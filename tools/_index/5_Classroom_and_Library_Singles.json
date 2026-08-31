@@ -1,0 +1,531 @@
+{
+ "source": "furniture/final/moderninteriors/1_Interiors/16x16/Theme_Sorter_Singles/5_Classroom_and_Library_Singles",
+ "kind": "folder",
+ "sprites": [
+  {
+   "i": 0,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_1.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 1,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_2.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 2,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_3.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 3,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_4.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 4,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_5.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 5,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_6.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 6,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_7.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 7,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_8.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 8,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_9.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 9,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_10.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 10,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_11.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 11,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_12.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 12,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_13.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 13,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_14.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 14,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_15.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 15,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_16.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 16,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_17.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 17,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_18.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 18,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_19.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 19,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_20.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 20,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_21.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 21,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_22.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 22,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_23.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 23,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_24.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 24,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_25.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 25,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_26.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 26,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_27.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 27,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_28.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 28,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_29.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 29,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_30.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 30,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_31.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 31,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_32.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 32,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_33.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 33,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_34.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 34,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_35.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 35,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_36.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 36,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_37.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 37,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_38.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 38,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_39.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 39,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_40.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 40,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_41.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 41,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_42.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 42,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_43.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 43,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_44.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 44,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_45.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 45,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_46.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 46,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_47.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 47,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_48.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 48,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_49.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 49,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_50.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 50,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_51.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 51,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_52.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 52,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_53.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 53,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_54.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 54,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_55.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 55,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_56.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 56,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_57.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 57,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_58.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 58,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_59.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 59,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_60.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 60,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_61.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 61,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_62.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 62,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_63.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 63,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_64.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 64,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_65.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 65,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_66.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 66,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_67.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 67,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_68.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 68,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_69.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 69,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_70.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 70,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_71.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 71,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_72.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 72,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_73.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 73,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_74.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 74,
+   "box": null,
+   "file": "Classroom_and_Library_Singles_75.png",
+   "w": 16,
+   "h": 48
+  }
+ ]
+}

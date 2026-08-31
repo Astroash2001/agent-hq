@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent HQ — 2D Virtual Office</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-viewport">
+        <!-- ================= LEFT: office + dock + command bar ================= -->
+        <main class="canvas-panel" role="main" aria-label="Virtual Office Simulation">
+            <div class="canvas-container" id="canvasContainer">
+                <canvas id="officeCanvas" aria-label="Interactive 2D office workspace"></canvas>
+                <div class="canvas-tooltip" id="canvasTooltip" role="tooltip" aria-hidden="true"></div>
+            </div>
+
+            <!-- Agent card dock. Populated by hud.js from the agent manifests. -->
+            <div class="agent-dock" id="agentDock" role="list" aria-label="Agent roster"></div>
+
+            <div class="bottom-command-bar">
+                <form id="promptForm" class="prompt-form" aria-label="Agent command input">
+                    <span class="cmd-indicator" aria-hidden="true">&gt;</span>
+                    <input type="text" id="promptInput"
+                           placeholder="Command Boss Dave or a specialist (e.g. 'Research market trends and write a report')…"
+                           autocomplete="off" required aria-label="Command prompt">
+                    <button type="submit" class="dispatch-button" id="dispatchBtn">DISPATCH</button>
+                    <button type="button" class="emergency-button" id="emergencyStopBtn"
+                            title="Emergency stop all agents">HALT</button>
+                </form>
+            </div>
+        </main>
+
+        <!-- ================= RIGHT: amber terminal HUD ================= -->
+        <aside class="hud-sidebar" role="complementary" aria-label="Telemetry and agent controls">
+
+            <!-- 1. LIVE TERMINAL -->
+            <section class="hud-card terminal-card" aria-label="Live terminal console">
+                <div class="terminal-titlebar">
+                    <span class="glyph" aria-hidden="true">&gt;_</span>
+                    <button class="hud-icon-btn" id="clearTerminalBtn"
+                            title="Clear logs" aria-label="Clear terminal logs">&times;</button>
+                </div>
+                <div class="crt-screen" id="terminalLogs" role="log" aria-live="polite">
+                    <div class="terminal-prompt-intro">Live terminal log stream.</div>
+                </div>
+            </section>
+
+            <!-- 2. TOKEN USAGE -->
+            <section class="hud-card token-card" aria-label="Token usage">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">🗄️</span> TOKEN USAGE
+                    </div>
+                    <div class="metric" id="tokenUsageValue">0/10000</div>
+                </div>
+                <!-- 20 segments, filled by hud.js. -->
+                <div class="equalizer-container" id="tokenFuelGauge"
+                     role="meter" aria-valuemin="0" aria-valuemax="10000" aria-valuenow="0"></div>
+            </section>
+
+            <!-- 3. TASK QUEUE -->
+            <section class="hud-card queue-card" aria-label="Task queue">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">📋</span> TASK QUEUE
+                    </div>
+                    <div class="metric" id="taskQueueCount">0/5</div>
+                </div>
+                <div class="queue-list" id="taskQueueList"></div>
+            </section>
+
+            <!-- 4. AI NETWORK STATUS -->
+            <section class="hud-card net-card" aria-label="Network status">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">🖧</span> AI NETWORK STATUS
+                    </div>
+                </div>
+                <div class="status-row">
+                    <span class="led" id="netLed" aria-hidden="true"></span>
+                    <span id="netStatusText">0 AGENTS ONLINE</span>
+                </div>
+            </section>
+
+            <!-- 5. SIMULATION CONTROLS -->
+            <section class="hud-card sim-card" aria-label="Simulation controls">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">&#9654;&#9654;</span> SIMULATION CONTROLS
+                    </div>
+                </div>
+                <div class="sim-body">
+                    <div class="sim-controls-row">
+                        <button class="sim-btn" id="simPlayBtn"   title="Play"   aria-label="Play">&#9654;</button>
+                        <button class="sim-btn" id="simPauseBtn"  title="Pause"  aria-label="Pause">&#10074;&#10074;</button>
+                        <button class="sim-btn" id="simRewindBtn" title="Rewind" aria-label="Rewind">&#9664;&#9664;</button>
+                        <span class="sim-speed" id="simSpeedText">Speed 1x</span>
+                    </div>
+                    <div class="sim-footer">
+                        <button type="button" id="simToggleLabel">[Pause]</button>
+                        <button type="button" id="simSettingsBtn">[Settings]</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Executive synthesis drawer (hidden until a task completes) -->
+            <section class="hud-card memo-card" id="executiveMemoCard" style="display: none;"
+                     aria-label="Executive synthesis">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">📜</span> EXECUTIVE SYNTHESIS
+                    </div>
+                    <button class="hud-icon-btn" id="closeMemoBtn" aria-label="Close synthesis">&times;</button>
+                </div>
+                <div class="memo-content markdown-body" id="memoBodyContent"></div>
+            </section>
+        </aside>
+    </div>
+
+    <script src="js/office_map.js"></script>
+    <script src="js/canvas.js"></script>
+    <script src="js/hud.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

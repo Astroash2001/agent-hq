@@ -1,0 +1,195 @@
+# TODO
+
+Unfinished work, known issues and next steps. Everything here was verified against
+the codebase, not assumed.
+
+[[README]] · [[ARCHITECTURE]] · [[STACK]] · [[DECISIONS]]
+
+---
+
+## Immediate
+
+### No `requirements.txt`
+
+Nothing pins the backend's dependencies. A fresh clone cannot be installed. Current
+working set (versions in [[STACK]]):
+
+```
+fastapi uvicorn pydantic pydantic-settings litellm pytest pytest-asyncio httpx
+```
+
+Asset tooling additionally needs `pillow numpy scipy playwright`, plus `node` on
+PATH for `preview_map.py`. Worth splitting into `requirements.txt` and
+`requirements-dev.txt`.
+
+### Dead sprites in the atlas
+
+Measured: the atlas holds **233** non-character sprites; the map uses **96**.
+
+- **15 authored sprites unused:** `chair_office`, `conf_table`, `conf_wall_run`,
+  `conf_wall_strip`, `counter_sink_v`, `credenza_lamp`, `desk_l`, `desk_l_wide`,
+  `desk_l_wing`, `desk_pedestal`, `plant_potted`, `printer_small`,
+  `projector_screen`, `tv_boardroom`, `tv_widescreen`
+- **8 orphaned PNGs** sit in `assets/generated/authored/` but are no longer
+  produced by `gen_tiles.py` — `conf_wall_run`, `conf_wall_strip`, `credenza_lamp`,
+  `plant_potted`, `tablet`, `tv_boardroom`, `tv_wall_east`, `whiteboard_arch`.
+  `build_atlas.py` globs that directory, so they are baked in as dead weight.
+
+Fix: delete the orphans, prune the unused `AUTHORED` entries and `PACK_PICKS`, then
+rebuild. Should meaningfully shrink the atlas.
+
+### `emergency_stop` doesn't reach a running LLM call
+
+`cancel()` sets `_is_cancelled`, checked at the top of each ReAct step. A request
+already in flight to `litellm.acompletion` runs to its 12s timeout first. Real
+cancellation needs the LLM call wrapped in a task that can be cancelled.
+
+---
+
+## Backend
+
+### Task routing is keyword matching
+
+**Done.** `planner.py` asks the model for a validated DAG and falls back to the
+old buckets when there is no key or the reply will not validate. The buckets
+survive as `heuristic_plan`, now with real dependencies instead of a fixed chain.
+Contract in [[PROTOCOL]] (`plan.created`).
+
+Still open: the planner sees the roster and each agent's record, but not the
+tools each agent actually holds, so it can still assign work to a specialist that
+lacks the tool for it. `validate_plan` does not check that.
+
+### Everything runs sequentially
+
+**Done.** `_execute_plan` runs every step whose dependencies are satisfied in one
+`asyncio.gather` wave, capped by `max_parallel_agents` (3). One agent still runs
+one subtask at a time, held by a per-agent lock.
+
+Still open: the cap is a slice of the ready set, not a semaphore, so a wave of
+five runs 3 then 2 rather than starting the fourth the moment a slot frees.
+
+### Subtask results are not fed forward
+
+**Done.** `workspace.py` gives each mission an artifact store. A step declares
+what it `produces` and `consumes`; upstream artifacts are delivered to the desk
+and pasted into the agent's prompt before it starts. `MAX_INJECTED_CHARS` (2400)
+truncates long ones.
+
+Still open: truncation is a hard character cut, not a summary, so a very long
+upstream artifact loses its tail rather than being condensed.
+
+### Spatial runtime edge cases
+
+`office.py` binds tools to stations and makes agents walk to them. Open items:
+
+- Walk time is straight-line distance; it ignores walls and the collision grid
+  the renderer paths against, so a backend walk and a drawn walk can disagree on
+  a route that has to go around the conference room
+- Station capacity is modelled (`Station.capacity`) but the lock is always
+  exclusive, so a capacity of 2 does nothing
+- `station_wait_timeout` (45s) drops the agent through to calling the tool
+  without the station rather than failing the step
+
+### Memory is lexical, not semantic
+
+`memory.py` scores similarity by IDF-weighted token overlap. It has no
+dependency and no key, which is why it was chosen, but it cannot tell that
+"speed up the cache" and "optimise memoisation" are the same task. Swapping in
+embeddings means replacing `_similarity` and nothing else.
+
+Also open: nothing ever marks an episode a failure except an emergency stop, so
+`success_rate` is 1.0 for every agent and rerouting will not fire in practice
+until agent runs can actually fail.
+
+### Token telemetry is estimated on the simulator path
+
+`_simulate_specialist_action` returns hardcoded counts (90–180 prompt, 40–95
+completion). The gauge is honest only when a real LLM is answering. Also
+`max_tokens_budget_per_task` (150000) is defined and broadcast but never enforced.
+
+### Synthesis is string assembly
+
+`_synthesize_results` concatenates Markdown. The "Final Orchestrator Verdict" is a
+fixed sentence, not a conclusion drawn from the results.
+
+### CORS is fully open
+
+`allow_origins=["*"]` with `allow_credentials=True` — fine for local dev, must be
+tightened before any deployment.
+
+### `terminal` tool executes shell commands
+
+`tools/terminal.py` is reachable by the `coder` and `data_analyst` agents. Fine
+locally; needs sandboxing or an allowlist before this is exposed to anything
+untrusted.
+
+---
+
+## Frontend
+
+### `hud.js` handles events `app.js` never sends
+
+`updateActiveDagNode` and `setQueue` exist but nothing calls them — the `dag.update`
+event is emitted by the backend and broadcast, but `app.js`'s switch has no case for
+it. The DAG is computed and sent but never visualised.
+
+### Standalone simulation names are hardcoded
+
+`simulateStandaloneTask` in `app.js` hardcodes Alice/Charlie/Bob/Eve and their log
+lines. Adding or renaming an agent leaves the offline demo stale.
+
+### Boss Dave never leaves his desk
+
+`hangouts` are all in the bullpen, lounge and kitchen. The idle-wander code picks
+from that list regardless of which room an agent is in, so the orchestrator would
+have to path out of the boss office to reach any of them.
+
+---
+
+## Office rendering
+
+Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
+
+### Known rough edges
+
+- **Boss office is the thinnest room** — least prop density of the four
+- **North wall could take another two or three pieces** to match the reference's
+  end-to-end furniture run
+- **Agents stand rather than sit.** Modern Interiors ships sit animations in its
+  character generator; wiring them up means extending the character build in
+  `build_atlas.py` and adding a seated clip to `drawAgent`
+- **Nine desks in a 3×3 grid leaves more open floor** than the previous twelve.
+  Either a fourth rank (there is vertical room now) or more aisle greenery
+
+### Not started
+
+- Boss office and kitchen have no automatic doors; the system is general
+  (`map.doors` takes any number) so each is roughly a one-line addition
+- The lounge has no games furniture — the reference has a foosball table, which
+  neither pack contains
+
+---
+
+## Testing
+
+11 tests pass in `backend/tests/` (`test_phase1..4.py`), covering health, agent
+listing, WebSocket handshake and event flow.
+
+**Not covered:**
+
+- Any frontend code — no JS test runner is configured
+- The asset pipeline — `check_layout.py` is a validator run by hand, not a test
+- `_decompose_task` routing branches
+- Tool execution paths beyond the registry surface
+
+---
+
+## Housekeeping
+
+- `frontend/assets/modern_interiors/` still holds the **non-commercial** free pack.
+  Confirm no free-pack sprite survives in the atlas before any commercial use —
+  licence detail in [[STACK]]
+- `furniture/new/` is a byte-identical duplicate of the free pack; safe to delete
+- `tools/_slices/` holds 614 one-off debug crops from earlier sessions
+- `backend/.pytest_cache/` is committed alongside the source
+- `Preview.png` in the project root is unreferenced

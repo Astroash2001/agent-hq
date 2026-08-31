@@ -1,0 +1,74 @@
+# =============================================================================
+# Art source packs  --  ~1 GB, and not needed to run anything.
+#
+# The frontend loads exactly three files: assets/generated/office_atlas.png,
+# office_atlas.json and floor_wood.png. Those ARE committed, so a fresh clone
+# runs. The packs below are only needed to re-run tools/build_atlas.py.
+#
+# furniture/final/ additionally holds PAID licensed content -- the Modern
+# Interiors paid pack, Modern Office Revamped, and Character Generator 2.0
+# with its Windows installer. That must not be redistributed. See STACK.md.
+# =============================================================================
+furniture/
+Modern_Interiors_Free_v2.2/
+Little_Bits_Office_tileset/
+lpc_the_office/
+kenney_emotes-pack/
+PIPOYA FREE RPG Character Sprites NEKONIN/
+Pixel Life - Desk Essentials/
+
+# Pack archives sitting in the project root
+*.zip
+*.rar
+*.exe
+
+# Atlas build inputs. Nothing in frontend/js fetches these -- they are raw
+# material for build_atlas.py. modern_interiors/ here is the NON-COMMERCIAL
+# free pack, whose licence forbids commercial use.
+frontend/assets/modern_interiors/
+frontend/assets/emotes/
+frontend/assets/pipoya/
+
+# =============================================================================
+# Build scratch
+# =============================================================================
+# One-off debug crops written by the asset tooling. 7 MB and regenerable.
+tools/_slices/
+
+# =============================================================================
+# Runtime state
+# =============================================================================
+# Episodic memory, rewritten on every mission. memory.py recreates the file
+# and its directory when missing, so there is nothing to seed.
+backend/data/
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+
+# =============================================================================
+# Secrets  --  GEMINI_API_KEY etc. are read from the environment by config.py
+# =============================================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# =============================================================================
+# Editor / OS
+# =============================================================================
+.obsidian/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

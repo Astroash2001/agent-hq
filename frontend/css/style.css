@@ -1,0 +1,667 @@
+/* ===========================================================================
+   AI Agent HQ — warm pixel office + amber terminal HUD
+
+   Every colour below was sampled directly out of the reference art
+   (final.jpg) rather than eyeballed. Sampling method: background colours are
+   the modal value of a region; foreground/text colours are the 97th
+   brightness percentile of the same region, because the modal colour of a
+   text block is always its backdrop.
+   =========================================================================== */
+
+:root {
+    /* --- surfaces ------------------------------------------------------- */
+    --bg:            #000000;   /* page, outside the panel */
+    --panel:         #120d13;   /* card interiors */
+    --panel-raised:  #171218;   /* card chrome / sidebar body */
+    --chrome:        #2a232a;   /* terminal title bar */
+    --trough:        #0d0a10;   /* unfilled gauge track */
+
+    /* --- frame --------------------------------------------------------- */
+    --frame:         #a9713c;
+    --frame-dim:     #6b4526;
+    --frame-lit:     #c98a4a;
+
+    /* --- ink ----------------------------------------------------------- */
+    --amber:         #eeb063;
+    --amber-bright:  #fac57f;
+    --cream:         #ece7de;
+    --green:         #67d94e;
+    --green-lit:     #8dff6f;
+    --string:        #e4be75;
+    --muted:         #8a8280;
+
+    /* --- accents ------------------------------------------------------- */
+    --row-selected:  #473124;
+    --btn-face:      #493733;
+    --gauge-lo:      #e08a3c;
+    --gauge-hi:      #f8c873;
+
+    --font-pixel: 'Silkscreen', 'Press Start 2P', monospace;
+    --font-mono:  'IBM Plex Mono', ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+
+    --gap: 10px;
+    --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--cream);
+    font-family: var(--font-mono);
+    /* Pixel art must never be resampled. */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+body { overflow: hidden; }
+
+/* ===========================================================================
+   Layout — reference is 1376x768 with the sidebar occupying 421px (30.6%).
+   =========================================================================== */
+
+.app-viewport {
+    display: grid;
+    grid-template-columns: 1fr minmax(360px, 30.6%);
+    gap: var(--gap);
+    height: 100vh;
+    padding: var(--gap);
+}
+
+.canvas-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    min-width: 0;
+    min-height: 0;
+}
+
+/* --- the office itself ---------------------------------------------------- */
+
+.canvas-container {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    background: #050307;
+    border: 2px solid var(--frame-dim);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+#officeCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+.canvas-tooltip {
+    position: absolute;
+    z-index: 5;
+    padding: 4px 8px;
+    background: var(--panel);
+    border: 1px solid var(--frame);
+    border-radius: 3px;
+    color: var(--cream);
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .12s;
+}
+
+.canvas-tooltip[data-visible="true"] { opacity: 1; }
+
+/* ===========================================================================
+   Agent dock — the horizontal card strip. Not present in final.jpg (it comes
+   from the harness reference), so it is styled in final.jpg's chrome to keep
+   one visual language.
+   =========================================================================== */
+
+.agent-dock {
+    display: flex;
+    /* Never shrink. The default (0 1 auto) lets a tight viewport squeeze the
+       dock toward zero, and overflow-y:hidden then clips the cards away
+       entirely. The canvas above has flex:1 + min-height:0, so it yields
+       instead. */
+    flex: 0 0 auto;
+    gap: 8px;
+    padding: 8px;
+    background: var(--panel-raised);
+    border: 2px solid var(--frame-dim);
+    border-radius: var(--radius);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame-dim) var(--trough);
+}
+
+.agent-dock::-webkit-scrollbar { height: 8px; }
+.agent-dock::-webkit-scrollbar-track { background: var(--trough); }
+.agent-dock::-webkit-scrollbar-thumb {
+    background: var(--frame-dim);
+    border-radius: 4px;
+}
+
+.dock-card {
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    gap: 8px;
+    align-items: center;
+    flex: 0 0 228px;
+    padding: 7px 9px;
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+
+.dock-card:hover { border-color: var(--frame); }
+
+.dock-card[data-selected="true"] {
+    background: var(--row-selected);
+    border-color: var(--frame-lit);
+}
+
+/* Portraits are pre-cropped to the silhouette by tools/build_atlas.py and sized
+   by hud.js from the manifest (14x17 at 3x = 42x51). The values here are only
+   the pre-load placeholder. */
+.dock-avatar {
+    width: 42px;
+    height: 51px;
+    align-self: center;
+    background-color: var(--trough);
+    background-repeat: no-repeat;
+    border: 1px solid var(--frame-dim);
+    border-radius: 2px;
+    image-rendering: pixelated;
+}
+
+.dock-main { min-width: 0; }
+
+.dock-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.dock-name {
+    font-family: var(--font-pixel);
+    font-size: 11px;
+    letter-spacing: .04em;
+    color: var(--cream);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dock-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    background: var(--panel-raised);
+    border: 1px solid var(--frame-dim);
+    border-radius: 2px;
+    font-size: 10px;
+    color: var(--muted);
+}
+
+.dock-status::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    background: var(--muted);
+    border-radius: 1px;
+}
+
+.dock-card[data-state="active"]   .dock-status::before,
+.dock-card[data-state="thinking"] .dock-status::before,
+.dock-card[data-state="done"]     .dock-status::before { border-radius: 1px; }
+
+.dock-card[data-state="active"]   .dock-status { color: var(--green); }
+.dock-card[data-state="active"]   .dock-status::before { background: var(--green); }
+.dock-card[data-state="thinking"] .dock-status { color: var(--amber); }
+.dock-card[data-state="thinking"] .dock-status::before { background: var(--amber); }
+.dock-card[data-state="done"]     .dock-status { color: var(--green-lit); }
+.dock-card[data-state="done"]     .dock-status::before { background: var(--green-lit); }
+
+.dock-path {
+    margin: 3px 0 5px;
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;              /* keep the tail of a long path visible */
+    text-align: left;
+}
+
+.dock-progress {
+    height: 4px;
+    background: var(--trough);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.dock-progress > i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--gauge-lo), var(--gauge-hi));
+    transition: width .3s ease;
+}
+
+/* ===========================================================================
+   Command bar
+   =========================================================================== */
+
+.bottom-command-bar {
+    background: var(--panel-raised);
+    border: 2px solid var(--frame-dim);
+    border-radius: var(--radius);
+}
+
+.prompt-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+}
+
+.cmd-indicator {
+    font-family: var(--font-pixel);
+    font-size: 14px;
+    color: var(--amber);
+}
+
+#promptInput {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    background: var(--trough);
+    border: 1px solid var(--frame-dim);
+    border-radius: 3px;
+    color: var(--cream);
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+#promptInput::placeholder { color: #5c5459; }
+#promptInput:focus {
+    outline: none;
+    border-color: var(--frame);
+}
+
+.dispatch-button,
+.emergency-button {
+    padding: 8px 14px;
+    border-radius: 3px;
+    font-family: var(--font-pixel);
+    font-size: 11px;
+    letter-spacing: .06em;
+    cursor: pointer;
+    transition: filter .15s;
+}
+
+.dispatch-button {
+    background: var(--btn-face);
+    border: 1px solid var(--frame);
+    color: var(--amber-bright);
+}
+
+.emergency-button {
+    background: #3a1c1c;
+    border: 1px solid #8c3a2e;
+    color: #f2a08d;
+}
+
+.dispatch-button:hover,
+.emergency-button:hover { filter: brightness(1.25); }
+
+.dispatch-button:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+/* ===========================================================================
+   HUD sidebar
+   =========================================================================== */
+
+.hud-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    min-height: 0;
+    padding: 10px;
+    background: var(--panel-raised);
+    /* The reference frame is a double rule: a bright inner line inside a dim
+       outer one. box-shadow draws the inner without a second element. */
+    border: 2px solid var(--frame-dim);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px var(--frame);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame-dim) var(--trough);
+}
+
+.hud-card {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-height: 0;
+}
+
+.hud-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.card-title-neon {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-pixel);
+    font-size: 12px;
+    letter-spacing: .04em;
+    color: var(--amber);
+}
+
+.header-icon { font-size: 13px; }
+
+.hud-card-header .metric {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* --- 1. terminal ---------------------------------------------------------- */
+
+/* The reference gives the terminal roughly twice the slack the queue gets, and
+   between them they fill the column -- capping the terminal instead just leaves
+   dead space under the simulation card. Both grow from a zero basis so the
+   split stays 2:1 whatever the window height. */
+.terminal-card {
+    flex: 2 1 0;
+    min-height: 150px;
+}
+
+.terminal-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: var(--chrome);
+    border: 1px solid var(--frame-dim);
+    border-bottom: none;
+    border-radius: 5px 5px 0 0;
+}
+
+.terminal-titlebar .glyph {
+    font-family: var(--font-pixel);
+    font-size: 13px;
+    color: var(--amber-bright);
+}
+
+.hud-icon-btn {
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    background: var(--btn-face);
+    border: 1px solid var(--frame);
+    border-radius: 3px;
+    color: var(--amber-bright);
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.hud-icon-btn:hover { filter: brightness(1.3); }
+
+.crt-screen {
+    flex: 1;
+    min-height: 0;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 0 0 5px 5px;
+    font-size: 12px;
+    line-height: 1.55;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame) var(--trough);
+}
+
+.crt-screen::-webkit-scrollbar { width: 8px; }
+.crt-screen::-webkit-scrollbar-track { background: var(--trough); }
+.crt-screen::-webkit-scrollbar-thumb {
+    background: var(--frame-dim);
+    border-radius: 4px;
+}
+
+.crt-log-line { word-break: break-word; }
+.log-time   { color: var(--muted); }
+.log-agent  { color: var(--cream); }
+.log-string { color: var(--string); }
+.tag-success  { color: var(--green); }
+.tag-analysis { color: var(--green); }
+.tag-error    { color: #f08a72; }
+
+.terminal-prompt-intro {
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+/* --- 2. token gauge ------------------------------------------------------- */
+
+.equalizer-container {
+    display: flex;
+    gap: 2px;
+    height: 26px;
+    padding: 3px;
+    background: var(--trough);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+}
+
+.eq-seg {
+    flex: 1;
+    border-radius: 1px;
+    /* Not transparent: an empty gauge should still read as a gauge, which it
+       only does if the unlit slots are visible against the trough. */
+    background: #191219;
+    transition: background .25s;
+}
+
+.eq-seg[data-on="true"] {
+    background: linear-gradient(180deg, var(--gauge-hi), var(--gauge-lo));
+}
+
+/* --- 3. task queue -------------------------------------------------------- */
+
+.queue-card { flex: 1 1 0; min-height: 96px; }
+
+.queue-list {
+    flex: 1;
+    min-height: 86px;
+    padding: 5px;
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame) var(--trough);
+}
+
+.queue-list::-webkit-scrollbar { width: 8px; }
+.queue-list::-webkit-scrollbar-track { background: var(--trough); }
+.queue-list::-webkit-scrollbar-thumb {
+    background: var(--frame-dim);
+    border-radius: 4px;
+}
+
+.queue-row {
+    padding: 3px 7px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--cream);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-row[data-active="true"] {
+    background: var(--row-selected);
+    border-color: var(--frame);
+}
+
+.queue-empty {
+    padding: 3px 7px;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+/* --- 4. network status ---------------------------------------------------- */
+
+.status-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 9px;
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.led {
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+    background: var(--green);
+    border: 1px solid #2f7a24;
+    border-radius: 3px;
+    box-shadow: 0 0 6px rgba(103, 217, 78, .75);
+    animation: led-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes led-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .55; }
+}
+
+/* --- 5. simulation controls ----------------------------------------------- */
+
+.sim-body {
+    padding: 7px 9px;
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+}
+
+.sim-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sim-btn {
+    width: 34px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    background: var(--btn-face);
+    border: 1px solid var(--frame);
+    border-radius: 4px;
+    color: var(--amber-bright);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: filter .15s;
+}
+
+.sim-btn:hover { filter: brightness(1.3); }
+
+.sim-btn[data-active="true"] {
+    background: var(--frame);
+    color: #1a1014;
+}
+
+.sim-speed {
+    margin-left: 4px;
+    font-size: 12px;
+    color: var(--cream);
+}
+
+.sim-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 7px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.sim-footer button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.sim-footer button:hover { color: var(--amber); }
+
+/* --- memo drawer ---------------------------------------------------------- */
+
+.memo-card { flex: 0 1 auto; min-height: 0; }
+
+.memo-content {
+    max-height: 220px;
+    padding: 9px 11px;
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-y: auto;
+}
+
+.memo-content h1,
+.memo-content h2,
+.memo-content h3 {
+    margin: .5em 0 .3em;
+    color: var(--amber);
+    font-family: var(--font-pixel);
+    font-size: 12px;
+}
+
+.memo-content ul { margin: .3em 0; padding-left: 1.1em; }
+.memo-content code {
+    padding: 1px 4px;
+    background: var(--trough);
+    border-radius: 2px;
+    color: var(--string);
+}
+
+/* --- narrow viewports ----------------------------------------------------- */
+
+@media (max-width: 900px) {
+    .app-viewport {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+        overflow-y: auto;
+    }
+    .hud-sidebar { max-height: 55vh; }
+}

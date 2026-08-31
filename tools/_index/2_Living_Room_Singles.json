@@ -1,0 +1,860 @@
+{
+ "source": "furniture/final/moderninteriors/1_Interiors/16x16/Theme_Sorter_Singles/2_Living_Room_Singles",
+ "kind": "folder",
+ "sprites": [
+  {
+   "i": 0,
+   "box": null,
+   "file": "Living_Room_Singles_1.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 1,
+   "box": null,
+   "file": "Living_Room_Singles_2.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 2,
+   "box": null,
+   "file": "Living_Room_Singles_3.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 3,
+   "box": null,
+   "file": "Living_Room_Singles_4.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 4,
+   "box": null,
+   "file": "Living_Room_Singles_5.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 5,
+   "box": null,
+   "file": "Living_Room_Singles_6.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 6,
+   "box": null,
+   "file": "Living_Room_Singles_7.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 7,
+   "box": null,
+   "file": "Living_Room_Singles_8.png",
+   "w": 16,
+   "h": 16
+  },
+  {
+   "i": 8,
+   "box": null,
+   "file": "Living_Room_Singles_9.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 9,
+   "box": null,
+   "file": "Living_Room_Singles_10.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 10,
+   "box": null,
+   "file": "Living_Room_Singles_11.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 11,
+   "box": null,
+   "file": "Living_Room_Singles_12.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 12,
+   "box": null,
+   "file": "Living_Room_Singles_13.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 13,
+   "box": null,
+   "file": "Living_Room_Singles_14.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 14,
+   "box": null,
+   "file": "Living_Room_Singles_15.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 15,
+   "box": null,
+   "file": "Living_Room_Singles_16.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 16,
+   "box": null,
+   "file": "Living_Room_Singles_17.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 17,
+   "box": null,
+   "file": "Living_Room_Singles_18.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 18,
+   "box": null,
+   "file": "Living_Room_Singles_19.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 19,
+   "box": null,
+   "file": "Living_Room_Singles_20.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 20,
+   "box": null,
+   "file": "Living_Room_Singles_21.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 21,
+   "box": null,
+   "file": "Living_Room_Singles_22.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 22,
+   "box": null,
+   "file": "Living_Room_Singles_23.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 23,
+   "box": null,
+   "file": "Living_Room_Singles_24.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 24,
+   "box": null,
+   "file": "Living_Room_Singles_25.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 25,
+   "box": null,
+   "file": "Living_Room_Singles_26.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 26,
+   "box": null,
+   "file": "Living_Room_Singles_27.png",
+   "w": 16,
+   "h": 16
+  },
+  {
+   "i": 27,
+   "box": null,
+   "file": "Living_Room_Singles_28.png",
+   "w": 16,
+   "h": 16
+  },
+  {
+   "i": 28,
+   "box": null,
+   "file": "Living_Room_Singles_29.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 29,
+   "box": null,
+   "file": "Living_Room_Singles_30.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 30,
+   "box": null,
+   "file": "Living_Room_Singles_31.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 31,
+   "box": null,
+   "file": "Living_Room_Singles_32.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 32,
+   "box": null,
+   "file": "Living_Room_Singles_33.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 33,
+   "box": null,
+   "file": "Living_Room_Singles_34.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 34,
+   "box": null,
+   "file": "Living_Room_Singles_35.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 35,
+   "box": null,
+   "file": "Living_Room_Singles_36.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 36,
+   "box": null,
+   "file": "Living_Room_Singles_37.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 37,
+   "box": null,
+   "file": "Living_Room_Singles_38.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 38,
+   "box": null,
+   "file": "Living_Room_Singles_39.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 39,
+   "box": null,
+   "file": "Living_Room_Singles_40.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 40,
+   "box": null,
+   "file": "Living_Room_Singles_41.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 41,
+   "box": null,
+   "file": "Living_Room_Singles_42.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 42,
+   "box": null,
+   "file": "Living_Room_Singles_43.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 43,
+   "box": null,
+   "file": "Living_Room_Singles_44.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 44,
+   "box": null,
+   "file": "Living_Room_Singles_45.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 45,
+   "box": null,
+   "file": "Living_Room_Singles_46.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 46,
+   "box": null,
+   "file": "Living_Room_Singles_47.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 47,
+   "box": null,
+   "file": "Living_Room_Singles_48.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 48,
+   "box": null,
+   "file": "Living_Room_Singles_49.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 49,
+   "box": null,
+   "file": "Living_Room_Singles_50.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 50,
+   "box": null,
+   "file": "Living_Room_Singles_51.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 51,
+   "box": null,
+   "file": "Living_Room_Singles_52.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 52,
+   "box": null,
+   "file": "Living_Room_Singles_53.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 53,
+   "box": null,
+   "file": "Living_Room_Singles_54.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 54,
+   "box": null,
+   "file": "Living_Room_Singles_55.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 55,
+   "box": null,
+   "file": "Living_Room_Singles_56.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 56,
+   "box": null,
+   "file": "Living_Room_Singles_57.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 57,
+   "box": null,
+   "file": "Living_Room_Singles_58.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 58,
+   "box": null,
+   "file": "Living_Room_Singles_59.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 59,
+   "box": null,
+   "file": "Living_Room_Singles_60.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 60,
+   "box": null,
+   "file": "Living_Room_Singles_61.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 61,
+   "box": null,
+   "file": "Living_Room_Singles_62.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 62,
+   "box": null,
+   "file": "Living_Room_Singles_63.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 63,
+   "box": null,
+   "file": "Living_Room_Singles_64.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 64,
+   "box": null,
+   "file": "Living_Room_Singles_65.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 65,
+   "box": null,
+   "file": "Living_Room_Singles_66.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 66,
+   "box": null,
+   "file": "Living_Room_Singles_67.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 67,
+   "box": null,
+   "file": "Living_Room_Singles_68.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 68,
+   "box": null,
+   "file": "Living_Room_Singles_69.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 69,
+   "box": null,
+   "file": "Living_Room_Singles_70.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 70,
+   "box": null,
+   "file": "Living_Room_Singles_71.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 71,
+   "box": null,
+   "file": "Living_Room_Singles_72.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 72,
+   "box": null,
+   "file": "Living_Room_Singles_73.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 73,
+   "box": null,
+   "file": "Living_Room_Singles_74.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 74,
+   "box": null,
+   "file": "Living_Room_Singles_75.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 75,
+   "box": null,
+   "file": "Living_Room_Singles_76.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 76,
+   "box": null,
+   "file": "Living_Room_Singles_77.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 77,
+   "box": null,
+   "file": "Living_Room_Singles_78.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 78,
+   "box": null,
+   "file": "Living_Room_Singles_79.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 79,
+   "box": null,
+   "file": "Living_Room_Singles_80.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 80,
+   "box": null,
+   "file": "Living_Room_Singles_81.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 81,
+   "box": null,
+   "file": "Living_Room_Singles_82.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 82,
+   "box": null,
+   "file": "Living_Room_Singles_83.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 83,
+   "box": null,
+   "file": "Living_Room_Singles_84.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 84,
+   "box": null,
+   "file": "Living_Room_Singles_85.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 85,
+   "box": null,
+   "file": "Living_Room_Singles_86.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 86,
+   "box": null,
+   "file": "Living_Room_Singles_87.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 87,
+   "box": null,
+   "file": "Living_Room_Singles_88.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 88,
+   "box": null,
+   "file": "Living_Room_Singles_89.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 89,
+   "box": null,
+   "file": "Living_Room_Singles_90.png",
+   "w": 16,
+   "h": 48
+  },
+  {
+   "i": 90,
+   "box": null,
+   "file": "Living_Room_Singles_91.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 91,
+   "box": null,
+   "file": "Living_Room_Singles_92.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 92,
+   "box": null,
+   "file": "Living_Room_Singles_93.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 93,
+   "box": null,
+   "file": "Living_Room_Singles_94.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 94,
+   "box": null,
+   "file": "Living_Room_Singles_95.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 95,
+   "box": null,
+   "file": "Living_Room_Singles_96.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 96,
+   "box": null,
+   "file": "Living_Room_Singles_97.png",
+   "w": 16,
+   "h": 16
+  },
+  {
+   "i": 97,
+   "box": null,
+   "file": "Living_Room_Singles_98.png",
+   "w": 32,
+   "h": 16
+  },
+  {
+   "i": 98,
+   "box": null,
+   "file": "Living_Room_Singles_99.png",
+   "w": 32,
+   "h": 32
+  },
+  {
+   "i": 99,
+   "box": null,
+   "file": "Living_Room_Singles_100.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 100,
+   "box": null,
+   "file": "Living_Room_Singles_101.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 101,
+   "box": null,
+   "file": "Living_Room_Singles_102.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 102,
+   "box": null,
+   "file": "Living_Room_Singles_103.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 103,
+   "box": null,
+   "file": "Living_Room_Singles_104.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 104,
+   "box": null,
+   "file": "Living_Room_Singles_105.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 105,
+   "box": null,
+   "file": "Living_Room_Singles_106.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 106,
+   "box": null,
+   "file": "Living_Room_Singles_107.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 107,
+   "box": null,
+   "file": "Living_Room_Singles_108.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 108,
+   "box": null,
+   "file": "Living_Room_Singles_109.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 109,
+   "box": null,
+   "file": "Living_Room_Singles_110.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 110,
+   "box": null,
+   "file": "Living_Room_Singles_111.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 111,
+   "box": null,
+   "file": "Living_Room_Singles_112.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 112,
+   "box": null,
+   "file": "Living_Room_Singles_113.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 113,
+   "box": null,
+   "file": "Living_Room_Singles_114.png",
+   "w": 32,
+   "h": 48
+  },
+  {
+   "i": 114,
+   "box": null,
+   "file": "Living_Room_Singles_115.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 115,
+   "box": null,
+   "file": "Living_Room_Singles_116.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 116,
+   "box": null,
+   "file": "Living_Room_Singles_117.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 117,
+   "box": null,
+   "file": "Living_Room_Singles_118.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 118,
+   "box": null,
+   "file": "Living_Room_Singles_119.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 119,
+   "box": null,
+   "file": "Living_Room_Singles_120.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 120,
+   "box": null,
+   "file": "Living_Room_Singles_121.png",
+   "w": 16,
+   "h": 32
+  },
+  {
+   "i": 121,
+   "box": null,
+   "file": "Living_Room_Singles_122.png",
+   "w": 16,
+   "h": 32
+  }
+ ]
+}
