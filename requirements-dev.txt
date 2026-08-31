@@ -1,0 +1,31 @@
+# Development dependencies: the test suite and the asset pipeline.
+# Includes everything in requirements.txt.
+#
+#   pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+# --- Tests ------------------------------------------------------------------
+# 32 tests in backend/tests/. httpx is not imported directly -- it is what
+# fastapi.testclient.TestClient is built on, so the suite will not collect
+# without it.
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1
+
+# --- Asset pipeline ---------------------------------------------------------
+# tools/build_atlas.py, gen_tiles.py, index_pack.py, check_layout.py and
+# preview_map.py. Pillow does the compositing; numpy and scipy do the sprite
+# segmentation (scipy.ndimage labels connected components when cutting a
+# sprite out of a pack sheet).
+#
+# These also need, outside pip:
+#   * node on PATH -- preview_map.py and check_layout.py read the real
+#     office_map.js through `node -e` rather than keeping a second copy of the
+#     layout that could drift
+#   * the art source packs, which are NOT in this repo (see .gitignore and
+#     STACK.md). The built atlas in frontend/assets/generated/ is committed, so
+#     you only need the packs to regenerate it.
+pillow==12.1.1
+numpy==1.26.4
+scipy==1.15.3

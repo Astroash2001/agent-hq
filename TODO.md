@@ -11,16 +11,17 @@ the codebase, not assumed.
 
 ### No `requirements.txt`
 
-Nothing pins the backend's dependencies. A fresh clone cannot be installed. Current
-working set (versions in [[STACK]]):
+**Done.** Split into `requirements.txt` (fastapi, uvicorn, websockets, pydantic,
+pydantic-settings, litellm) and `requirements-dev.txt` (the test suite plus
+pillow/numpy/scipy for the asset pipeline). Both pinned to the versions the
+32-test suite passes on under Python 3.10.9, and both verified to resolve.
 
-```
-fastapi uvicorn pydantic pydantic-settings litellm pytest pytest-asyncio httpx
-```
+`websockets` was missing from the old working set — uvicorn ships no WebSocket
+implementation of its own, so `/ws` fails the handshake without it. `playwright`
+was listed but is imported nowhere; it is not in either file.
 
-Asset tooling additionally needs `pillow numpy scipy playwright`, plus `node` on
-PATH for `preview_map.py`. Worth splitting into `requirements.txt` and
-`requirements-dev.txt`.
+Still outside pip: `node` on PATH for `preview_map.py` and `check_layout.py`, and
+the art source packs if you want to rebuild the atlas.
 
 ### Dead sprites in the atlas
 

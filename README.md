@@ -26,8 +26,18 @@ python main.py            # uvicorn on http://localhost:8080
 `main.py` mounts `frontend/` as static files, so the UI is served from the same
 origin and the WebSocket at `/ws` connects with no CORS or port juggling.
 
-**No `requirements.txt` exists yet** — see [[TODO]]. Currently installed:
-`fastapi uvicorn pydantic pydantic-settings litellm pytest pytest-asyncio httpx`.
+Install first:
+
+```bash
+pip install -r requirements.txt        # to run it
+pip install -r requirements-dev.txt    # to run the tests or rebuild the atlas
+```
+
+The dev set additionally needs `node` on PATH — `preview_map.py` and
+`check_layout.py` read the real `office_map.js` through it rather than keeping a
+second copy of the layout that could drift. Rebuilding the atlas also needs the
+art source packs, which are not in this repo; the built atlas is committed, so
+you only need them to regenerate it. See [[STACK]].
 
 ### Frontend only (art / layout work)
 
