@@ -90,7 +90,13 @@ class Settings(BaseSettings):
 
     # Safety Guardrails
     max_agent_steps: int = 8  # Step capper to prevent runaway infinite loops
-    max_tokens_budget_per_task: int = 150000
+    # Whole-mission ceiling, enforced between waves. This is runaway protection,
+    # not a spend target: it should sit well above what real work costs, or it
+    # stops the work instead of the runaway. 150k was set when web_search was a
+    # mock; with live search a routine 3-step mission spent 144,156 of it,
+    # because the ReAct loop re-sends its history -- including every search
+    # result -- on every turn.
+    max_tokens_budget_per_task: int = 400000
 
     # Planning (P1)
     # The planner asks the model for a DAG; heuristic buckets are the fallback.

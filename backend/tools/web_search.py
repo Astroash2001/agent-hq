@@ -34,6 +34,16 @@ TAVILY_URL = "https://api.tavily.com/search"
 # eat the agent's own 90s call budget on top of its LLM time.
 _TIMEOUT = 20.0
 
+# Snippets are trimmed before they enter the agent's message history.
+#
+# The ReAct loop re-sends the whole history on every turn, so one tool result
+# is not paid for once -- it is paid for on each remaining turn of that step.
+# Untrimmed, a single search serialised to ~1,700 tokens and an observed
+# research step carried eighteen of them: ~31k prompt tokens per step, and a
+# three-step mission that spent 144k of its 150k budget. 600 characters keeps
+# the substance of a snippet; the URL is there when an agent needs the rest.
+MAX_SNIPPET_CHARS = 600
+
 _NO_PROVIDER = (
     "No web search provider is configured in this deployment, so no external "
     "sources are available for this query. Do not retry the search. Answer from "
@@ -83,14 +93,16 @@ async def _tavily(query: str, max_results: int) -> Dict[str, Any]:
     body = response.json()
     results: List[Dict[str, str]] = []
     for item in (body.get("results") or []):
+        snippet = (item.get("content") or "").strip()
+        if len(snippet) > MAX_SNIPPET_CHARS:
+            snippet = snippet[:MAX_SNIPPET_CHARS].rstrip() + " ..."
         results.append({
             "title": item.get("title", ""),
             # `content` is Tavily's extracted snippet. Renamed to `snippet` so
             # the shape matches what this tool has always returned and the
             # agent prompts do not have to change.
-            "snippet": item.get("content", ""),
+            "snippet": snippet,
             "url": item.get("url", ""),
-            "score": item.get("score"),
         })
 
     out: Dict[str, Any] = {
