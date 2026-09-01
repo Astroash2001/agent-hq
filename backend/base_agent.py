@@ -132,6 +132,7 @@ class BaseAgent:
         step = 0
         final_answer = ""
         last_content = ""      # best non-empty reply seen, for the fallback below
+        searches = 0           # web_search calls this run, capped below
 
         while step < settings.max_agent_steps:
             if self._is_cancelled:
@@ -217,6 +218,33 @@ class BaseAgent:
                 tool_name = tool_call.get("name")
                 tool_args = tool_call.get("arguments", {})
                 tools_used.append(tool_name)
+
+                # Hard ceiling on searches per task.
+                #
+                # Search is the one tool an agent will happily call forever:
+                # every result suggests another query worth trying. Observed on
+                # one subtask -- eighteen searches, each re-sent in the history
+                # on every later turn, and a single 3-step mission costing 144k
+                # tokens. The cap is enforced here rather than asked for in the
+                # prompt because a request is advisory and this is a budget.
+                if tool_name == "web_search":
+                    searches += 1
+                    if searches > settings.search_max_calls:
+                        messages.append({
+                            "role": "tool",
+                            "name": tool_name,
+                            "content": json.dumps({
+                                "success": False,
+                                "error": (
+                                    f"Search limit reached ({settings.search_max_calls} "
+                                    f"searches per task). No further searches are "
+                                    f"available. Write your deliverable now using what "
+                                    f"you have already found."
+                                ),
+                            })
+                        })
+                        logger.info("[%s] search cap hit (%d)", self.name, settings.search_max_calls)
+                        continue
 
                 async with office.use_tool_station(
                     self.id, tool_name, agent_name=self.name, task_id=task.id

@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     tavily_api_key: str = os.getenv("TAVILY_API_KEY", "")
     # "basic" is one credit and fast; "advanced" digs deeper for two.
     search_depth: str = os.getenv("SEARCH_DEPTH", "basic")
+    # Hard ceiling on searches per agent task, enforced in the ReAct loop.
+    # Every result suggests another query worth trying, so without a cap an
+    # agent keeps going until its step budget is gone -- eighteen searches on
+    # one subtask, and a 3-step mission costing 144k tokens.
+    search_max_calls: int = int(os.getenv("SEARCH_MAX_CALLS", "5"))
+    # Results per search. Each one is carried in the message history and
+    # re-sent on every later turn, so this multiplies through the whole step.
+    search_max_results: int = int(os.getenv("SEARCH_MAX_RESULTS", "3"))
     # Tavily can return a direct synthesised answer alongside the snippets.
     search_include_answer: bool = True
 

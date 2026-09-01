@@ -99,11 +99,11 @@ async def test_max_results_is_clamped_to_the_api_range(keyed, monkeypatch):
     sent = _post(monkeypatch, _Resp(200, {"results": []}))
     await web_search.search_web("q", max_results=500)
     assert sent["json"]["max_results"] == 20, "Tavily's ceiling is 20"
-    # 0 is falsy and read as "unspecified", so it takes the default rather
-    # than asking for a single result -- a model passing 0 means it did not
-    # have an opinion, not that it wants one hit.
+    # 0 is falsy and read as "unspecified", so it takes the configured default
+    # rather than asking for a single result -- a model passing 0 means it did
+    # not have an opinion, not that it wants one hit.
     await web_search.search_web("q", max_results=0)
-    assert sent["json"]["max_results"] == 5
+    assert sent["json"]["max_results"] == settings.search_max_results
     await web_search.search_web("q", max_results=-3)
     assert sent["json"]["max_results"] == 1
 

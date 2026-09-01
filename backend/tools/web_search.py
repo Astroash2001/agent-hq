@@ -67,7 +67,7 @@ def _unavailable(query: str, why: str) -> Dict[str, Any]:
 async def _tavily(query: str, max_results: int) -> Dict[str, Any]:
     payload = {
         "query": query,
-        "max_results": max(1, min(int(max_results or 5), 20)),
+        "max_results": max(1, min(int(max_results or settings.search_max_results), 20)),
         "search_depth": settings.search_depth,
         "include_answer": settings.search_include_answer,
         "topic": "general",
@@ -122,7 +122,7 @@ async def _tavily(query: str, max_results: int) -> Dict[str, Any]:
     return out
 
 
-async def search_web(query: str, max_results: int = 5) -> Dict[str, Any]:
+async def search_web(query: str, max_results: int = 0) -> Dict[str, Any]:
     """
     Search the web for information.
 

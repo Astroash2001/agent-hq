@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import inspect
 import json
 import logging
@@ -170,17 +170,23 @@ class ToolRegistry:
             name="web_search",
             description=(
                 "Search the live web for current facts, figures and sources. Returns "
-                "ranked snippets with their URLs. If the reply says no provider is "
-                "configured, searching is unavailable in this deployment -- do not "
-                "call this tool again; answer from your own knowledge and note that "
-                "it was not verified against live sources."
+                "ranked snippets with their URLs. "
+                "You get a small, fixed number of searches per task, so make each one "
+                "count: search only for facts you actually need for your deliverable, "
+                "one specific question at a time. Do not re-search a topic from a "
+                "different angle, chase background context, or verify a figure you "
+                "already have from a source. When you have enough to write, stop "
+                "searching and write. "
+                "If the reply says no provider is configured, searching is unavailable "
+                "here -- do not call this tool again; answer from your own knowledge "
+                "and note that it was not verified against live sources."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search keyword or query string"},
                     "max_results": {"type": "integer",
-                                    "description": "How many results to retrieve, 1-20 (default 5)"}
+                                    "description": "How many results to retrieve, 1-20. Omit for the default."}
                 },
                 "required": ["query"]
             },
