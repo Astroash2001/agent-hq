@@ -1,5 +1,30 @@
-﻿import os
-from typing import Dict, Any, List
+"""
+File tools.
+
+`write_file` is bound to the running mission. Before that it wrote to whatever
+path the model invented, relative to the process working directory -- so an
+agent's actual deliverable ended up loose in backend/ while the workspace
+recorded only the agent's closing sentence about it ("Task completed after 4
+execution steps.", 39 bytes, standing in for a 2.4KB report). Downstream steps
+then consumed the sentence instead of the work.
+
+The binding follows the same shape as tools/meeting.py: the orchestrator sets
+the active workspace for the length of a mission, because the workspace is
+created per mission and there is nothing to import at module load.
+"""
+import os
+from typing import Dict, Any, List, Optional
+
+# Set by the orchestrator for the duration of a mission.
+_active_workspace = None
+_active_author = None
+
+
+def bind_workspace(workspace, author_id: str = "", author_name: str = "", step_id: str = "") -> None:
+    """Point write_file at the running mission's workspace."""
+    global _active_workspace, _active_author
+    _active_workspace = workspace
+    _active_author = (author_id, author_name, step_id) if workspace else None
 
 
 async def read_file(filepath: str) -> Dict[str, Any]:
@@ -22,7 +47,30 @@ async def read_file(filepath: str) -> Dict[str, Any]:
 
 
 async def write_file(filepath: str, content: str) -> Dict[str, Any]:
-    """Write or overwrite content to a file."""
+    """
+    Write a file into the mission workspace.
+
+    Filed as a workspace artifact rather than dropped on disk at an arbitrary
+    path, so the thing the agent actually produced is what downstream steps
+    receive and what ends up in the mission directory. With no mission running
+    (a bare agent, or a test) it falls back to the old direct write.
+    """
+    if _active_workspace is not None:
+        author_id, author_name, step_id = _active_author or ("", "", "")
+        artifact = await _active_workspace.put(
+            name=os.path.basename(filepath or "untitled.md"),
+            content=content,
+            author_id=author_id or "agent",
+            author_name=author_name or "Agent",
+            step_id=step_id,
+        )
+        return {
+            "success": True,
+            "filepath": artifact.name,
+            "bytes_written": artifact.size_chars,
+            "message": f"Filed {artifact.size_chars} chars to the mission workspace "
+                       f"as '{artifact.name}'.",
+        }
     try:
         os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:

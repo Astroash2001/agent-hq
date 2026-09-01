@@ -1,4 +1,4 @@
-﻿import os
+import os
 from typing import Dict, Any, List
 
 
@@ -41,11 +41,27 @@ async def search_web(query: str, max_results: int = 3) -> Dict[str, Any]:
             "url": "https://sqlglot.com/docs/security/read_only"
         })
     else:
-        results.append({
-            "title": f"Search Results for: {query}",
-            "snippet": f"Found latest technical documentation, code snippets, and architecture benchmarks related to '{query}'.",
-            "url": f"https://devdocs.io/search?q={query.replace(' ', '+')}"
-        })
+        # No provider is wired up, and there are no fixtures for this topic.
+        #
+        # This used to return a filler snippet -- "Found latest technical
+        # documentation ... related to '<query>'" -- which reads like a result
+        # but carries nothing. A capable model treats that as a failed search
+        # and tries again with different wording: an observed GPT-5.5 run
+        # called this tool 11 times on one subtask, exhausted its step budget,
+        # and filed a 39-byte stub as its research. Saying plainly that no
+        # search is available lets the agent fall back to what it knows and
+        # get on with the work.
+        return {
+            "success": True,
+            "configured": False,
+            "query": query,
+            "count": 0,
+            "results": [],
+            "note": ("No web search provider is configured in this deployment, so no "
+                     "external sources are available for this query. Do not retry the "
+                     "search. Answer from your own knowledge and say in your output "
+                     "that it was not verified against live sources."),
+        }
 
     return {
         "success": True,

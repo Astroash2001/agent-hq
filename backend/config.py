@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     # was dead config until then -- declared here and read by nothing.
     fallback_model: str = "gemini/gemini-2.5-flash-lite"
     temperature: float = 0.2
-    max_tokens: int = 2048
+    # Output ceiling per call. 2048 suited a non-reasoning model; a reasoning
+    # model spends this budget on thinking BEFORE it emits any text, so a hard
+    # turn returns finish_reason="length" with empty content and no error.
+    # Observed on gpt-5.5: a research turn carrying three tool results burned
+    # the whole 2048 on reasoning and produced nothing, which the agent loop
+    # then filed as a 39-byte stub.
+    max_tokens: int = 8000
     # Per-call ceiling. Was hardcoded at 12s in base_agent.py, which suited a
     # fast non-thinking model. Reasoning models think before answering and a
     # 12s cap cuts them off mid-thought -- and the failure is silent, because
@@ -105,7 +111,6 @@ class Settings(BaseSettings):
     max_walk_seconds: float = 2.0
     station_wait_timeout: float = 45.0
 
-    # Memory (P6)
     # --- mission output ------------------------------------------------------
     # Every mission leaves a directory behind: its artifacts, report.md, and a
     # mission.json describing the run. Without this the workspace was purely
@@ -113,6 +118,7 @@ class Settings(BaseSettings):
     persist_missions: bool = True
     missions_path: str = os.path.join(os.path.dirname(__file__), "data", "missions")
 
+    # Memory (P6)
     memory_enabled: bool = True
     memory_path: str = os.path.join(os.path.dirname(__file__), "data", "memory.json")
     memory_recall_k: int = 3

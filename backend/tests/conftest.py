@@ -27,6 +27,27 @@ from config import settings
 
 
 @pytest.fixture(autouse=True, scope="session")
+def _scratch_missions():
+    """
+    Keep the suite out of the real mission directory.
+
+    The phase tests run whole missions, and once the workspace started
+    mirroring artifacts to disk those runs began littering
+    `backend/data/missions/` with fixture output that is indistinguishable
+    from a real run.
+    """
+    import shutil
+    import tempfile
+
+    root = tempfile.mkdtemp(prefix="agenthq_test_missions_")
+    original = settings.missions_path
+    settings.missions_path = os.path.join(root, "missions")
+    yield
+    settings.missions_path = original
+    shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True, scope="session")
 def _offline_llm():
     """Force every test onto the offline simulator path."""
     saved = {

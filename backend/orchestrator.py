@@ -15,6 +15,7 @@ from office import office
 from planner import planner
 from schemas import (AgentManifest, AgentStatus, DAGNode, Event, EventType, Plan,
                      PlanStep, Task)
+from tools import file_ops
 from workspace import MissionWorkspace
 
 logger = logging.getLogger("AgentHQ.Orchestrator")
@@ -242,6 +243,7 @@ class Orchestrator:
             "subtasks": results,
             "plan_source": plan.source,
             "artifacts": workspace.summary(),
+            "mission_dir": workspace.dir,
             "duration_seconds": round(duration, 2)
         }
 
@@ -302,6 +304,24 @@ class Orchestrator:
             )
             for step in plan.steps
         ]
+
+    @staticmethod
+    def _best_artifact(workspace, step, before):
+        """
+        The file this step actually wrote, if it wrote one.
+
+        An agent may write several (drafts, notes). Preference goes to an exact
+        match on the promised name, then to the largest new one -- the closing
+        summary an agent writes about its work is always shorter than the work.
+        """
+        fresh = [workspace.get(n) for n in workspace.names() if n not in before]
+        fresh = [a for a in fresh if a is not None]
+        if not fresh:
+            return None
+        for a in fresh:
+            if a.name == step.produces:
+                return a
+        return max(fresh, key=lambda a: a.size_chars)
 
     def _tokens_spent(self) -> int:
         """
@@ -536,10 +556,36 @@ class Orchestrator:
         if not specialist:
             raise KeyError(f"step {step.id} names unknown agent '{step.agent_id}'")
 
+        # What existed before this step, so anything new is this step's doing.
+        before = set(workspace.names())
+
         subtask_id = f"{task_id}_{step.id}"
+        # A step that promises an artifact needs the means to write one. The
+        # researcher holds only web_search and read_file, so being told to file
+        # its findings was an instruction it could not follow -- it returned no
+        # text at all and the step filed a 39-byte stub as the research the
+        # rest of the mission was built on. Granted per step through the same
+        # mechanism meetings use, rather than by widening any manifest.
+        grant = ["write_file"] if (step.produces and "write_file" not in specialist.tools) else None
+
+        # Name the deliverable in the task itself. The plan promises this step
+        # produces a specific artifact, and an agent that is never told that
+        # has no reason to write one -- observed: a researcher did its work
+        # entirely through tool calls, returned empty content, and the step
+        # filed base_agent's "Task completed after N execution steps." stub as
+        # the research the rest of the mission was supposed to build on.
+        description = step.description
+        if step.produces:
+            description = (
+                f"{step.description}\n\n"
+                f"Deliverable: write your full output to `{step.produces}` with the "
+                f"write_file tool before you finish. Put the actual content in that "
+                f"file -- the next step reads the file, not your reply."
+            )
+
         subtask = Task(
             id=subtask_id,
-            description=step.description,
+            description=description,
             parent_task_id=task_id,
             assigned_to=step.agent_id
         )
@@ -604,19 +650,44 @@ class Orchestrator:
                 result_text = await self._run_meeting(
                     step, specialist, subtask, workspace, context, hints, goal, task_id)
             else:
-                result_text = await specialist.run(
-                    subtask, context=context, hints=hints, goal=goal)
+                # write_file files into the workspace for the length of this
+                # step, so whatever the agent writes is attributed to it.
+                file_ops.bind_workspace(
+                    workspace, step.agent_id, specialist.name, step.id)
+                try:
+                    result_text = await specialist.run(
+                        subtask, context=context, hints=hints, goal=goal,
+                        extra_tools=grant)
+                finally:
+                    file_ops.bind_workspace(None)
 
         stats = dict(specialist.last_run or {})
 
         if step.produces:
-            await workspace.put(
-                name=step.produces,
-                content=result_text,
-                author_id=step.agent_id,
-                author_name=specialist.name,
-                step_id=step.id
-            )
+            # Prefer what the agent actually wrote over what it said about it.
+            # `result_text` is the closing chat message -- filing that as the
+            # artifact meant downstream steps consumed "Task completed after 4
+            # execution steps." instead of the 2.4KB report the agent produced.
+            written = self._best_artifact(workspace, step, before)
+            if written is not None:
+                if written.name != step.produces:
+                    # Re-file under the name the plan promised, so `consumes`
+                    # on the next step still resolves.
+                    await workspace.put(
+                        name=step.produces,
+                        content=written.content,
+                        author_id=step.agent_id,
+                        author_name=specialist.name,
+                        step_id=step.id
+                    )
+            else:
+                await workspace.put(
+                    name=step.produces,
+                    content=result_text,
+                    author_id=step.agent_id,
+                    author_name=specialist.name,
+                    step_id=step.id
+                )
 
         if settings.memory_enabled:
             memory.record(

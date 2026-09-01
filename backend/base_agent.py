@@ -131,6 +131,7 @@ class BaseAgent:
 
         step = 0
         final_answer = ""
+        last_content = ""      # best non-empty reply seen, for the fallback below
 
         while step < settings.max_agent_steps:
             if self._is_cancelled:
@@ -174,6 +175,10 @@ class BaseAgent:
                 task_id=task.id,
                 data=self.token_usage.model_dump()
             ))
+
+            content_now = (response_data.get("content") or "").strip()
+            if len(content_now) > len(last_content):
+                last_content = content_now
 
             thought_text = response_data.get("thought", "")
             if thought_text:
@@ -231,9 +236,15 @@ class BaseAgent:
 
             await asyncio.sleep(0.3)  # Visual pacing for UI observation
 
-        # Step limit reached safety check
+        # Step limit reached safety check.
+        #
+        # `last_content` rather than the generic string wherever possible: a
+        # model that says everything through tool calls and returns empty
+        # content on its final turn is normal, and filing "Task completed
+        # after N execution steps." as that step's artifact threw the real
+        # work away.
         if not final_answer:
-            final_answer = f"Task completed after {step} execution steps."
+            final_answer = last_content or f"Task completed after {step} execution steps."
 
         # Back to the desk, so the next mission starts from a clean floor.
         if settings.spatial_enabled:
@@ -303,6 +314,18 @@ class BaseAgent:
                         })
 
                 content = message.content or ""
+
+                # A truncated turn is otherwise invisible: the model returns no
+                # content and no tool call, the loop treats that as "done", and
+                # the step files a stub. Say so instead.
+                if choice.finish_reason == "length" and not content:
+                    logger.warning(
+                        "[%s] reply hit the %s-token ceiling before producing text "
+                        "(reasoning consumed the budget); raise MAX_TOKENS",
+                        self.name, settings.max_tokens)
+                    await self.speak("Reply hit the token ceiling - retrying.",
+                                     task_id=task.id)
+
                 return {
                     "content": content,
                     "thought": content[:60] if content else "Executing tool...",
