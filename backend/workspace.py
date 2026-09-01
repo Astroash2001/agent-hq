@@ -8,10 +8,19 @@ depend on it receive that artifact's text in their prompt. The handoff is real.
 
 It is also the thing the office draws: `artifact.created` fires when a desk
 produces something, `artifact.delivered` when it is carried to another desk.
+
+Artifacts are mirrored to disk as they are filed. The store itself is in
+memory and dies with the mission, and the result only ever reached the browser
+over the websocket -- so closing the tab destroyed the work. Every mission now
+leaves a directory behind under `data/missions/`.
 """
+import json
 import logging
+import os
+import re
 from typing import Any, Dict, List, Optional
 
+from config import settings
 from event_bus import event_bus
 from schemas import Artifact, Event, EventType
 
@@ -22,13 +31,67 @@ logger = logging.getLogger("AgentHQ.Workspace")
 # not blow past the context window.
 MAX_INJECTED_CHARS = 2400
 
+# Artifact names come from the model, so they reach the filesystem untrusted.
+# Anything that could climb out of the mission directory is stripped rather
+# than rejected -- a bad name should not lose the artifact.
+_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _safe_name(name: str) -> str:
+    cleaned = _UNSAFE.sub("_", os.path.basename(name or "")).lstrip(".")
+    return cleaned[:120] or "untitled.md"
+
 
 class MissionWorkspace:
-    """In-memory artifact store scoped to one mission."""
+    """Artifact store for one mission, mirrored to a directory on disk."""
 
     def __init__(self, mission_id: str):
         self.mission_id = mission_id
         self.artifacts: Dict[str, Artifact] = {}
+        self.dir: Optional[str] = None
+        if settings.persist_missions:
+            try:
+                self.dir = os.path.join(settings.missions_path, _safe_name(mission_id))
+                os.makedirs(self.dir, exist_ok=True)
+            except (OSError, ValueError) as exc:
+                # Losing the mirror must never lose the mission. The run keeps
+                # going in memory exactly as it did before persistence existed.
+                # ValueError as well as OSError: a path with a NUL byte in it
+                # raises the former, and a bad setting must not kill the run.
+                logger.warning("[%s] cannot create mission directory: %s", mission_id, exc)
+                self.dir = None
+
+    def _write(self, filename: str, body: str) -> Optional[str]:
+        """Write one file into the mission directory. Never raises."""
+        if not self.dir:
+            return None
+        path = os.path.join(self.dir, _safe_name(filename))
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(body)
+            return path
+        except (OSError, ValueError) as exc:
+            logger.warning("[%s] could not write %s: %s", self.mission_id, filename, exc)
+            return None
+
+    def save_report(self, text: str) -> Optional[str]:
+        """The final synthesis, as the mission's headline file."""
+        return self._write("report.md", text or "")
+
+    def save_manifest(self, payload: Dict[str, Any]) -> Optional[str]:
+        """
+        Goal, plan, per-step status and totals for one run.
+
+        This is what makes two runs comparable -- the artifacts alone say what
+        was produced but not what was asked, planned, or how it went.
+        """
+        if not self.dir:
+            return None
+        try:
+            return self._write("mission.json", json.dumps(payload, indent=2, default=str))
+        except (TypeError, ValueError) as exc:
+            logger.warning("[%s] manifest not serialisable: %s", self.mission_id, exc)
+            return None
 
     async def put(
         self,
@@ -48,6 +111,7 @@ class MissionWorkspace:
             size_chars=len(content)
         )
         self.artifacts[name] = artifact
+        self._write(name, content)
 
         await event_bus.emit(Event(
             type=EventType.ARTIFACT_CREATED,

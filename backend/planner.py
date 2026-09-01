@@ -17,8 +17,10 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from config import settings, llm_configured, llm_route
-from schemas import Plan, PlanStep
+import llm
+from config import settings, llm_configured
+from event_bus import event_bus
+from schemas import Event, EventType, Plan, PlanStep
 
 logger = logging.getLogger("AgentHQ.Planner")
 
@@ -192,6 +194,16 @@ class Planner:
     def __init__(self):
         self.last_source: str = "heuristic"
 
+    @staticmethod
+    async def _on_retry(note: str, kind: str) -> None:
+        """Narrate a retry to the terminal. Planning gates the whole mission,
+        so a silent 28s rate-limit wait is indistinguishable from a hang."""
+        await event_bus.emit(Event(
+            type=EventType.TERMINAL_LOG,
+            data={"message": f"Planner: {note}",
+                  "level": "ERROR" if kind == "fallback" else "INFO"}
+        ))
+
     async def plan(self, goal: str, roster: List[Dict[str, Any]]) -> Plan:
         """
         Plan `goal` against `roster`.
@@ -244,9 +256,6 @@ class Planner:
         attempt: int
     ) -> Optional[Dict[str, Any]]:
         """One planning call. Returns the parsed payload or None."""
-        import litellm
-        litellm.drop_params = True
-
         system = PLANNER_SYSTEM_PROMPT % (settings.planner_max_steps,
                                           settings.meeting_capacity)
         user = (
@@ -258,14 +267,15 @@ class Planner:
             user += ("\n\nYour previous reply was not valid. Return ONLY a JSON object "
                      "with a 'steps' array. Every agent_id must come from the roster above.")
 
-        response = await litellm.acompletion(
-            model=settings.default_model,
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": user}],
+        # Through llm.acompletion so the planner gets the same retry and
+        # fallback as an agent step. It gates the entire mission -- a single
+        # transient 429 here used to mean no plan at all.
+        response = await llm.acompletion(
+            [{"role": "system", "content": system},
+             {"role": "user", "content": user}],
             temperature=settings.planner_temperature,
-            max_tokens=settings.max_tokens,
             timeout=settings.planner_timeout,
-            **llm_route(),
+            on_retry=self._on_retry,
         )
         content = response.choices[0].message.content or ""
         return _extract_json(content)

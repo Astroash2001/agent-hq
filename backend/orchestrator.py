@@ -186,6 +186,34 @@ class Orchestrator:
         main_task.status = "completed"
         main_task.result = synthesis_text
 
+        # Put the run on disk before announcing it. The websocket payload is
+        # the only other copy, so a browser that is closed or reloaded at this
+        # moment would otherwise take the whole mission with it.
+        workspace.save_report(synthesis_text)
+        workspace.save_manifest({
+            "mission_id": task_id,
+            "goal": user_prompt,
+            "plan_source": plan.source,
+            "duration_seconds": round(duration, 2),
+            "total_tokens": self._tokens_spent(),
+            "token_budget": settings.max_tokens_budget_per_task,
+            "steps": [
+                {
+                    "id": s.id,
+                    "agent_id": s.agent_id,
+                    "description": s.description,
+                    "kind": getattr(s, "kind", "work"),
+                    "attendees": getattr(s, "attendees", []),
+                    "dependencies": s.dependencies,
+                    "produces": s.produces,
+                    "consumes": s.consumes,
+                    "status": s.status,
+                }
+                for s in plan.steps
+            ],
+            "artifacts": [a.name for a in workspace.artifacts.values()],
+        })
+
         await event_bus.emit(Event(
             type=EventType.TASK_COMPLETED,
             task_id=task_id,
@@ -194,7 +222,8 @@ class Orchestrator:
                 "duration_seconds": round(duration, 2),
                 "subtasks_count": len(plan.steps),
                 "plan_source": plan.source,
-                "artifacts": workspace.summary()
+                "artifacts": workspace.summary(),
+                "mission_dir": workspace.dir,
             }
         ))
 
@@ -274,6 +303,19 @@ class Orchestrator:
             for step in plan.steps
         ]
 
+    def _tokens_spent(self) -> int:
+        """
+        Tokens burned across the whole roster.
+
+        Agents keep their own running totals (BaseAgent.token_usage), so the
+        mission figure is just their sum -- there is no separate ledger to keep
+        in step with them.
+        """
+        total = sum(a.token_usage.total_tokens for a in self.agents.values())
+        if self.boss_agent:
+            total += self.boss_agent.token_usage.total_tokens
+        return total
+
     async def _emit_dag(self, task_id: str, source: str = ""):
         await event_bus.emit(Event(
             type=EventType.DAG_UPDATE,
@@ -324,6 +366,30 @@ class Orchestrator:
                 logger.warning(f"[{task_id}] {len(pending)} step(s) unreachable after a failure")
                 break
 
+            # Budget gate. max_tokens_budget_per_task was broadcast to the UI
+            # and enforced nowhere, which was harmless while every run was
+            # simulated and is not once a paid key is in play. Checked between
+            # waves rather than mid-step: a step already dispatched has to be
+            # allowed to finish, or its artifact is lost and the graph stalls.
+            spent = self._tokens_spent()
+            if spent >= settings.max_tokens_budget_per_task:
+                for sid in pending:
+                    self._set_node_status(sid, "failed")
+                    by_id[sid].status = "failed"
+                    failed.add(sid)
+                await self._emit_dag(task_id, plan.source)
+                await event_bus.emit(Event(
+                    type=EventType.TASK_FAILED,
+                    task_id=task_id,
+                    data={"error": f"Token budget exhausted: {spent:,} of "
+                                   f"{settings.max_tokens_budget_per_task:,} used. "
+                                   f"{len(pending)} step(s) not started."}
+                ))
+                logger.warning("[%s] budget exhausted (%s tokens); %d step(s) skipped",
+                               task_id, spent, len(pending))
+                pending.clear()
+                break
+
             limit = settings.max_parallel_agents if settings.parallel_enabled else 1
             wave = ready[:limit]
             wave_index += 1
@@ -359,6 +425,25 @@ class Orchestrator:
                         task_id=f"{task_id}_{sid}",
                         data={"step_id": sid, "error": str(outcome)}
                     ))
+                    # Failures have to reach memory too. memory.record lives at
+                    # the end of _run_step, which a raising step never gets to,
+                    # so every episode ever written said "success" -- leaving
+                    # success_rate at 1.0 for everyone and making the
+                    # competence-based rerouting in _route_step dead code.
+                    if settings.memory_enabled:
+                        specialist = self._agent_by_id(step.agent_id)
+                        memory.record(
+                            agent_id=step.agent_id,
+                            agent_name=specialist.name if specialist else step.agent_id,
+                            goal=goal,
+                            subtask=step.description,
+                            outcome="failure",
+                            summary=f"{type(outcome).__name__}: {outcome}"[:400],
+                            duration_sec=(specialist.last_run.get("duration_sec", 0.0)
+                                          if specialist else 0.0),
+                            total_tokens=(specialist.last_run.get("tokens", 0)
+                                          if specialist else 0),
+                        )
                     continue
 
                 step.status = "completed"

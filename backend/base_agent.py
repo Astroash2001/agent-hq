@@ -4,7 +4,8 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from config import settings, llm_configured, llm_route
+import llm
+from config import settings, llm_configured
 from event_bus import event_bus
 from memory import memory
 from office import office
@@ -29,6 +30,9 @@ class BaseAgent:
         self.status = AgentStatus.IDLE
         self.token_usage = TokenUsage()
         self._is_cancelled = False
+        # The LLM request currently in flight, so cancel() can abort it rather
+        # than waiting for it to time out.
+        self._inflight: Optional[asyncio.Future] = None
         # Telemetry for the step that just finished, read by the orchestrator
         # when it writes the episode to memory.
         self.last_run: Dict[str, Any] = {}
@@ -56,8 +60,17 @@ class BaseAgent:
         ))
 
     def cancel(self):
-        """Emergency interrupt / kill switch trigger."""
+        """
+        Emergency interrupt / kill switch trigger.
+
+        Cancels the in-flight request as well as setting the flag. The flag
+        alone is only read between ReAct steps, so a HALT pressed during a call
+        used to sit for the rest of the 90s timeout before anything happened.
+        """
         self._is_cancelled = True
+        inflight = self._inflight
+        if inflight is not None and not inflight.done():
+            inflight.cancel()
 
     async def run(
         self,
@@ -136,7 +149,15 @@ class BaseAgent:
             await self.update_status(AgentStatus.THINKING, {"step": step})
 
             # Call LLM or fallback simulator
-            response_data = await self._call_llm(messages, tool_schemas, task)
+            try:
+                response_data = await self._call_llm(messages, tool_schemas, task)
+            except asyncio.CancelledError:
+                # cancel() aborted the request mid-flight. Loop round so the
+                # check at the top produces the halt result, rather than having
+                # a second copy of that bookkeeping here.
+                if self._is_cancelled:
+                    continue
+                raise
 
             # Update token usage telemetry
             self.token_usage.prompt_tokens += response_data.get("prompt_tokens", 120)
@@ -245,24 +266,25 @@ class BaseAgent:
 
         if has_key:
             try:
-                import litellm
-                litellm.drop_params = True
+                async def _narrate(note, kind):
+                    await self.speak(note, task_id=task.id)
 
-                kwargs = {
-                    "model": settings.default_model,
-                    "messages": messages,
-                    "temperature": settings.temperature,
-                    "max_tokens": settings.max_tokens,
-                    "timeout": settings.llm_timeout,
-                    # api_base / api_key / User-Agent when a gateway is set;
-                    # empty otherwise, so direct-provider routing is unchanged.
-                    **llm_route(),
-                }
-                if tools:
-                    kwargs["tools"] = tools
-                    kwargs["tool_choice"] = "auto"
+                # Held on the agent so cancel() can reach into the request that
+                # is actually in flight. Without this, HALT only took effect
+                # between ReAct steps -- up to llm_timeout (90s) of nothing
+                # happening after the user pressed the button.
+                self._inflight = asyncio.ensure_future(
+                    llm.acompletion(
+                        messages,
+                        tools=tools,
+                        on_retry=_narrate,
+                    )
+                )
+                try:
+                    response = await self._inflight
+                finally:
+                    self._inflight = None
 
-                response = await litellm.acompletion(**kwargs)
                 choice = response.choices[0]
                 message = choice.message
 

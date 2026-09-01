@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     # LLM Settings
     # Default model: gemini/gemini-2.5-flash or gemini-2.0-flash via LiteLLM
     default_model: str = "gemini/gemini-2.5-flash"
-    fallback_model: str = "gemini/gemini-2.0-flash"
+    # Tried once by llm.py after the primary has exhausted its retries. This
+    # was dead config until then -- declared here and read by nothing.
+    fallback_model: str = "gemini/gemini-2.5-flash-lite"
     temperature: float = 0.2
     max_tokens: int = 2048
     # Per-call ceiling. Was hardcoded at 12s in base_agent.py, which suited a
@@ -23,6 +25,22 @@ class Settings(BaseSettings):
     # the exception handler falls through to the simulator. 90s leaves room;
     # lower it for a fast model if you want the fallback to kick in sooner.
     llm_timeout: float = 90.0
+
+    # --- retry ---------------------------------------------------------------
+    # A transient provider failure used to kill the whole mission: nothing
+    # retried, so one 429 ended the run. llm.py retries the transient cases
+    # only -- a 401 or a 404 still fails on the first attempt, because those
+    # will fail identically forever and delaying the error only hides it.
+    llm_max_retries: int = 3
+    llm_backoff_base: float = 1.5      # seconds; doubles each attempt
+    llm_backoff_max: float = 30.0      # ceiling for the computed backoff
+    # A provider that names its own delay is honoured up to this. Gemini asks
+    # for 28s on the free tier, which is worth waiting; an absurd value is not.
+    llm_retry_max_wait: float = 60.0
+    # After retries are spent, try settings.fallback_model once. Because
+    # litellm picks the provider from the model prefix, this crosses providers:
+    # an OpenAI primary can fall back to Gemini.
+    llm_fallback_enabled: bool = True
 
     # API Keys (loaded from .env or OS environment)
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
@@ -88,6 +106,13 @@ class Settings(BaseSettings):
     station_wait_timeout: float = 45.0
 
     # Memory (P6)
+    # --- mission output ------------------------------------------------------
+    # Every mission leaves a directory behind: its artifacts, report.md, and a
+    # mission.json describing the run. Without this the workspace was purely
+    # in-memory and the result only ever existed in the open browser tab.
+    persist_missions: bool = True
+    missions_path: str = os.path.join(os.path.dirname(__file__), "data", "missions")
+
     memory_enabled: bool = True
     memory_path: str = os.path.join(os.path.dirname(__file__), "data", "memory.json")
     memory_recall_k: int = 3

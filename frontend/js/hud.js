@@ -544,6 +544,7 @@ class RetroHUD {
         // so instead -- an empty report with no explanation reads like a bug in
         // the UI rather than a mission that did not produce anything.
         const files = Array.isArray(payload.artifacts) ? payload.artifacts : [];
+        this.missionDir = payload.mission_dir || '';
         const banner = document.getElementById('outBanner');
         const failed = /\b(\d+)\s+failed\b/i.exec(String(markdownText || ''));
         const nFailed = failed ? parseInt(failed[1], 10) : 0;
@@ -577,12 +578,19 @@ class RetroHUD {
         if (count) count.textContent = String(files.length);
         if (!wrap) return;
 
+        // Where the run was saved. The output used to exist only in this tab,
+        // so saying where it landed is the point of having persisted it.
+        const where = this.missionDir
+            ? `<div class="out-where">Saved to <code>${this.escapeHtml(this.missionDir)}</code></div>`
+            : '';
+
         if (!files.length) {
-            wrap.innerHTML = '<div class="out-empty">Nothing was filed to the workspace.</div>';
+            wrap.innerHTML = where +
+                '<div class="out-empty">Nothing was filed to the workspace.</div>';
             return;
         }
 
-        wrap.innerHTML = files.map((f, i) => {
+        wrap.innerHTML = where + files.map((f, i) => {
             const body = String(f.content || '');
             const rendered = (typeof marked !== 'undefined' && /\.md$/i.test(f.name || ''))
                 ? marked.parse(body)

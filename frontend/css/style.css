@@ -752,6 +752,15 @@ body { overflow: hidden; }
     margin: 6px 0;
 }
 .out-clip { color: var(--muted); font-style: italic; font-size: 10px; }
+.out-where {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    padding: 4px 2px 7px;
+    overflow-wrap: anywhere;
+}
+.out-where code { color: var(--string); }
+
 .out-empty {
     font-family: var(--font-mono);
     font-size: 11px;
