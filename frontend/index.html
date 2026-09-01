@@ -63,18 +63,7 @@
                      role="meter" aria-valuemin="0" aria-valuemax="10000" aria-valuenow="0"></div>
             </section>
 
-            <!-- 3. TASK QUEUE -->
-            <section class="hud-card queue-card" aria-label="Task queue">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">📋</span> TASK QUEUE
-                    </div>
-                    <div class="metric" id="taskQueueCount">0/5</div>
-                </div>
-                <div class="queue-list" id="taskQueueList"></div>
-            </section>
-
-            <!-- 3b. EXECUTION PLAN -- the DAG the planner builds. The backend
+            <!-- 3. EXECUTION PLAN -- the DAG the planner builds. The backend
                  has always broadcast plan.created and dag.update; nothing drew
                  them until now. Hidden until a plan arrives. -->
             <section class="hud-card plan-card" id="planCard" style="display: none;"
@@ -83,57 +72,60 @@
                     <div class="card-title-neon">
                         <span class="header-icon" aria-hidden="true">🗺️</span> EXECUTION PLAN
                     </div>
+                    <button class="hud-icon-btn" id="dagExpandBtn"
+                            title="Expand graph" aria-label="Expand graph">⛶</button>
                     <div class="metric" id="planSource">—</div>
                 </div>
-                <div class="plan-list" id="planList"></div>
+                <!-- The DAG as an actual graph. SVG rather than canvas so the
+                     labels stay crisp and each node is a real hoverable node. -->
+                <div class="dag-viewport" id="dagViewport">
+                    <svg id="dagSvg" role="img" aria-label="Execution plan graph"></svg>
+                </div>
+                <div class="dag-legend" id="dagLegend"></div>
             </section>
 
-            <!-- 4. AI NETWORK STATUS -->
-            <section class="hud-card net-card" aria-label="Network status">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">🖧</span> AI NETWORK STATUS
-                    </div>
-                </div>
-                <div class="status-row">
-                    <span class="led" id="netLed" aria-hidden="true"></span>
-                    <span id="netStatusText">0 AGENTS ONLINE</span>
-                </div>
-            </section>
-
-            <!-- 5. SIMULATION CONTROLS -->
-            <section class="hud-card sim-card" aria-label="Simulation controls">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">&#9654;&#9654;</span> SIMULATION CONTROLS
-                    </div>
-                </div>
-                <div class="sim-body">
-                    <div class="sim-controls-row">
-                        <button class="sim-btn" id="simPlayBtn"   title="Play"   aria-label="Play">&#9654;</button>
-                        <button class="sim-btn" id="simPauseBtn"  title="Pause"  aria-label="Pause">&#10074;&#10074;</button>
-                        <button class="sim-btn" id="simRewindBtn" title="Rewind" aria-label="Rewind">&#9664;&#9664;</button>
-                        <span class="sim-speed" id="simSpeedText">Speed 1x</span>
-                    </div>
-                    <div class="sim-footer">
-                        <button type="button" id="simToggleLabel">[Pause]</button>
-                        <button type="button" id="simSettingsBtn">[Settings]</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Executive synthesis drawer (hidden until a task completes) -->
+            <!-- MISSION OUTPUT -- what the user actually asked for. The goal,
+                 the finished report, and every artifact with its real body.
+                 Hidden until a mission completes. -->
             <section class="hud-card memo-card" id="executiveMemoCard" style="display: none;"
-                     aria-label="Executive synthesis">
+                     aria-label="Mission output">
                 <div class="hud-card-header">
                     <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">📜</span> EXECUTIVE SYNTHESIS
+                        <span class="header-icon" aria-hidden="true">📜</span> MISSION OUTPUT
                     </div>
-                    <button class="hud-icon-btn" id="closeMemoBtn" aria-label="Close synthesis">&times;</button>
+                    <button class="hud-icon-btn" id="closeMemoBtn" aria-label="Close output">&times;</button>
                 </div>
-                <div class="memo-content markdown-body" id="memoBodyContent"></div>
+
+                <div class="out-goal" id="outGoal"></div>
+                <div class="out-banner" id="outBanner" style="display: none;"></div>
+
+                <div class="out-tabs" role="tablist">
+                    <button class="out-tab" id="outTabReport" role="tab"
+                            data-active="true" aria-selected="true">REPORT</button>
+                    <button class="out-tab" id="outTabFiles" role="tab"
+                            aria-selected="false">FILES <span id="outFileCount">0</span></button>
+                </div>
+
+                <div class="out-pane" id="outPaneReport" role="tabpanel">
+                    <div class="memo-content markdown-body" id="memoBodyContent"></div>
+                </div>
+                <div class="out-pane" id="outPaneFiles" role="tabpanel" style="display: none;">
+                    <div class="out-files" id="outFiles"></div>
+                </div>
             </section>
         </aside>
+    </div>
+
+    <!-- Full-screen graph. The sidebar is narrow; a wide plan needs the room. -->
+    <div class="dag-overlay" id="dagOverlay" style="display: none;" role="dialog"
+         aria-label="Execution plan graph, expanded">
+        <div class="dag-overlay-bar">
+            <span class="card-title-neon">🗺️ EXECUTION PLAN</span>
+            <button class="hud-icon-btn" id="dagCloseBtn" aria-label="Close graph">&times;</button>
+        </div>
+        <div class="dag-viewport dag-viewport-full" id="dagViewportFull">
+            <svg id="dagSvgFull" role="img" aria-label="Execution plan graph"></svg>
+        </div>
     </div>
 
     <script src="js/office_map.js"></script>

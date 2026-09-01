@@ -127,16 +127,32 @@ class MissionWorkspace:
             "do not repeat it.\n\n" + "\n\n".join(blocks)
         )
 
+    # A mission produces a handful of markdown files, so the bodies ride along
+    # in the completion payload rather than needing a fetch per artifact. The
+    # cap is a guard against one runaway artifact, not an expected path.
+    MAX_BODY_CHARS = 20000
+
     def summary(self) -> List[Dict[str, Any]]:
-        """Artifact index without the bodies, for the mission result payload."""
-        return [
-            {
+        """
+        Artifact index for the mission result payload, bodies included.
+
+        The bodies are here because the UI has nowhere else to get them: the
+        store is in-memory and dies with the mission, and `artifact.created`
+        carries only a 180-char preview. Without them the output panel can
+        list what was produced but never show it.
+        """
+        out = []
+        for a in self.artifacts.values():
+            body = a.content or ""
+            clipped = len(body) > self.MAX_BODY_CHARS
+            out.append({
                 "name": a.name,
                 "author_id": a.author_id,
                 "author_name": a.author_name,
                 "step_id": a.step_id,
                 "size_chars": a.size_chars,
-                "created_at": a.created_at
-            }
-            for a in self.artifacts.values()
-        ]
+                "created_at": a.created_at,
+                "content": body[:self.MAX_BODY_CHARS],
+                "truncated": clipped,
+            })
+        return out

@@ -486,144 +486,7 @@ body { overflow: hidden; }
     background: linear-gradient(180deg, var(--gauge-hi), var(--gauge-lo));
 }
 
-/* --- 3. task queue -------------------------------------------------------- */
-
-.queue-card { flex: 1 1 0; min-height: 96px; }
-
-.queue-list {
-    flex: 1;
-    min-height: 86px;
-    padding: 5px;
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--frame) var(--trough);
-}
-
-.queue-list::-webkit-scrollbar { width: 8px; }
-.queue-list::-webkit-scrollbar-track { background: var(--trough); }
-.queue-list::-webkit-scrollbar-thumb {
-    background: var(--frame-dim);
-    border-radius: 4px;
-}
-
-.queue-row {
-    padding: 3px 7px;
-    border: 1px solid transparent;
-    border-radius: 3px;
-    font-size: 12px;
-    color: var(--cream);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.queue-row[data-active="true"] {
-    background: var(--row-selected);
-    border-color: var(--frame);
-}
-
-.queue-empty {
-    padding: 3px 7px;
-    color: var(--muted);
-    font-size: 11px;
-}
-
-/* --- 4. network status ---------------------------------------------------- */
-
-.status-row {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 7px 9px;
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-    font-size: 12px;
-}
-
-.led {
-    width: 13px;
-    height: 13px;
-    flex: 0 0 auto;
-    background: var(--green);
-    border: 1px solid #2f7a24;
-    border-radius: 3px;
-    box-shadow: 0 0 6px rgba(103, 217, 78, .75);
-    animation: led-pulse 2.4s ease-in-out infinite;
-}
-
-@keyframes led-pulse {
-    0%, 100% { opacity: 1; }
-    50%      { opacity: .55; }
-}
-
-/* --- 5. simulation controls ----------------------------------------------- */
-
-.sim-body {
-    padding: 7px 9px;
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-}
-
-.sim-controls-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.sim-btn {
-    width: 34px;
-    height: 28px;
-    display: grid;
-    place-items: center;
-    background: var(--btn-face);
-    border: 1px solid var(--frame);
-    border-radius: 4px;
-    color: var(--amber-bright);
-    font-size: 13px;
-    line-height: 1;
-    cursor: pointer;
-    transition: filter .15s;
-}
-
-.sim-btn:hover { filter: brightness(1.3); }
-
-.sim-btn[data-active="true"] {
-    background: var(--frame);
-    color: #1a1014;
-}
-
-.sim-speed {
-    margin-left: 4px;
-    font-size: 12px;
-    color: var(--cream);
-}
-
-.sim-footer {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 7px;
-    font-size: 11px;
-    color: var(--muted);
-}
-
-.sim-footer button {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--muted);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    cursor: pointer;
-}
-
-.sim-footer button:hover { color: var(--amber); }
-
-/* --- memo drawer ---------------------------------------------------------- */
+/* --- mission output ---------------------------------------------------------- */
 
 .memo-card { flex: 0 1 auto; min-height: 0; }
 
@@ -671,63 +534,227 @@ body { overflow: hidden; }
    The planner's DAG. plan.created draws it; dag.update redraws it after every
    step, so status is carried on the row rather than animated.
    ========================================================================= */
-.plan-list {
+/* --- execution plan: the DAG as a graph ------------------------------- */
+/* Was a flat list, which hid the graph structure entirely. Nodes are ranked
+   by dependency depth and joined by real edges; the visual language follows
+   Obsidian's graph view -- round nodes, curved links, neighbours stay lit on
+   hover while the rest dims. */
+
+.dag-viewport {
     flex: 1;
-    min-height: 70px;
-    max-height: 190px;
-    padding: 5px;
-    background: var(--panel);
+    min-height: 150px;
+    background:
+        radial-gradient(circle at 50% 40%, rgba(169,113,60,.07), transparent 70%),
+        var(--panel);
     border: 1px solid var(--frame-dim);
     border-radius: 4px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame) var(--trough);
+}
+.dag-viewport::-webkit-scrollbar { width: 8px; height: 8px; }
+.dag-viewport::-webkit-scrollbar-track { background: var(--trough); }
+.dag-viewport::-webkit-scrollbar-thumb { background: var(--frame-dim); border-radius: 4px; }
+.dag-viewport svg { display: block; }
+
+.dag-edge {
+    fill: none;
+    stroke: var(--frame-dim);
+    stroke-width: 1.6;
+    transition: stroke .15s, opacity .15s;
+}
+.dag-edge.lit { stroke: var(--amber-bright); stroke-width: 2.4; }
+.dag-edge.dim { opacity: .18; }
+
+.dag-node { cursor: default; transition: opacity .15s; }
+.dag-node.dim { opacity: .22; }
+.dag-dot { transition: r .15s, filter .15s; }
+.dag-node:hover .dag-dot { filter: brightness(1.35); }
+
+.dag-ring { stroke-width: 1.4; opacity: .75; }
+
+.dag-glyph {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    fill: #14100f;
+    pointer-events: none;
+}
+.dag-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    fill: var(--cream);
+    pointer-events: none;
+}
+.dag-sub {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    fill: var(--muted);
+    pointer-events: none;
+}
+
+/* A running node pulses, so the eye finds the live step without hunting. */
+.dag-node[data-status="running"] .dag-dot,
+.dag-node[data-status="active"]  .dag-dot { animation: dagPulse 1.15s ease-in-out infinite; }
+@keyframes dagPulse {
+    0%, 100% { filter: brightness(1);   }
+    50%      { filter: brightness(1.55); }
+}
+
+.dag-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 5px 2px 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+}
+.dag-legend span[data-k="completed"] { color: var(--green-lit); }
+.dag-legend span[data-k="running"]   { color: var(--amber-bright); }
+.dag-legend span[data-k="failed"]    { color: #ff7a5c; }
+
+/* Full-screen graph: the sidebar is too narrow for a wide plan. */
+.dag-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    padding: 26px;
+    background: rgba(0, 0, 0, .82);
+    backdrop-filter: blur(2px);
+}
+.dag-overlay-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--panel-raised);
+    border: 1px solid var(--frame);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+}
+.dag-viewport-full {
+    flex: 1;
+    min-height: 0;
+    border-radius: 0 0 var(--radius) var(--radius);
+    border-color: var(--frame);
+}
+
+/* --- mission output --------------------------------------------------- */
+
+.out-goal {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--cream);
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: var(--panel);
+    border-left: 2px solid var(--frame);
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+}
+.out-goal-tag {
+    font-family: var(--font-pixel);
+    font-size: 8px;
+    color: var(--frame-lit);
+    margin-right: 6px;
+}
+
+.out-banner {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.4;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+}
+.out-banner[data-kind="error"] {
+    color: #ffb2a0;
+    background: rgba(200, 80, 60, .13);
+    border-left: 2px solid #c8503c;
+}
+.out-banner[data-kind="warn"] {
+    color: var(--string);
+    background: rgba(169, 113, 60, .12);
+    border-left: 2px solid var(--frame);
+}
+
+.out-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.out-tab {
+    font-family: var(--font-pixel);
+    font-size: 8px;
+    letter-spacing: .5px;
+    color: var(--muted);
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 3px;
+    padding: 5px 9px;
+    cursor: pointer;
+}
+.out-tab:hover { color: var(--cream); }
+.out-tab[data-active="true"] {
+    color: var(--amber-bright);
+    border-color: var(--frame);
+    background: var(--row-selected);
+}
+
+.out-pane { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+
+.out-files {
+    flex: 1;
+    min-height: 0;
+    max-height: 260px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--frame) var(--trough);
 }
-.plan-list::-webkit-scrollbar { width: 8px; }
-.plan-list::-webkit-scrollbar-track { background: var(--trough); }
-.plan-list::-webkit-scrollbar-thumb {
-    background: var(--frame-dim);
-    border-radius: 4px;
-}
+.out-files::-webkit-scrollbar { width: 8px; }
+.out-files::-webkit-scrollbar-track { background: var(--trough); }
+.out-files::-webkit-scrollbar-thumb { background: var(--frame-dim); border-radius: 4px; }
 
-.plan-step {
+.out-file {
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 3px;
+    margin-bottom: 5px;
+}
+.out-file > summary {
     display: flex;
-    gap: 7px;
-    align-items: flex-start;
-    padding: 4px 5px;
-    border-left: 2px solid var(--frame-dim);
-    margin-bottom: 3px;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
     font-family: var(--font-mono);
     font-size: 11px;
-    line-height: 1.35;
     color: var(--cream);
 }
-.plan-mark { flex: 0 0 auto; color: var(--muted); }
-.plan-body { display: flex; flex-direction: column; min-width: 0; }
-.plan-text { overflow-wrap: anywhere; }
-.plan-meta { font-size: 10px; color: var(--muted); }
-
-/* Status is the only thing that changes between redraws, so it carries all
-   the colour: amber while running, green when done, red on failure. */
-.plan-step[data-status="running"],
-.plan-step[data-status="active"] {
-    border-left-color: var(--amber);
-    background: var(--row-selected);
+.out-file > summary::-webkit-details-marker { display: none; }
+.out-file > summary::before { content: "▸ "; color: var(--frame-lit); }
+.out-file[open] > summary::before { content: "▾ "; }
+.out-file-name { overflow-wrap: anywhere; }
+.out-file-meta { flex: 0 0 auto; font-size: 9.5px; color: var(--muted); }
+.out-file-body {
+    padding: 2px 10px 8px;
+    border-top: 1px solid var(--frame-dim);
+    font-size: 11px;
 }
-.plan-step[data-status="running"] .plan-mark,
-.plan-step[data-status="active"]  .plan-mark { color: var(--amber-bright); }
-
-.plan-step[data-status="completed"] { border-left-color: var(--green); }
-.plan-step[data-status="completed"] .plan-mark { color: var(--green-lit); }
-.plan-step[data-status="completed"] .plan-text { color: var(--muted); }
-
-.plan-step[data-status="failed"] { border-left-color: #c8503c; }
-.plan-step[data-status="failed"] .plan-mark { color: #ff7a5c; }
-
-/* A meeting row reads differently from a work row: it is a place, not a desk. */
-.plan-step[data-kind="meeting"] {
-    border-left-color: var(--frame-lit);
-    background: rgba(169, 113, 60, 0.10);
+.out-file-body pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--cream);
+    margin: 6px 0;
 }
-.plan-step[data-kind="meeting"] .plan-mark  { color: var(--frame-lit); }
-.plan-step[data-kind="meeting"] .plan-meta  { color: var(--string); }
+.out-clip { color: var(--muted); font-style: italic; font-size: 10px; }
+.out-empty {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 10px 4px;
+}

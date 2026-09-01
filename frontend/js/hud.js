@@ -36,21 +36,15 @@ class RetroHUD {
         this.terminalLogs   = document.getElementById('terminalLogs');
         this.tokenUsageValue = document.getElementById('tokenUsageValue');
         this.tokenFuelGauge = document.getElementById('tokenFuelGauge');
-        this.taskQueueList  = document.getElementById('taskQueueList');
-        this.taskQueueCount = document.getElementById('taskQueueCount');
-        this.netStatusText  = document.getElementById('netStatusText');
         this.agentDock      = document.getElementById('agentDock');
         this.planCard       = document.getElementById('planCard');
-        this.planList       = document.getElementById('planList');
+        this.planNodes      = [];   // last plan, redrawn when the overlay opens
         this.planSource     = document.getElementById('planSource');
-        this.simSpeedText   = document.getElementById('simSpeedText');
         this.executiveMemoCard = document.getElementById('executiveMemoCard');
         this.memoBodyContent   = document.getElementById('memoBodyContent');
 
         this.currentTokens = 0;
         this.maxTokens = 10000;
-        this.maxQueue = 5;
-        this.queue = [];
         this.agents = new Map();
         this.selectedAgentId = null;
 
@@ -58,7 +52,6 @@ class RetroHUD {
 
         this.buildGauge();
         this.registerAgents(DEFAULT_AGENTS);
-        this.renderQueue();
         this.initEventListeners();
         this.loadAtlas();
     }
@@ -163,7 +156,6 @@ class RetroHUD {
             this.agentDock.appendChild(this.buildDockCard(agent));
         });
 
-        this.setAgentCount(this.agents.size);
         this.applyAvatars();            // no-op until the atlas has loaded
     }
 
@@ -258,56 +250,214 @@ class RetroHUD {
      * Node shape (verified against a live run): id, agent_id, description,
      * dependencies, produces, consumes, rationale, status, routed_from.
      */
+    /**
+     * Draw the plan as a graph.
+     *
+     * It was a flat list, which threw away the one thing a DAG is for: a step
+     * with two parents and a step that merely follows another looked identical.
+     * Dependencies are drawn as real edges now, laid out in ranks so the shape
+     * of the plan -- what forks, what joins, what waits -- is visible at a
+     * glance.
+     */
     renderPlan(nodes, source) {
-        if (!this.planList || !this.planCard) return;
+        if (!this.planCard) return;
         if (!Array.isArray(nodes) || !nodes.length) {
             this.planCard.style.display = 'none';
+            this.planNodes = [];
             return;
         }
         this.planCard.style.display = '';
         if (this.planSource) this.planSource.textContent = source || 'planner';
+        this.planNodes = nodes;
 
-        this.planList.innerHTML = nodes.map((n, i) => {
-            const id     = n.id || n.step_id || `s${i + 1}`;
-            const status = (n.status || 'pending').toLowerCase();
-            const who    = n.agent_id || n.agent || '';
-            const text   = n.description || n.label || id;
-            const agent  = this.agents.get(who);
-            const name   = agent ? agent.name : who;
-            const deps   = n.dependencies || [];
+        this.drawDag(document.getElementById('dagSvg'), nodes, 300);
+        const overlay = document.getElementById('dagOverlay');
+        if (overlay && overlay.style.display !== 'none') {
+            this.drawDag(document.getElementById('dagSvgFull'), nodes, 0);
+        }
+        this.renderDagLegend(nodes);
+    }
+
+    /**
+     * Rank the steps by dependency depth.
+     *
+     * Depth is the LONGEST path from a root, not the shortest: a step that
+     * depends on both s1 and s3 has to sit below s3, or its edge would point
+     * upwards and the graph would read as a cycle.
+     */
+    layoutDag(nodes) {
+        const byId = new Map();
+        const list = nodes.map((n, i) => {
+            const id = n.id || n.step_id || `s${i + 1}`;
+            const rec = { raw: n, id, deps: (n.dependencies || []).filter(Boolean), depth: 0, i };
+            byId.set(id, rec);
+            return rec;
+        });
+
+        // Iterate to a fixed point. A DAG settles in at most |V| passes; the
+        // bound also stops a malformed plan with a cycle from spinning here.
+        for (let pass = 0; pass < list.length; pass++) {
+            let moved = false;
+            for (const nd of list) {
+                for (const d of nd.deps) {
+                    const p = byId.get(d);
+                    if (p && p.depth + 1 > nd.depth) { nd.depth = p.depth + 1; moved = true; }
+                }
+            }
+            if (!moved) break;
+        }
+
+        const ranks = [];
+        for (const nd of list) (ranks[nd.depth] || (ranks[nd.depth] = [])).push(nd);
+        return { list, byId, ranks };
+    }
+
+    drawDag(svg, nodes, fixedHeight) {
+        if (!svg) return;
+        const { list, byId, ranks } = this.layoutDag(nodes);
+
+        // Width comes from the viewport the svg sits in. Falls back rather than
+        // throwing: a hidden panel measures 0, and the overlay is measured
+        // before it has been laid out at least once.
+        const host = svg.parentElement;
+        const box = host && host.getBoundingClientRect ? host.getBoundingClientRect() : null;
+        const W = Math.max(240, (box && box.width) || 480);
+        const rankH = 92;
+        const H = fixedHeight || Math.max(240, ranks.length * rankH + 40);
+        const R = 15;
+
+        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', H);
+
+        // Position: ranks down the page, evenly spread across each row.
+        const usableH = H - 48;
+        ranks.forEach((row, d) => {
+            const y = 30 + (ranks.length === 1 ? usableH / 2 : (d / (ranks.length - 1)) * usableH);
+            row.forEach((nd, i) => {
+                nd.x = ((i + 1) / (row.length + 1)) * W;
+                nd.y = y;
+            });
+        });
+
+        const STATUS = {
+            completed: 'var(--green)',
+            running:   'var(--amber-bright)',
+            active:    'var(--amber-bright)',
+            failed:    '#e2603f',
+            pending:   'var(--muted)',
+        };
+        const statusOf = n => (n.status || 'pending').toLowerCase();
+
+        let edges = '';
+        let dots  = '';
+
+        for (const nd of list) {
+            for (const d of nd.deps) {
+                const p = byId.get(d);
+                if (!p) continue;
+                // Cubic bezier with vertical handles -- the Obsidian look, and
+                // it keeps edges from cutting straight through nodes between.
+                const dy = Math.max(24, (nd.y - p.y) * 0.45);
+                edges += `<path class="dag-edge" data-from="${p.id}" data-to="${nd.id}"
+                    d="M ${p.x} ${p.y + R} C ${p.x} ${p.y + R + dy}, ${nd.x} ${nd.y - R - dy}, ${nd.x} ${nd.y - R}" />`;
+            }
+        }
+
+        for (const nd of list) {
+            const n = nd.raw;
+            const st = statusOf(n);
+            const colour = STATUS[st] || STATUS.pending;
             const meeting = n.kind === 'meeting';
-            const mark   = meeting ? '☰'
-                         : ({ completed: '✔', running: '▶', active: '▶',
-                              failed: '✖', pending: '·' }[status] || '·');
-            // A meeting is several people in one place, so the row names the
-            // room rather than a single desk: chair first, then who joined.
-            const guests = (n.attendees || [])
-                .map(id => (this.agents.get(id) || {}).name || id);
-            const line = meeting
+            const who = n.agent_id || n.agent || '';
+            const agent = this.agents.get(who);
+            const name = agent ? agent.name : who;
+            const guests = (n.attendees || []).map(g => (this.agents.get(g) || {}).name || g);
+            const label = meeting ? 'Meeting' : (nd.id);
+            const sub = meeting
                 ? `${name}${guests.length ? ' + ' + guests.join(', ') : ''}`
                 : name;
-            return `
-                <div class="plan-step" data-status="${status}"${meeting ? ' data-kind="meeting"' : ''}>
-                    <span class="plan-mark">${mark}</span>
-                    <span class="plan-body">
-                        <span class="plan-text">${meeting ? 'Meeting — ' : ''}${this.escapeHtml(text)}</span>
-                        <span class="plan-meta">${this.escapeHtml(line || '')}${
-                            deps.length ? ' · after ' + this.escapeHtml(deps.join(', ')) : ''
-                        }</span>
-                    </span>
-                </div>`;
-        }).join('');
+            const glyph = meeting ? '☰'
+                : ({ completed: '✔', running: '▶', active: '▶',
+                     failed: '✖' }[st] || '·');
+
+            const tip = [
+                `${nd.id}${meeting ? ' (meeting)' : ''} — ${sub}`,
+                n.description || '',
+                n.produces ? `produces: ${n.produces}` : '',
+                (n.consumes && n.consumes.length) ? `consumes: ${[].concat(n.consumes).join(', ')}` : '',
+                nd.deps.length ? `after: ${nd.deps.join(', ')}` : '',
+            ].filter(Boolean).join('\n');
+
+            dots += `
+              <g class="dag-node" data-id="${nd.id}" data-status="${st}"${meeting ? ' data-kind="meeting"' : ''}>
+                <title>${this.escapeHtml(tip)}</title>
+                ${meeting ? `<circle class="dag-ring" cx="${nd.x}" cy="${nd.y}" r="${R + 5}"
+                     fill="none" stroke="${colour}" />` : ''}
+                <circle class="dag-dot" cx="${nd.x}" cy="${nd.y}" r="${R}"
+                        fill="${colour}" />
+                <text class="dag-glyph" x="${nd.x}" y="${nd.y}"
+                      text-anchor="middle" dominant-baseline="central">${glyph}</text>
+                <text class="dag-label" x="${nd.x}" y="${nd.y + R + 15}"
+                      text-anchor="middle">${this.escapeHtml(label)}</text>
+                <text class="dag-sub" x="${nd.x}" y="${nd.y + R + 27}"
+                      text-anchor="middle">${this.escapeHtml(this.clip(sub, 18))}</text>
+              </g>`;
+        }
+
+        svg.innerHTML = `<g class="dag-edges">${edges}</g><g class="dag-nodes">${dots}</g>`;
+        this.wireDagHover(svg);
+    }
+
+    /** Obsidian's hover: the node and its links stay lit, everything else dims. */
+    wireDagHover(svg) {
+        const nodes = svg.querySelectorAll('.dag-node');
+        const edges = svg.querySelectorAll('.dag-edge');
+        nodes.forEach(g => {
+            g.addEventListener('mouseenter', () => {
+                const id = g.dataset.id;
+                const near = new Set([id]);
+                edges.forEach(e => {
+                    const hit = e.dataset.from === id || e.dataset.to === id;
+                    e.classList.toggle('lit', hit);
+                    e.classList.toggle('dim', !hit);
+                    if (hit) { near.add(e.dataset.from); near.add(e.dataset.to); }
+                });
+                nodes.forEach(o => o.classList.toggle('dim', !near.has(o.dataset.id)));
+            });
+            g.addEventListener('mouseleave', () => {
+                edges.forEach(e => e.classList.remove('lit', 'dim'));
+                nodes.forEach(o => o.classList.remove('dim'));
+            });
+        });
+    }
+
+    renderDagLegend(nodes) {
+        const el = document.getElementById('dagLegend');
+        if (!el) return;
+        const tally = { completed: 0, running: 0, failed: 0, pending: 0 };
+        nodes.forEach(n => {
+            let s = (n.status || 'pending').toLowerCase();
+            if (s === 'active') s = 'running';
+            if (tally[s] === undefined) s = 'pending';
+            tally[s]++;
+        });
+        const bits = [];
+        if (tally.completed) bits.push(`<span data-k="completed">✔ ${tally.completed} done</span>`);
+        if (tally.running)   bits.push(`<span data-k="running">▶ ${tally.running} running</span>`);
+        if (tally.failed)    bits.push(`<span data-k="failed">✖ ${tally.failed} failed</span>`);
+        if (tally.pending)   bits.push(`<span data-k="pending">· ${tally.pending} pending</span>`);
+        el.innerHTML = bits.join('');
+    }
+
+    clip(s, n) {
+        s = String(s || '');
+        return s.length > n ? s.slice(0, n - 1) + '…' : s;
     }
 
     /** Kept for app.js compatibility -- highlights the dock card. */
     updateActiveDagNode(specialistId) {
         if (specialistId) this.setAgentState(specialistId, 'active');
-    }
-
-    setAgentCount(n) {
-        if (this.netStatusText) {
-            this.netStatusText.textContent = `${n} AGENT${n === 1 ? '' : 'S'} ONLINE`;
-        }
     }
 
     /* --- terminal -------------------------------------------------------- */
@@ -365,60 +515,101 @@ class RetroHUD {
         }
     }
 
-    /* --- task queue ------------------------------------------------------ */
-
-    enqueueTask(id, description) {
-        this.queue.push({ id, description, active: this.queue.length === 0 });
-        this.renderQueue();
-    }
-
-    completeTask(id) {
-        this.queue = this.queue.filter(t => t.id !== id);
-        if (this.queue.length) this.queue[0].active = true;
-        this.renderQueue();
-    }
-
-    setQueue(tasks) {
-        this.queue = (tasks || []).map((t, i) => ({
-            id: t.id,
-            description: t.description,
-            active: i === 0
-        }));
-        this.renderQueue();
-    }
-
-    renderQueue() {
-        if (!this.taskQueueList) return;
-        this.taskQueueList.innerHTML = '';
-
-        if (!this.queue.length) {
-            const empty = document.createElement('div');
-            empty.className = 'queue-empty';
-            empty.textContent = 'No tasks queued.';
-            this.taskQueueList.appendChild(empty);
-        } else {
-            this.queue.forEach(task => {
-                const row = document.createElement('div');
-                row.className = 'queue-row';
-                row.dataset.active = String(!!task.active);
-                row.textContent = `${task.id} ${task.description}`;
-                this.taskQueueList.appendChild(row);
-            });
-        }
-
-        if (this.taskQueueCount) {
-            this.taskQueueCount.textContent = `${this.queue.length}/${this.maxQueue}`;
-        }
-    }
-
     /* --- memo ------------------------------------------------------------ */
 
-    showExecutiveMemo(markdownText) {
+    /** Remember what was asked, so the output can be shown against it. */
+    setMissionGoal(goal) {
+        this.missionGoal = goal || '';
+    }
+
+    /**
+     * Show the finished mission: the goal, the report, and the real files.
+     *
+     * `payload` is the whole task.completed body. The second argument is
+     * optional so the old one-argument call still works.
+     */
+    showExecutiveMemo(markdownText, payload) {
         if (!this.executiveMemoCard || !this.memoBodyContent) return;
+        payload = payload || {};
+
+        const goalEl = document.getElementById('outGoal');
+        if (goalEl) {
+            goalEl.innerHTML = this.missionGoal
+                ? `<span class="out-goal-tag">ASKED</span> ${this.escapeHtml(this.missionGoal)}`
+                : '';
+            goalEl.style.display = this.missionGoal ? '' : 'none';
+        }
+
+        // A failed run used to render its verdict as if it were a result. Say
+        // so instead -- an empty report with no explanation reads like a bug in
+        // the UI rather than a mission that did not produce anything.
+        const files = Array.isArray(payload.artifacts) ? payload.artifacts : [];
+        const banner = document.getElementById('outBanner');
+        const failed = /\b(\d+)\s+failed\b/i.exec(String(markdownText || ''));
+        const nFailed = failed ? parseInt(failed[1], 10) : 0;
+        if (banner) {
+            if (nFailed > 0) {
+                banner.textContent = `${nFailed} step${nFailed === 1 ? '' : 's'} failed — `
+                    + `the report below is incomplete. See the terminal for the cause.`;
+                banner.dataset.kind = 'error';
+                banner.style.display = '';
+            } else if (!files.length) {
+                banner.textContent = 'No files were produced by this mission.';
+                banner.dataset.kind = 'warn';
+                banner.style.display = '';
+            } else {
+                banner.style.display = 'none';
+            }
+        }
+
         this.memoBodyContent.innerHTML = (typeof marked !== 'undefined')
             ? marked.parse(String(markdownText || ''))
             : this.escapeHtml(String(markdownText || ''));
+
+        this.renderOutputFiles(files);
         this.executiveMemoCard.style.display = 'flex';
+        this.selectOutputTab('report');
+    }
+
+    renderOutputFiles(files) {
+        const wrap  = document.getElementById('outFiles');
+        const count = document.getElementById('outFileCount');
+        if (count) count.textContent = String(files.length);
+        if (!wrap) return;
+
+        if (!files.length) {
+            wrap.innerHTML = '<div class="out-empty">Nothing was filed to the workspace.</div>';
+            return;
+        }
+
+        wrap.innerHTML = files.map((f, i) => {
+            const body = String(f.content || '');
+            const rendered = (typeof marked !== 'undefined' && /\.md$/i.test(f.name || ''))
+                ? marked.parse(body)
+                : `<pre>${this.escapeHtml(body)}</pre>`;
+            return `
+              <details class="out-file"${i === 0 ? ' open' : ''}>
+                <summary>
+                    <span class="out-file-name">${this.escapeHtml(f.name || 'untitled')}</span>
+                    <span class="out-file-meta">${this.escapeHtml(f.author_name || '')} · ${f.size_chars || 0} chars</span>
+                </summary>
+                <div class="out-file-body markdown-body">${rendered}${
+                    f.truncated ? '<p class="out-clip">… truncated for display</p>' : ''
+                }</div>
+              </details>`;
+        }).join('');
+    }
+
+    selectOutputTab(which) {
+        const tabs = { report: 'outTabReport', files: 'outTabFiles' };
+        const panes = { report: 'outPaneReport', files: 'outPaneFiles' };
+        Object.keys(tabs).forEach(k => {
+            const t = document.getElementById(tabs[k]);
+            const p = document.getElementById(panes[k]);
+            const on = k === which;
+            if (t) { t.dataset.active = String(on); t.setAttribute('aria-selected', String(on)); }
+            if (p) p.style.display = on ? '' : 'none';
+        });
     }
 
     /* --- wiring ---------------------------------------------------------- */
@@ -440,46 +631,37 @@ class RetroHUD {
             });
         }
 
-        this.wireSimControls();
-    }
+        const tabReport = document.getElementById('outTabReport');
+        const tabFiles  = document.getElementById('outTabFiles');
+        if (tabReport) tabReport.addEventListener('click', () => this.selectOutputTab('report'));
+        if (tabFiles)  tabFiles.addEventListener('click',  () => this.selectOutputTab('files'));
 
-    wireSimControls() {
-        const play = document.getElementById('simPlayBtn');
-        const pause = document.getElementById('simPauseBtn');
-        const rewind = document.getElementById('simRewindBtn');
-        const toggle = document.getElementById('simToggleLabel');
-
-        const canvas = () => window.officeCanvas;
-        const setPaused = (paused) => {
-            const c = canvas();
-            if (c) c.isPaused = paused;
-            if (play) play.dataset.active = String(!paused);
-            if (pause) pause.dataset.active = String(paused);
-            if (toggle) toggle.textContent = paused ? '[Resume]' : '[Pause]';
-        };
-
-        if (play) play.addEventListener('click', () => setPaused(false));
-        if (pause) pause.addEventListener('click', () => setPaused(true));
-        if (toggle) {
-            toggle.addEventListener('click', () => {
-                const c = canvas();
-                setPaused(c ? !c.isPaused : true);
+        // The sidebar graph is a thumbnail; the overlay is where a wide plan is
+        // actually readable. Redraw on open because the viewport size differs.
+        const overlay = document.getElementById('dagOverlay');
+        const expand  = document.getElementById('dagExpandBtn');
+        const closeD  = document.getElementById('dagCloseBtn');
+        if (expand && overlay) {
+            expand.addEventListener('click', () => {
+                overlay.style.display = 'flex';
+                requestAnimationFrame(() =>
+                    this.drawDag(document.getElementById('dagSvgFull'), this.planNodes || [], 0));
             });
         }
-
-        // Rewind steps the speed back down through the cycle 1x -> 2x -> 4x.
-        if (rewind) {
-            rewind.addEventListener('click', () => {
-                const c = canvas();
-                if (!c) return;
-                const speeds = [1, 2, 4];
-                const idx = speeds.indexOf(c.simSpeed);
-                c.simSpeed = speeds[(idx <= 0 ? speeds.length : idx) - 1];
-                if (this.simSpeedText) this.simSpeedText.textContent = `Speed ${c.simSpeed}x`;
+        if (closeD && overlay) {
+            closeD.addEventListener('click', () => { overlay.style.display = 'none'; });
+        }
+        if (overlay) {
+            overlay.addEventListener('click', e => {
+                if (e.target === overlay) overlay.style.display = 'none';
             });
         }
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && overlay && overlay.style.display !== 'none') {
+                overlay.style.display = 'none';
+            }
+        });
 
-        setPaused(false);
     }
 
     escapeHtml(text) {

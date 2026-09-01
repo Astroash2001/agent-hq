@@ -5,7 +5,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = new PixelOfficeCanvas('officeCanvas');
     const hud = new RetroHUD();
-    // hud.js reaches for these to drive the dock and the simulation controls.
+    // canvas.js logs through the HUD; hud.js focuses the camera on a
+    // selected agent. Each reaches the other through these.
     window.retroHUD = hud;
     window.officeCanvas = canvas;
 
@@ -48,9 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const type = event.type;
         const agentId = event.agent_id;
         const payload = event.data || {};
-        // The mission id lives on the ENVELOPE, not in data. task.completed
-        // carries only {result, artifacts, duration_seconds, ...}, so reading
-        // payload.id here left the queue item stuck forever.
+        // The mission id lives on the ENVELOPE, not in data: task.completed
+        // carries only {result, artifacts, duration_seconds, ...}.
         const taskId = event.task_id;
 
         switch (type) {
@@ -62,8 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case 'task.created':
-                hud.enqueueTask(taskId || payload.id || `#${hud.queue.length + 1}`, payload.description);
-                hud.addTerminalLog(`Task: '${payload.description}' queued.`, 'ANALYSIS');
+                hud.addTerminalLog(`Task accepted: '${payload.description}'`, 'ANALYSIS');
                 break;
 
             case 'task.assigned':
@@ -159,6 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // {dag, source} -- the same nodes, restated after every step. Both
             // just redraw the panel.
             case 'plan.created':
+                hud.setMissionGoal(payload.goal);
                 hud.renderPlan(payload.steps || [], payload.source);
                 hud.addTerminalLog(
                     `Plan: ${(payload.steps || []).length} steps (${payload.source || 'planner'})`,
@@ -200,9 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case 'task.completed':
-                hud.completeTask(taskId || payload.id);
                 hud.addTerminalLog(`Task completed in ${payload.duration_seconds}s`, 'SUCCESS');
-                hud.showExecutiveMemo(payload.result);
+                // The whole payload, not just the text: `artifacts` carries the
+                // produced files and their bodies for the FILES tab.
+                hud.showExecutiveMemo(payload.result, payload);
                 break;
         }
     }
@@ -242,7 +243,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function simulateStandaloneTask(text) {
         const taskId = `#${++standaloneTaskSeq}`;
-        hud.enqueueTask(taskId, text);
         hud.addTerminalLog(`User dispatched: '${text}'`, 'ANALYSIS');
         canvas.showSpeech('orchestrator', 'Routing subtasks...');
         canvas.updateAgentStatus('orchestrator', 'thinking');
@@ -271,7 +271,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             canvas.agents.forEach(a => canvas.updateAgentStatus(a.id, 'done'));
             hud.agents.forEach(a => hud.setAgentState(a.id, 'done', { progress: 1 }));
-            hud.completeTask(taskId);
             hud.addTerminalLog('Task successfully completed!', 'SUCCESS');
             hud.showExecutiveMemo(
                 `# 🎯 Task Execution Summary\n\n**Goal:** ${text}\n\n` +
