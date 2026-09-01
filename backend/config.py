@@ -48,6 +48,17 @@ class Settings(BaseSettings):
     # an OpenAI primary can fall back to Gemini.
     llm_fallback_enabled: bool = True
 
+    # --- web search ----------------------------------------------------------
+    # Tavily backs the web_search tool. Without a key the tool says plainly
+    # that no search is available, which is what lets an agent fall back on
+    # its own knowledge instead of retrying an empty tool until its step
+    # budget is gone.
+    tavily_api_key: str = os.getenv("TAVILY_API_KEY", "")
+    # "basic" is one credit and fast; "advanced" digs deeper for two.
+    search_depth: str = os.getenv("SEARCH_DEPTH", "basic")
+    # Tavily can return a direct synthesised answer alongside the snippets.
+    search_include_answer: bool = True
+
     # API Keys (loaded from .env or OS environment)
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")

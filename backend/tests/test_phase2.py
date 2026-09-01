@@ -15,9 +15,18 @@ async def test_tool_registry_terminal():
 
 @pytest.mark.asyncio
 async def test_tool_registry_web_search():
+    """
+    The registry can run the tool, and the reply is always actionable.
+
+    This used to assert `len(results) > 0`, which only held because the tool
+    was a mock with canned fixtures. It now calls a real provider, and the
+    suite runs with no key -- so the contract worth pinning is that the call
+    succeeds either way and, when it cannot search, says so plainly instead of
+    returning filler. Provider behaviour is covered in test_web_search.py.
+    """
     result = await tool_registry.execute("web_search", {"query": "safe SQL and RAG best practices"})
     assert result["success"] is True
-    assert len(result["results"]) > 0
+    assert result["results"] or result["note"]
 
 
 @pytest.mark.asyncio

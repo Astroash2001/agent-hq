@@ -186,6 +186,27 @@ class BaseAgent:
 
             tool_calls = response_data.get("tool_calls", [])
 
+            # Warn the agent before its budget runs out.
+            #
+            # Nothing ever told an agent how many steps it had, so it could not
+            # ration them. With live search wired up, a researcher spent all 8
+            # on thirteen increasingly specific queries and was cut off before
+            # writing anything -- the work was done, and none of it was kept.
+            # A model that knows it is nearly out of turns stops gathering and
+            # produces the deliverable.
+            remaining = settings.max_agent_steps - step
+            if 0 < remaining <= 2 and tool_calls:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"You have {remaining} step{'' if remaining == 1 else 's'} left "
+                        f"before this task is stopped. Stop gathering information now "
+                        f"and produce your deliverable this turn -- write it out in full "
+                        f"with write_file if you have that tool, then reply with a "
+                        f"one-line summary. Work with what you already have."
+                    )
+                })
+
             # If no tool calls requested, we have reached the final answer
             if not tool_calls:
                 final_answer = response_data.get("content", "Task completed successfully.")

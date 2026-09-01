@@ -22,3 +22,6 @@ pydantic-settings==2.12.0
 # key set, planner.py falls back to heuristic buckets and the agents run on the
 # simulated action path, so the app still starts and the UI still animates.
 litellm==1.81.10
+# Imported directly by tools/web_search.py for the Tavily call. Already a
+# litellm dependency, pinned here because this project now uses it itself.
+httpx==0.28.1

@@ -168,12 +168,19 @@ class ToolRegistry:
         # 2. Web Search
         self.register(
             name="web_search",
-            description="Search online documentation, technical articles, and job resources for factual data.",
+            description=(
+                "Search the live web for current facts, figures and sources. Returns "
+                "ranked snippets with their URLs. If the reply says no provider is "
+                "configured, searching is unavailable in this deployment -- do not "
+                "call this tool again; answer from your own knowledge and note that "
+                "it was not verified against live sources."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search keyword or query string"},
-                    "max_results": {"type": "integer", "description": "Number of results to retrieve (default 3)"}
+                    "max_results": {"type": "integer",
+                                    "description": "How many results to retrieve, 1-20 (default 5)"}
                 },
                 "required": ["query"]
             },
