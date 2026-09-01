@@ -74,6 +74,20 @@
                 <div class="queue-list" id="taskQueueList"></div>
             </section>
 
+            <!-- 3b. EXECUTION PLAN -- the DAG the planner builds. The backend
+                 has always broadcast plan.created and dag.update; nothing drew
+                 them until now. Hidden until a plan arrives. -->
+            <section class="hud-card plan-card" id="planCard" style="display: none;"
+                     aria-label="Execution plan">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">🗺️</span> EXECUTION PLAN
+                    </div>
+                    <div class="metric" id="planSource">—</div>
+                </div>
+                <div class="plan-list" id="planList"></div>
+            </section>
+
             <!-- 4. AI NETWORK STATUS -->
             <section class="hud-card net-card" aria-label="Network status">
                 <div class="hud-card-header">

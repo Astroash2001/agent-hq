@@ -237,6 +237,18 @@ class ToolRegistry:
             function=analyze_python_code
         )
 
+        # 7. Conference table. These two only work in the meeting room -- see
+        # tools/meeting.py for why they are their own pair rather than reusing
+        # read_file / write_file.
+        from tools.meeting import TOOLS as MEETING_TOOLS
+        for spec in MEETING_TOOLS:
+            self.register(
+                name=spec["name"],
+                description=spec["description"],
+                parameters=spec["parameters"],
+                function=spec["function"]
+            )
+
 
 # Global singleton Tool Registry instance
 tool_registry = ToolRegistry()

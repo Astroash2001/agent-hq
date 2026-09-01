@@ -103,7 +103,8 @@ class PixelOfficeCanvas {
         this.isPaused = false;
         this.simSpeed = 1;
         this.selectedAgentId = null;
-        this.taskOrbs = [];
+        // Latches once the backend sends its first agent.move.
+        this.liveDriven = false;
         this.particles = [];
 
         this.atlas = null;
@@ -326,6 +327,7 @@ class PixelOfficeCanvas {
             walkTimer: 0,
             walkFrame: 0,
             idleTimer: 2000 + Math.random() * 6000,
+            errand: null,
             speech: null
         }));
     }
@@ -384,11 +386,62 @@ class PixelOfficeCanvas {
         if (a && text) a.speech = { text: String(text).slice(0, 96), expiry: Date.now() + 6500 };
     }
 
-    dispatchTaskOrb(sourceId, targetId) {
-        const s = this.agents.find(a => a.id === sourceId) || this.agents[0];
-        const t = this.agents.find(a => a.id === targetId);
-        if (!s || !t) return;
-        this.taskOrbs.push({ sx: s.x, sy: s.y, tx: t.x, ty: t.y, p: 0 });
+    /**
+     * Walk an agent somewhere because the BACKEND said so.
+     *
+     * office.py already decides that, say, the researcher must stand at the
+     * library before web_search will run, and sends the trip as agent.move.
+     * Until this existed the canvas ignored that and ran its own random
+     * wander, so the figures on screen had nothing to do with the work being
+     * done. The first backend-driven move latches `liveDriven`, which retires
+     * the wander for good -- the two would otherwise fight over the same
+     * waypoints.
+     */
+    walkAgentTo(agentId, x, y, label) {
+        const a = this.agents.find(v => v.id === agentId);
+        if (!a || typeof x !== 'number' || typeof y !== 'number') return;
+        this.liveDriven = true;
+        this.sendTo(a, { x, y });
+        if (label) this.showSpeech(agentId, label);
+    }
+
+    /**
+     * Backend says the agent has arrived. Deliberately does NOT move anyone.
+     *
+     * office.py's walk duration is a timing model, not an animation: it billed
+     * the library trip at 250ms, while the renderer covers that same distance
+     * in about 1.2s at WALK_SPEED -- and further still once the path bends
+     * round furniture. So arrival lands mid-stride nearly every time, and
+     * setting the position here snapped the figure to the destination. That is
+     * what looked like teleporting.
+     *
+     * The destination is already right, because walkAgentTo set it; the walk
+     * just needs to finish. Only when nothing is in flight -- a reload, or a
+     * move whose path could not be solved -- is this a real desync worth
+     * correcting.
+     */
+    agentArrived(agentId, x, y) {
+        const a = this.agents.find(v => v.id === agentId);
+        if (!a) return;
+        if (a.path || (a.waypoints && a.waypoints.length)) return;
+        if (typeof x === 'number' && typeof y === 'number') { a.x = x; a.y = y; }
+    }
+
+    /**
+     * Work handed from one agent to another.
+     *
+     * This used to be a 2.5px dot arcing between two desks, which read as a
+     * network ping rather than anything an office does. Now the sender walks
+     * over, and the bubble app.js pops carries what the task actually is; the
+     * walk is an ordinary sendTo, so a later backend move simply overrides it.
+     */
+    handOffTask(sourceId, targetId) {
+        const from = this.agents.find(a => a.id === sourceId) || this.agents[0];
+        const to = this.agents.find(a => a.id === targetId);
+        if (!from || !to || from === to) return;
+        // Stand beside the desk, not on it -- one tile south of the seat.
+        this.sendTo(from, { x: to.seat.x, y: to.seat.y + 1.1 });
+        from.errand = { returnTo: { ...from.seat }, at: Date.now() + 4200 };
     }
 
     focusAgent(agentId) {
@@ -501,7 +554,18 @@ class PixelOfficeCanvas {
             return;
         }
 
-        // Idle: occasionally wander to a hangout, then drift back to the desk.
+        // An errand: whoever delivered a task walks back to their own desk.
+        if (a.errand && Date.now() >= a.errand.at) {
+            this.sendTo(a, a.errand.returnTo);
+            a.errand = null;
+            return;
+        }
+
+        // Idle wander -- but only while nothing real is driving the floor. Once
+        // the backend has moved anybody, the office shows the work instead of
+        // inventing motion.
+        if (this.liveDriven) return;
+
         a.idleTimer -= dt * 1000 * this.simSpeed;
         if (a.idleTimer <= 0) {
             if (a.state === 'active' || a.state === 'thinking') {
@@ -558,14 +622,6 @@ class PixelOfficeCanvas {
         for (const a of this.agents) {
             if (a.speech && now > a.speech.expiry) a.speech = null;
             this.stepAgent(a, dt);
-        }
-        for (let i = this.taskOrbs.length - 1; i >= 0; i--) {
-            const o = this.taskOrbs[i];
-            o.p += dt * 0.9 * this.simSpeed;
-            if (o.p >= 1) {
-                this.spawnCelebration(o.tx, o.ty);
-                this.taskOrbs.splice(i, 1);
-            }
         }
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
@@ -797,14 +853,6 @@ class PixelOfficeCanvas {
     drawOrbs(ctx) {
         const T = this.tile;
         ctx.save();
-        for (const o of this.taskOrbs) {
-            const x = (o.sx + (o.tx - o.sx) * o.p) * T;
-            const y = (o.sy + (o.ty - o.sy) * o.p) * T - 14 - Math.sin(o.p * Math.PI) * 10;
-            ctx.fillStyle = '#f8c873';
-            ctx.beginPath();
-            ctx.arc(x, y, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-        }
         for (const p of this.particles) {
             ctx.globalAlpha = Math.max(0, p.life);
             ctx.fillStyle = p.c;

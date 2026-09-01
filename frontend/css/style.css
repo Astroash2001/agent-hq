@@ -665,3 +665,69 @@ body { overflow: hidden; }
     }
     .hud-sidebar { max-height: 55vh; }
 }
+
+/* =========================================================================
+   EXECUTION PLAN
+   The planner's DAG. plan.created draws it; dag.update redraws it after every
+   step, so status is carried on the row rather than animated.
+   ========================================================================= */
+.plan-list {
+    flex: 1;
+    min-height: 70px;
+    max-height: 190px;
+    padding: 5px;
+    background: var(--panel);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--frame) var(--trough);
+}
+.plan-list::-webkit-scrollbar { width: 8px; }
+.plan-list::-webkit-scrollbar-track { background: var(--trough); }
+.plan-list::-webkit-scrollbar-thumb {
+    background: var(--frame-dim);
+    border-radius: 4px;
+}
+
+.plan-step {
+    display: flex;
+    gap: 7px;
+    align-items: flex-start;
+    padding: 4px 5px;
+    border-left: 2px solid var(--frame-dim);
+    margin-bottom: 3px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--cream);
+}
+.plan-mark { flex: 0 0 auto; color: var(--muted); }
+.plan-body { display: flex; flex-direction: column; min-width: 0; }
+.plan-text { overflow-wrap: anywhere; }
+.plan-meta { font-size: 10px; color: var(--muted); }
+
+/* Status is the only thing that changes between redraws, so it carries all
+   the colour: amber while running, green when done, red on failure. */
+.plan-step[data-status="running"],
+.plan-step[data-status="active"] {
+    border-left-color: var(--amber);
+    background: var(--row-selected);
+}
+.plan-step[data-status="running"] .plan-mark,
+.plan-step[data-status="active"]  .plan-mark { color: var(--amber-bright); }
+
+.plan-step[data-status="completed"] { border-left-color: var(--green); }
+.plan-step[data-status="completed"] .plan-mark { color: var(--green-lit); }
+.plan-step[data-status="completed"] .plan-text { color: var(--muted); }
+
+.plan-step[data-status="failed"] { border-left-color: #c8503c; }
+.plan-step[data-status="failed"] .plan-mark { color: #ff7a5c; }
+
+/* A meeting row reads differently from a work row: it is a place, not a desk. */
+.plan-step[data-kind="meeting"] {
+    border-left-color: var(--frame-lit);
+    background: rgba(169, 113, 60, 0.10);
+}
+.plan-step[data-kind="meeting"] .plan-mark  { color: var(--frame-lit); }
+.plan-step[data-kind="meeting"] .plan-meta  { color: var(--string); }

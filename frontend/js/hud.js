@@ -40,6 +40,9 @@ class RetroHUD {
         this.taskQueueCount = document.getElementById('taskQueueCount');
         this.netStatusText  = document.getElementById('netStatusText');
         this.agentDock      = document.getElementById('agentDock');
+        this.planCard       = document.getElementById('planCard');
+        this.planList       = document.getElementById('planList');
+        this.planSource     = document.getElementById('planSource');
         this.simSpeedText   = document.getElementById('simSpeedText');
         this.executiveMemoCard = document.getElementById('executiveMemoCard');
         this.memoBodyContent   = document.getElementById('memoBodyContent');
@@ -244,6 +247,59 @@ class RetroHUD {
     }
 
     /** Kept for app.js compatibility — highlights the dock card instead of a DAG node. */
+    /**
+     * Draw the planner's DAG.
+     *
+     * plan.created arrives once with the whole plan; dag.update arrives again
+     * after every step with the statuses refreshed. Both land here, so the
+     * panel is simply redrawn from whatever the backend last said rather than
+     * being patched node by node.
+     *
+     * Node shape (verified against a live run): id, agent_id, description,
+     * dependencies, produces, consumes, rationale, status, routed_from.
+     */
+    renderPlan(nodes, source) {
+        if (!this.planList || !this.planCard) return;
+        if (!Array.isArray(nodes) || !nodes.length) {
+            this.planCard.style.display = 'none';
+            return;
+        }
+        this.planCard.style.display = '';
+        if (this.planSource) this.planSource.textContent = source || 'planner';
+
+        this.planList.innerHTML = nodes.map((n, i) => {
+            const id     = n.id || n.step_id || `s${i + 1}`;
+            const status = (n.status || 'pending').toLowerCase();
+            const who    = n.agent_id || n.agent || '';
+            const text   = n.description || n.label || id;
+            const agent  = this.agents.get(who);
+            const name   = agent ? agent.name : who;
+            const deps   = n.dependencies || [];
+            const meeting = n.kind === 'meeting';
+            const mark   = meeting ? '☰'
+                         : ({ completed: '✔', running: '▶', active: '▶',
+                              failed: '✖', pending: '·' }[status] || '·');
+            // A meeting is several people in one place, so the row names the
+            // room rather than a single desk: chair first, then who joined.
+            const guests = (n.attendees || [])
+                .map(id => (this.agents.get(id) || {}).name || id);
+            const line = meeting
+                ? `${name}${guests.length ? ' + ' + guests.join(', ') : ''}`
+                : name;
+            return `
+                <div class="plan-step" data-status="${status}"${meeting ? ' data-kind="meeting"' : ''}>
+                    <span class="plan-mark">${mark}</span>
+                    <span class="plan-body">
+                        <span class="plan-text">${meeting ? 'Meeting — ' : ''}${this.escapeHtml(text)}</span>
+                        <span class="plan-meta">${this.escapeHtml(line || '')}${
+                            deps.length ? ' · after ' + this.escapeHtml(deps.join(', ')) : ''
+                        }</span>
+                    </span>
+                </div>`;
+        }).join('');
+    }
+
+    /** Kept for app.js compatibility -- highlights the dock card. */
     updateActiveDagNode(specialistId) {
         if (specialistId) this.setAgentState(specialistId, 'active');
     }

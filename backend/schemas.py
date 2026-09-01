@@ -117,6 +117,17 @@ class PlanStep(BaseModel):
     status: str = "pending"  # pending, running, completed, failed
     routed_from: Optional[str] = Field(None, description="Original agent id if memory rerouted this step")
 
+    # A step used to mean one agent doing one thing, which is why a meeting
+    # could not be expressed at all: there was nowhere to name the other people
+    # in the room. `agent_id` stays the single owner -- for a meeting it is
+    # whoever chairs and records the decision -- and `attendees` are the others
+    # who walk to the table and are held there for the duration.
+    kind: str = Field("work", description="work | meeting")
+    attendees: List[str] = Field(
+        default_factory=list,
+        description="Additional agent ids that join a meeting step, besides agent_id"
+    )
+
 
 class Plan(BaseModel):
     """A validated execution graph for one user goal."""

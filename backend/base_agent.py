@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from config import settings
+from config import settings, llm_configured, llm_route
 from event_bus import event_bus
 from memory import memory
 from office import office
@@ -64,7 +64,8 @@ class BaseAgent:
         task: Task,
         context: str = "",
         hints: str = "",
-        goal: str = ""
+        goal: str = "",
+        extra_tools: Optional[List[str]] = None
     ) -> str:
         """
         Execute the ReAct Loop for the assigned task.
@@ -74,6 +75,12 @@ class BaseAgent:
         to this desk, `hints` what this agent remembers about similar work, and
         `goal` the mission the step belongs to. All three are optional, so a bare
         `run(task)` behaves exactly as it did before the workspace existed.
+
+        `extra_tools` grants tools for this call only, without touching the
+        agent's manifest. It exists for meetings: review_artifacts and
+        record_decision belong to the conference table, not to any one
+        specialist, so the chair borrows them for the length of the meeting and
+        gives them back.
 
         Tool calls are routed through the office: the agent walks to the station
         the tool lives at and holds it for the duration of the call.
@@ -103,7 +110,11 @@ class BaseAgent:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": "\n\n".join(user_parts)}
         ]
-        tool_schemas = tool_registry.get_schemas_for_agent(self.tools)
+        granted = list(self.tools)
+        for extra in (extra_tools or []):
+            if extra not in granted:
+                granted.append(extra)
+        tool_schemas = tool_registry.get_schemas_for_agent(granted)
 
         step = 0
         final_answer = ""
@@ -230,7 +241,7 @@ class BaseAgent:
         Call LLM using litellm with graceful fallback simulator.
         """
         # Try LiteLLM if API keys are available
-        has_key = bool(settings.gemini_api_key or settings.openai_api_key or settings.anthropic_api_key)
+        has_key = llm_configured()
 
         if has_key:
             try:
@@ -242,7 +253,10 @@ class BaseAgent:
                     "messages": messages,
                     "temperature": settings.temperature,
                     "max_tokens": settings.max_tokens,
-                    "timeout": 12.0
+                    "timeout": settings.llm_timeout,
+                    # api_base / api_key / User-Agent when a gateway is set;
+                    # empty otherwise, so direct-provider routing is unchanged.
+                    **llm_route(),
                 }
                 if tools:
                     kwargs["tools"] = tools
@@ -275,16 +289,64 @@ class BaseAgent:
                     "completion_tokens": getattr(response.usage, "completion_tokens", 50)
                 }
             except Exception as e:
+                # A credential or routing failure must not masquerade as a
+                # working run. With llm_strict on (the default in development)
+                # it raises here instead of quietly producing canned output
+                # that looks like the model answered.
+                if settings.llm_strict:
+                    logger.error(f"[{self.name}] LLM call failed: {type(e).__name__}: {e}")
+                    raise
                 logger.warning(f"[{self.name}] LLM call error: {e}. Utilizing specialist simulator.")
 
         # Robust Autonomous Specialist Simulator (100% reliable fallback)
         await asyncio.sleep(0.4)
-        return self._simulate_specialist_action(task, messages)
+        granted = [
+            t.get("function", {}).get("name")
+            for t in (tools or []) if isinstance(t, dict)
+        ]
+        return self._simulate_specialist_action(task, messages, [g for g in granted if g])
 
-    def _simulate_specialist_action(self, task: Task, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _simulate_specialist_action(
+        self,
+        task: Task,
+        messages: List[Dict[str, Any]],
+        granted: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         """High-fidelity fallback simulator that generates realistic tool calls and outputs."""
         history_len = len(messages)
         desc = task.description.lower()
+        granted = granted or []
+
+        # A meeting overrides the usual keyword routing. Without this the chair
+        # ignores the room it is sitting in and wanders off to whichever station
+        # its description happens to match -- observed: the boss walked to the
+        # library and called read_file in the middle of its own meeting. The
+        # meeting tools only exist when the orchestrator granted them, so their
+        # presence is a reliable signal that this step IS a meeting.
+        if "review_artifacts" in granted:
+            if history_len <= 2:
+                return {
+                    "thought": "Reading what everyone brought to the table...",
+                    "tool_calls": [{"name": "review_artifacts", "arguments": {}}],
+                    "prompt_tokens": 130,
+                    "completion_tokens": 50
+                }
+            if history_len <= 4 and "record_decision" in granted:
+                return {
+                    "thought": "Writing up what the room agreed...",
+                    "tool_calls": [{
+                        "name": "record_decision",
+                        "arguments": {
+                            "decision": (
+                                f"Meeting on: {task.description}\n\n"
+                                "The room reviewed the artifacts on the table and agreed to "
+                                "proceed on the approach they describe."
+                            )
+                        }
+                    }],
+                    "prompt_tokens": 150,
+                    "completion_tokens": 70
+                }
 
         # Step 1: Call relevant tool
         if history_len <= 2:

@@ -48,6 +48,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const type = event.type;
         const agentId = event.agent_id;
         const payload = event.data || {};
+        // The mission id lives on the ENVELOPE, not in data. task.completed
+        // carries only {result, artifacts, duration_seconds, ...}, so reading
+        // payload.id here left the queue item stuck forever.
+        const taskId = event.task_id;
 
         switch (type) {
             case 'system.status':
@@ -58,12 +62,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case 'task.created':
-                hud.enqueueTask(payload.id || `#${hud.queue.length + 1}`, payload.description);
+                hud.enqueueTask(taskId || payload.id || `#${hud.queue.length + 1}`, payload.description);
                 hud.addTerminalLog(`Task: '${payload.description}' queued.`, 'ANALYSIS');
                 break;
 
             case 'task.assigned':
-                canvas.dispatchTaskOrb('orchestrator', payload.assigned_to);
+                // The boss walks the work over rather than firing a dot across
+                // the room. The bubble below carries what the task actually is.
+                canvas.handOffTask('orchestrator', payload.assigned_to);
                 canvas.updateAgentStatus(payload.assigned_to, 'active');
                 // The one thing that pops a bubble over an agent: the work it
                 // has just been handed, in the words the message carries.
@@ -98,8 +104,103 @@ document.addEventListener('DOMContentLoaded', () => {
                 hud.updateTokens(payload);
                 break;
 
+            // ---- failures -------------------------------------------------
+            // Without this a failed step was indistinguishable from one still
+            // thinking: the backend emitted task.failed and nothing listened.
+            case 'task.failed':
+                canvas.updateAgentStatus(agentId, 'error');
+                hud.setAgentState(agentId, 'error', payload);
+                hud.addTerminalLog(
+                    `FAILED ${payload.step_id || 'step'}: ${payload.error || 'unknown error'}`,
+                    'ERROR');
+                break;
+
+            // {completed_step, total_steps, wave, failed}
+            case 'task.progress':
+                hud.addTerminalLog(
+                    `Step ${payload.completed_step} of ${payload.total_steps} done` +
+                    (payload.failed ? ` (${payload.failed} failed)` : ''), 'INFO');
+                break;
+
+            // ---- the floor ------------------------------------------------
+            // office.py decides an agent must stand at a station before its
+            // tool will run. These two are what make the office show that.
+            case 'agent.move':
+                if (payload.to) {
+                    canvas.walkAgentTo(agentId, payload.to.x, payload.to.y,
+                                       payload.label ? `to the ${payload.label}` : null);
+                    hud.addTerminalLog(
+                        `${payload.agent_name || agentId} → ${payload.label || 'station'}`, 'INFO');
+                }
+                break;
+
+            case 'agent.arrived':
+                if (payload.at) canvas.agentArrived(agentId, payload.at.x, payload.at.y);
+                break;
+
+            // {agent_name, label, station_id, tool, occupied_by, queue_length}
+            case 'station.queued':
+                hud.addTerminalLog(
+                    `${payload.agent_name || agentId} waiting for ${payload.label}` +
+                    (payload.occupied_by ? ` (held by ${payload.occupied_by})` : ''), 'INFO');
+                break;
+
+            case 'station.acquired':
+                hud.addTerminalLog(
+                    `${payload.agent_name || agentId} has ${payload.label || payload.station_id}`,
+                    'SUCCESS');
+                break;
+
+            case 'station.released':
+                break;
+
+            // ---- the plan -------------------------------------------------
+            // plan.created carries {goal, steps, source}; dag.update carries
+            // {dag, source} -- the same nodes, restated after every step. Both
+            // just redraw the panel.
+            case 'plan.created':
+                hud.renderPlan(payload.steps || [], payload.source);
+                hud.addTerminalLog(
+                    `Plan: ${(payload.steps || []).length} steps (${payload.source || 'planner'})`,
+                    'ANALYSIS');
+                break;
+
+            case 'dag.update':
+                hud.renderPlan(payload.dag || [], payload.source);
+                break;
+
+            case 'route.changed':
+                hud.addTerminalLog(
+                    `Rerouted ${payload.step_id || 'step'} → ${payload.to_agent_name || payload.to_agent || '?'}`,
+                    'ANALYSIS');
+                break;
+
+            // ---- work passed between agents --------------------------------
+            // {author_name, name, size_chars, step_id, preview}
+            case 'artifact.created':
+                hud.addTerminalLog(
+                    `${payload.author_name || agentId} produced ${payload.name} (${payload.size_chars} chars)`,
+                    'SUCCESS');
+                break;
+
+            // {from_agent_name, to_agent_name, name, size_chars, step_id}
+            case 'artifact.delivered':
+                hud.addTerminalLog(
+                    `${payload.name} — ${payload.from_agent_name} → ${payload.to_agent_name}`,
+                    'INFO');
+                break;
+
+            // `episodes` is a count, not a list.
+            case 'memory.recalled':
+                if (payload.episodes) {
+                    hud.addTerminalLog(
+                        `${payload.agent_name || agentId} recalled ${payload.episodes} similar episode(s)`,
+                        'INFO');
+                }
+                break;
+
             case 'task.completed':
-                hud.completeTask(payload.id);
+                hud.completeTask(taskId || payload.id);
                 hud.addTerminalLog(`Task completed in ${payload.duration_seconds}s`, 'SUCCESS');
                 hud.showExecutiveMemo(payload.result);
                 break;

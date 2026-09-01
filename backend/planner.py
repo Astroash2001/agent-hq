@@ -17,7 +17,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from config import settings
+from config import settings, llm_configured, llm_route
 from schemas import Plan, PlanStep
 
 logger = logging.getLogger("AgentHQ.Planner")
@@ -42,7 +42,17 @@ parallel, so do not chain steps that do not actually depend on each other.
 - `description` is an instruction addressed to that specialist, concrete enough \
 to act on without seeing the original goal.
 - `rationale` is one short clause explaining why this specialist.
-- Use at most %d steps. Prefer fewer. A trivial goal is one step."""
+- Use at most %d steps. Prefer fewer. A trivial goal is one step.
+
+MEETINGS
+You may make any step a meeting by adding "kind": "meeting" and "attendees": ["agent_id", ...]. A meeting gathers people at the conference table instead of one specialist working alone at their desk.
+
+- `agent_id` on a meeting is whoever CHAIRS it and writes the decision down. `attendees` are the others who join. Do not repeat the chair in `attendees`.
+- At the table, and nowhere else, the chair can call `review_artifacts` to read what everyone brought, and `record_decision` to write down what was agreed.
+- The table seats %d people in total, chair included.
+- Call one when the goal genuinely needs people together: reconciling two findings that may conflict, agreeing an approach before work starts, or reviewing several outputs as a group. A meeting must depend on the steps whose work it discusses -- there is no point meeting before there is anything to meet about.
+- Do NOT call one to simply pass a file from one agent to the next. That already happens automatically through `produces` and `consumes`.
+- If the user explicitly asks for a meeting, discussion, review or standup, give them one."""
 
 
 def _roster_block(roster: List[Dict[str, Any]]) -> str:
@@ -118,6 +128,24 @@ def validate_plan(raw: Dict[str, Any], valid_agent_ids: List[str]) -> List[PlanS
         if not produces:
             produces = f"{agent_id}_output.md"
 
+        # Meetings. The model is free to call one; these are the guardrails on
+        # what it may hand back. An attendee it invented, or itself twice, or a
+        # room of nine people would all break the floor, so they are repaired
+        # here rather than trusted.
+        kind = "meeting" if str(item.get("kind", "")).strip().lower() == "meeting" else "work"
+        attendees: List[str] = []
+        if kind == "meeting":
+            for a in (item.get("attendees") or []):
+                a = str(a).strip()
+                if a in valid_agent_ids and a != agent_id and a not in attendees:
+                    attendees.append(a)
+            # The chair occupies a seat too, so the guest list is capacity - 1.
+            attendees = attendees[:max(0, settings.meeting_capacity - 1)]
+            if not attendees:
+                # A meeting of one is just work. Demote rather than reject, so a
+                # near-miss does not cost the whole plan.
+                kind = "work"
+
         steps.append(PlanStep(
             id=canonical,
             agent_id=agent_id,
@@ -125,7 +153,9 @@ def validate_plan(raw: Dict[str, Any], valid_agent_ids: List[str]) -> List[PlanS
             dependencies=[str(d) for d in (item.get("dependencies") or []) if d],
             produces=produces,
             consumes=[str(c) for c in (item.get("consumes") or []) if c],
-            rationale=str(item.get("rationale") or "").strip()
+            rationale=str(item.get("rationale") or "").strip(),
+            kind=kind,
+            attendees=attendees
         ))
 
     if not steps:
@@ -164,8 +194,12 @@ class Planner:
 
     async def plan(self, goal: str, roster: List[Dict[str, Any]]) -> Plan:
         """
-        Plan `goal` against `roster`. Falls back to the heuristic buckets on any
-        failure, so this never raises and never returns an empty plan.
+        Plan `goal` against `roster`.
+
+        A malformed reply is retried once and then falls back to the heuristic
+        buckets. A failed CALL (auth, routing, timeout) raises when
+        settings.llm_strict is on, because a silent fallback there turns a
+        misconfigured gateway into a mission that looks like it worked.
         """
         valid_ids = [a["id"] for a in roster]
 
@@ -179,9 +213,21 @@ class Planner:
                     self.last_source = "llm"
                     logger.info(f"Planner produced {len(steps)} LLM steps for: {goal[:60]}")
                     return Plan(goal=goal, steps=steps, source="llm")
-                except Exception as e:
+                except PlanValidationError as e:
+                    # The model answered but the plan was malformed -- a real
+                    # planning failure, worth a retry then the buckets.
                     logger.warning(f"Planner attempt {attempt} unusable ({e}); "
                                    f"{'retrying' if attempt == 1 else 'falling back to heuristic'}")
+                except Exception as e:
+                    # The call itself failed: credentials, routing, timeout.
+                    # Retrying cannot fix that, and silently returning keyword
+                    # buckets makes a broken configuration look like a working
+                    # mission -- which is exactly how a bad gateway setup hides.
+                    logger.error(f"Planner LLM call failed: {type(e).__name__}: {e}")
+                    if settings.llm_strict:
+                        raise
+                    logger.warning("Falling back to heuristic buckets.")
+                    break
 
         self.last_source = "heuristic"
         steps = heuristic_plan(goal, valid_ids)
@@ -189,7 +235,7 @@ class Planner:
 
     @staticmethod
     def _has_key() -> bool:
-        return bool(settings.gemini_api_key or settings.openai_api_key or settings.anthropic_api_key)
+        return llm_configured()
 
     async def _call_planner_llm(
         self,
@@ -201,7 +247,8 @@ class Planner:
         import litellm
         litellm.drop_params = True
 
-        system = PLANNER_SYSTEM_PROMPT % settings.planner_max_steps
+        system = PLANNER_SYSTEM_PROMPT % (settings.planner_max_steps,
+                                          settings.meeting_capacity)
         user = (
             f"Available specialists:\n{_roster_block(roster)}\n\n"
             f"User goal:\n{goal}\n\n"
@@ -218,6 +265,7 @@ class Planner:
             temperature=settings.planner_temperature,
             max_tokens=settings.max_tokens,
             timeout=settings.planner_timeout,
+            **llm_route(),
         )
         content = response.choices[0].message.content or ""
         return _extract_json(content)

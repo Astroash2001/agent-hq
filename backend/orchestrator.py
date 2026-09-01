@@ -66,6 +66,20 @@ class Orchestrator:
             self._agent_locks[agent_id] = asyncio.Lock()
         return self._agent_locks[agent_id]
 
+    def _agent_by_id(self, agent_id: str):
+        """
+        Any agent by id, boss included.
+
+        The boss is held in `boss_agent` rather than in `self.agents`, but
+        `get_manifests` offers it to the planner alongside the specialists -- so
+        the planner could always name it, and any step it did name would raise
+        "unknown agent". Meetings made that reachable in practice, since the
+        boss is the natural chair.
+        """
+        if self.boss_agent and agent_id == self.boss_agent.id:
+            return self.boss_agent
+        return self.agents.get(agent_id)
+
     def get_manifests(self) -> List[Dict[str, Any]]:
         """
         All agent manifests for frontend rendering.
@@ -366,6 +380,65 @@ class Orchestrator:
 
         return results
 
+    async def _run_meeting(
+        self,
+        step: PlanStep,
+        chair,
+        subtask: Task,
+        workspace: MissionWorkspace,
+        context: str,
+        hints: str,
+        goal: str,
+        task_id: str
+    ) -> str:
+        """
+        Run a step as a meeting: gather the attendees, let the chair work with
+        the room's own tools, then send everyone back.
+
+        The attendees are held at the table for the whole call, so the office
+        shows a group sitting together rather than one agent at a desk. They do
+        not each run a ReAct loop -- one conversation with everyone's artifacts
+        on the table is the point, and N loops would multiply cost for no more
+        information. What makes it a meeting rather than a solo read is that
+        review_artifacts and record_decision exist only here, and every
+        attendee's work is on the table whether or not the step declared it in
+        `consumes`.
+        """
+        from tools import meeting as meeting_tools
+
+        attendees = [(a, ag.name) for a in step.attendees
+                     if (ag := self._agent_by_id(a)) is not None]
+
+        # Everything filed so far, minus what was already delivered as context.
+        on_the_table = [n for n in workspace.names() if n not in (step.consumes or [])]
+        room_context = context
+        if on_the_table:
+            extra = workspace.render_context(on_the_table)
+            room_context = f"{context}\n\n{extra}" if context else extra
+
+        roster = ", ".join(name for _, name in attendees) or "no one else"
+        brief = (
+            f"You are chairing a meeting at the conference table. "
+            f"In the room with you: {roster}.\n"
+            f"Use review_artifacts to read what they brought, and record_decision "
+            f"to write down what the room agreed before you finish."
+        )
+
+        meeting_tools.bind_workspace(workspace)
+        try:
+            async with office.hold_meeting(
+                "conference_table", attendees, task_id=task_id
+            ):
+                return await chair.run(
+                    subtask,
+                    context=f"{brief}\n\n{room_context}" if room_context else brief,
+                    hints=hints,
+                    goal=goal,
+                    extra_tools=["review_artifacts", "record_decision"],
+                )
+        finally:
+            meeting_tools.bind_workspace(None)
+
     async def _run_step(
         self,
         step: PlanStep,
@@ -374,7 +447,7 @@ class Orchestrator:
         goal: str
     ) -> Dict[str, Any]:
         """Assign one step, wait for the specialist, and file what it produced."""
-        specialist = self.agents.get(step.agent_id)
+        specialist = self._agent_by_id(step.agent_id)
         if not specialist:
             raise KeyError(f"step {step.id} names unknown agent '{step.agent_id}'")
 
@@ -399,11 +472,23 @@ class Orchestrator:
                 "produces": step.produces,
                 "consumes": step.consumes,
                 "rationale": step.rationale,
-                "routed_from": step.routed_from
+                "routed_from": step.routed_from,
+                "kind": step.kind,
+                "attendees": step.attendees
             }
         ))
         if self.boss_agent:
-            await self.boss_agent.speak(f"Dispatched {step.id} to {specialist.name}", task_id=task_id)
+            if step.kind == "meeting":
+                names = ", ".join(
+                    ag.name for a in step.attendees
+                    if (ag := self._agent_by_id(a)) is not None
+                ) or "the team"
+                await self.boss_agent.speak(
+                    f"Calling {specialist.name} and {names} to the conference room",
+                    task_id=task_id)
+            else:
+                await self.boss_agent.speak(
+                    f"Dispatched {step.id} to {specialist.name}", task_id=task_id)
 
         # One task per specialist at a time, even if the graph offers two.
         async with self._agent_lock(step.agent_id):
@@ -430,7 +515,12 @@ class Orchestrator:
                         }
                     ))
 
-            result_text = await specialist.run(subtask, context=context, hints=hints, goal=goal)
+            if step.kind == "meeting":
+                result_text = await self._run_meeting(
+                    step, specialist, subtask, workspace, context, hints, goal, task_id)
+            else:
+                result_text = await specialist.run(
+                    subtask, context=context, hints=hints, goal=goal)
 
         stats = dict(specialist.last_run or {})
 

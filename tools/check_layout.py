@@ -123,6 +123,40 @@ def overlap_area(a, b):
     return w * h if w > 0 and h > 0 else 0.0
 
 
+def check_layout_export(m):
+    """The backend's copy of the geometry must match the map's.
+
+    office.py walks agents to seats and stations by coordinate. It reads them
+    from office_layout.json, which tools/export_layout.py generates from this
+    map. Nothing regenerates that automatically, so this is the guard: if the
+    map moves and the export is not rerun, the backend sends agents to where the
+    furniture used to be. That is exactly how all five seats ended up inside
+    desks before the export existed.
+    """
+    path = os.path.join(ROOT, 'backend', 'office_layout.json')
+    if not os.path.exists(path):
+        return [f'MISSING    backend/office_layout.json -- run: python tools/export_layout.py']
+    with open(path, encoding='utf-8') as f:
+        exported = json.load(f)
+
+    problems = []
+    for key in ('seats', 'stations'):
+        live = m.get(key, {})
+        saved = exported.get(key, {})
+        for name in sorted(set(live) | set(saved)):
+            if name not in saved:
+                problems.append(f'STALE      {key}.{name} is in the map but not in office_layout.json')
+            elif name not in live:
+                problems.append(f'STALE      {key}.{name} is in office_layout.json but not in the map')
+            elif (round(live[name]['x'], 4), round(live[name]['y'], 4)) !=                  (round(saved[name]['x'], 4), round(saved[name]['y'], 4)):
+                problems.append(
+                    f'STALE      {key}.{name} map ({live[name]["x"]}, {live[name]["y"]}) '
+                    f'!= export ({saved[name]["x"]}, {saved[name]["y"]})')
+    if problems:
+        problems.append('           -> run: python tools/export_layout.py')
+    return problems
+
+
 def main():
     m = load_map()
     frames = json.load(open(os.path.join(GEN, 'office_atlas.json'), encoding='utf-8'))['frames']
@@ -190,6 +224,8 @@ def main():
                 problems.append(
                     f'OVERLAP    {a["sprite"]} @({a["x"]},{a["y"]}) '
                     f'<-> {b["sprite"]} @({b["x"]},{b["y"]})  {frac*100:.0f}%')
+
+    problems.extend(check_layout_export(m))
 
     print(f'checked {len(props)} props')
     if problems:
