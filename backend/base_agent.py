@@ -5,7 +5,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import llm
-from config import settings, llm_configured
+from config import date_context, settings, llm_configured
 from event_bus import event_bus
 from memory import memory
 from office import office
@@ -109,7 +109,12 @@ class BaseAgent:
         await self.speak(f"Analyzing task: '{task.description[:40]}...' ", task_id=task.id)
 
         # 2. Prepare message history & schemas
-        system_prompt = self.manifest.system_prompt
+        #
+        # The date leads the system prompt. Without it a model reasons from its
+        # training cutoff and cannot tell current information from stale --
+        # observed: a news brief headed "Today" citing an article three weeks
+        # old, because nothing in the conversation said what today was.
+        system_prompt = f"{date_context()}\n\n{self.manifest.system_prompt}"
         if hints:
             system_prompt = f"{system_prompt}\n\n{hints}"
 

@@ -18,7 +18,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 import llm
-from config import settings, llm_configured
+from config import date_context, settings, llm_configured
 from event_bus import event_bus
 from schemas import Event, EventType, Plan, PlanStep
 
@@ -256,8 +256,12 @@ class Planner:
         attempt: int
     ) -> Optional[Dict[str, Any]]:
         """One planning call. Returns the parsed payload or None."""
-        system = PLANNER_SYSTEM_PROMPT % (settings.planner_max_steps,
-                                          settings.meeting_capacity)
+        # Prepended rather than folded into the template: PLANNER_SYSTEM_PROMPT
+        # is %-formatted, and a date carrying a stray % would break it. The
+        # planner needs the date as much as an agent does -- it is the step
+        # that decides whether a goal is about current events at all.
+        system = date_context() + "\n\n" + PLANNER_SYSTEM_PROMPT % (
+            settings.planner_max_steps, settings.meeting_capacity)
         user = (
             f"Available specialists:\n{_roster_block(roster)}\n\n"
             f"User goal:\n{goal}\n\n"

@@ -1,4 +1,6 @@
+import datetime as _dt
 import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -69,6 +71,7 @@ class Settings(BaseSettings):
 
     # API Keys (loaded from .env or OS environment)
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -181,7 +184,8 @@ def llm_route() -> dict:
     route = {
         "api_base": settings.llm_api_base,
         "api_key": (settings.llm_api_key or settings.anthropic_api_key
-                    or settings.openai_api_key or settings.gemini_api_key),
+                    or settings.openai_api_key or settings.gemini_api_key
+                    or settings.groq_api_key),
     }
     if settings.llm_user_agent:
         # "User-Agent" exactly -- litellm forwards extra_headers into the
@@ -192,10 +196,32 @@ def llm_route() -> dict:
     return route
 
 
+def date_context() -> str:
+    """
+    Today's date, as a line to prepend to a system prompt.
+
+    A model has no idea what day it is -- its sense of "now" is its training
+    cutoff. Asked what happened in the news today, one cited a Reuters article
+    from three weeks earlier and headed it "Today", because nothing in the
+    conversation gave it a date to measure against.
+
+    This states the fact and stops there. It deliberately does not tell the
+    model what to do with it: whether a request needs recent sources, and how
+    recent, is the model's judgement to make from the user's actual words --
+    not something the harness should infer by looking for words like "today".
+
+    Local system date rather than UTC, because "today" for the person at the
+    keyboard is their today.
+    """
+    stamp = _dt.datetime.now().strftime("%A, %d %B %Y")
+    return f"Today's date is {stamp}."
+
+
 def llm_configured() -> bool:
     """True when any credential is available, gateway or direct provider."""
     return bool(settings.llm_api_key or settings.gemini_api_key
-                or settings.openai_api_key or settings.anthropic_api_key)
+                or settings.openai_api_key or settings.anthropic_api_key
+                or settings.groq_api_key)
 
 
 
@@ -206,3 +232,5 @@ if settings.openai_api_key and not os.environ.get("OPENAI_API_KEY"):
     os.environ["OPENAI_API_KEY"] = settings.openai_api_key
 if settings.anthropic_api_key and not os.environ.get("ANTHROPIC_API_KEY"):
     os.environ["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
+if settings.groq_api_key and not os.environ.get("GROQ_API_KEY"):
+    os.environ["GROQ_API_KEY"] = settings.groq_api_key

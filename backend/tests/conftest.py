@@ -59,15 +59,17 @@ def _offline_llm():
         # Cleared for the same reason as the model keys: with a real Tavily key
         # present the suite would make live searches and spend the account's
         # monthly quota to assert things that do not depend on the network.
+        "groq_api_key": settings.groq_api_key,
         "tavily_api_key": settings.tavily_api_key,
         "llm_strict": settings.llm_strict,
     }
     saved_env = {k: os.environ.pop(k, None) for k in
                  ("LLM_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY",
-                  "ANTHROPIC_API_KEY", "TAVILY_API_KEY")}
+                  "ANTHROPIC_API_KEY", "GROQ_API_KEY", "TAVILY_API_KEY")}
 
     for field in ("llm_api_key", "llm_api_base", "gemini_api_key",
-                  "openai_api_key", "anthropic_api_key", "tavily_api_key"):
+                  "openai_api_key", "anthropic_api_key", "groq_api_key",
+                  "tavily_api_key"):
         setattr(settings, field, "")
     settings.llm_strict = False
 
