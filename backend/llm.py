@@ -34,7 +34,14 @@ _TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
 # Never retry these, whatever else they look like. A bad key, a model id that
 # does not exist on this account, or a malformed request will fail identically
 # every time, and burning three attempts on one only delays the error.
-_FATAL_STATUS = {400, 401, 403, 404, 422}
+_FATAL_STATUS = {400, 401, 403, 404, 413, 422}
+
+# Groq answers an over-large request with 413 and the text below, and
+# litellm relabels it RateLimitError -- which reads as transient and is not.
+# The request is refused on its declared size before it ever runs, so it will
+# be refused identically forever. Matched on the message because the status
+# does not always survive the relabelling.
+_FATAL_TEXT = ("request too large", "reduce your max_tokens")
 
 _TRANSIENT_NAMES = (
     "RateLimitError", "ServiceUnavailableError", "InternalServerError",
@@ -67,6 +74,8 @@ def is_transient(exc: Exception) -> bool:
     and so carry no status at all.
     """
     if isinstance(exc, asyncio.CancelledError):
+        return False
+    if any(t in str(exc).lower() for t in _FATAL_TEXT):
         return False
     status = _status_of(exc)
     if status in _FATAL_STATUS:

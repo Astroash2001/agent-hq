@@ -222,6 +222,11 @@ class Orchestrator:
                 "result": synthesis_text,
                 "duration_seconds": round(duration, 2),
                 "subtasks_count": len(plan.steps),
+                # Counts, not just a total. A mission whose every step failed
+                # still reaches this line, and without these it announced
+                # itself as a success.
+                "steps_completed": sum(1 for s in plan.steps if s.status == "completed"),
+                "steps_failed": sum(1 for s in plan.steps if s.status == "failed"),
                 "plan_source": plan.source,
                 "artifacts": workspace.summary(),
                 "mission_dir": workspace.dir,
@@ -230,7 +235,11 @@ class Orchestrator:
 
         if self.boss_agent:
             await self.boss_agent.update_status(AgentStatus.IDLE)
-            await self.boss_agent.speak("Mission complete! Delivered briefing.", task_id=task_id)
+            failed_count = sum(1 for s in plan.steps if s.status == "failed")
+            await self.boss_agent.speak(
+                "Mission complete! Delivered briefing." if not failed_count
+                else f"Mission ended with {failed_count} failed step(s).",
+                task_id=task_id)
 
         for agent in self.agents.values():
             await agent.update_status(AgentStatus.IDLE)

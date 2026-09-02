@@ -200,7 +200,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case 'task.completed':
-                hud.addTerminalLog(`Task completed in ${payload.duration_seconds}s`, 'SUCCESS');
+                // A mission reaches this event whatever its steps did. Calling a
+                // run where everything failed a SUCCESS is how a rate-limited
+                // mission came to report itself as finished.
+                {
+                    const failed = payload.steps_failed || 0;
+                    const done = payload.steps_completed || 0;
+                    hud.addTerminalLog(
+                        failed
+                            ? `Task ended in ${payload.duration_seconds}s — ${done} step(s) completed, ${failed} failed`
+                            : `Task completed in ${payload.duration_seconds}s`,
+                        failed ? 'ERROR' : 'SUCCESS');
+                }
                 // The whole payload, not just the text: `artifacts` carries the
                 // produced files and their bodies for the FILES tab.
                 hud.showExecutiveMemo(payload.result, payload);
