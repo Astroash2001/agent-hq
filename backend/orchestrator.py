@@ -530,6 +530,11 @@ class Orchestrator:
         )
 
         meeting_tools.bind_workspace(workspace)
+        # file_ops too, not just the meeting tools. A chair whose own manifest
+        # carries write_file will use it -- and with only meeting_tools bound
+        # that write escaped the workspace and landed loose in backend/, giving
+        # one artifact two copies: the workspace's and an orphan on disk.
+        file_ops.bind_workspace(workspace, chair.id, chair.name, step.id)
         try:
             async with office.hold_meeting(
                 "conference_table", attendees, task_id=task_id
@@ -543,6 +548,7 @@ class Orchestrator:
                 )
         finally:
             meeting_tools.bind_workspace(None)
+            file_ops.bind_workspace(None)
 
     async def _run_step(
         self,

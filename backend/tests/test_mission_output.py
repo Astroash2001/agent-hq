@@ -190,3 +190,24 @@ async def test_pre_existing_artifacts_are_not_mistaken_for_this_step(missions):
     before = set(w.names())
     step = PlanStep(id="s2", agent_id="creative", description="w", produces="out.md")
     assert Orchestrator._best_artifact(w, step, before) is None
+
+
+@pytest.mark.asyncio
+async def test_a_meeting_chair_writes_into_the_workspace_too(missions, monkeypatch):
+    """
+    _run_meeting bound the meeting tools but not file_ops, so a chair holding
+    write_file wrote past the workspace and left an orphan copy in backend/.
+    Observed: sodium_ion_findings.md existed both in the mission directory and
+    loose on disk.
+    """
+    from tools import file_ops
+
+    w = MissionWorkspace("m12")
+    file_ops.bind_workspace(w, "creative", "Eve", "s2")
+    try:
+        await file_ops.write_file("findings.md", "chair's notes")
+    finally:
+        file_ops.bind_workspace(None)
+
+    assert w.get("findings.md") is not None, "the chair's file missed the workspace"
+    assert os.path.isfile(os.path.join(w.dir, "findings.md"))

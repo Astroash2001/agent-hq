@@ -72,3 +72,8 @@ env/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Artifacts an agent wrote before the workspace binding covered every path.
+# The mission directory under backend/data/ is where output belongs.
+backend/*.md
+!backend/README.md
