@@ -608,6 +608,39 @@ class RetroHUD {
         }).join('');
     }
 
+    /**
+     * Move the output card between the sidebar and a full-screen overlay.
+     *
+     * `want` forces a state; omitted, it toggles. The card's original position
+     * is remembered as a parent plus next-sibling pair, so it goes back exactly
+     * where it was rather than being appended to the end of the sidebar.
+     */
+    toggleOutputExpanded(want) {
+        const card = this.executiveMemoCard;
+        const overlay = document.getElementById('outOverlay');
+        const host = document.getElementById('outOverlayHost');
+        const btn = document.getElementById('outExpandBtn');
+        if (!card || !overlay || !host) return;
+
+        const expanded = overlay.style.display !== 'none';
+        const next = (want === undefined) ? !expanded : want;
+        if (next === expanded) return;
+
+        if (next) {
+            this._outHome = { parent: card.parentNode, before: card.nextSibling };
+            host.appendChild(card);
+            overlay.style.display = 'flex';
+            card.dataset.expanded = 'true';
+            if (btn) { btn.textContent = '✕'; btn.title = 'Restore output'; }
+        } else {
+            const home = this._outHome;
+            if (home && home.parent) home.parent.insertBefore(card, home.before);
+            overlay.style.display = 'none';
+            delete card.dataset.expanded;
+            if (btn) { btn.textContent = '⛶'; btn.title = 'Expand output'; }
+        }
+    }
+
     selectOutputTab(which) {
         const tabs = { report: 'outTabReport', files: 'outTabFiles' };
         const panes = { report: 'outPaneReport', files: 'outPaneFiles' };
@@ -639,6 +672,20 @@ class RetroHUD {
             });
         }
 
+        // Expand / restore the output panel. The card itself moves between the
+        // sidebar and the overlay -- rendering a second copy would mean two
+        // DOM trees to keep in step, and the open <details>, the selected tab
+        // and the scroll position would all reset on every toggle.
+        const outExpand = document.getElementById('outExpandBtn');
+        if (outExpand) outExpand.addEventListener('click', () => this.toggleOutputExpanded());
+
+        const outOverlay = document.getElementById('outOverlay');
+        if (outOverlay) {
+            outOverlay.addEventListener('click', e => {
+                if (e.target === outOverlay) this.toggleOutputExpanded(false);
+            });
+        }
+
         const tabReport = document.getElementById('outTabReport');
         const tabFiles  = document.getElementById('outTabFiles');
         if (tabReport) tabReport.addEventListener('click', () => this.selectOutputTab('report'));
@@ -665,9 +712,14 @@ class RetroHUD {
             });
         }
         document.addEventListener('keydown', e => {
-            if (e.key === 'Escape' && overlay && overlay.style.display !== 'none') {
+            if (e.key !== 'Escape') return;
+            if (overlay && overlay.style.display !== 'none') {
                 overlay.style.display = 'none';
+                return;
             }
+            // The output card has to be moved back, not just hidden, so it
+            // goes through its own toggle rather than having its display set.
+            this.toggleOutputExpanded(false);
         });
 
     }

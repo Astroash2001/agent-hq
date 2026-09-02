@@ -486,6 +486,56 @@ body { overflow: hidden; }
     background: linear-gradient(180deg, var(--gauge-hi), var(--gauge-lo));
 }
 
+/* --- expanded output panel -------------------------------------------- */
+/* The sidebar is ~500px of a report that can run to several thousand words.
+   The card is moved in here rather than copied, so everything below is about
+   letting the same element breathe rather than restyling a duplicate. */
+
+.panel-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 26px;
+    background: rgba(0, 0, 0, .82);
+    backdrop-filter: blur(2px);
+}
+
+.panel-overlay-host {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 1000px;
+    max-height: 100%;
+    min-height: 0;
+}
+
+/* Fill the overlay instead of sitting at sidebar height. */
+.memo-card[data-expanded="true"] {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    border-color: var(--frame);
+}
+
+/* The two panes and their scrollers are capped for the sidebar; expanded,
+   the available height is the only limit that should apply. */
+.memo-card[data-expanded="true"] .out-pane { min-height: 0; }
+.memo-card[data-expanded="true"] .memo-content,
+.memo-card[data-expanded="true"] .out-files {
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Long-form text is hard to read at sidebar size; give it room. */
+.memo-card[data-expanded="true"] .memo-content { font-size: 13px; line-height: 1.6; }
+.memo-card[data-expanded="true"] .out-file-body { font-size: 12.5px; line-height: 1.6; }
+.memo-card[data-expanded="true"] .out-goal { font-size: 12px; }
+
 /* --- mission output ---------------------------------------------------------- */
 
 .memo-card { flex: 0 1 auto; min-height: 0; }

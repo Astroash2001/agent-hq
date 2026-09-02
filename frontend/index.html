@@ -93,6 +93,8 @@
                     <div class="card-title-neon">
                         <span class="header-icon" aria-hidden="true">📜</span> MISSION OUTPUT
                     </div>
+                    <button class="hud-icon-btn" id="outExpandBtn"
+                            title="Expand output" aria-label="Expand output">&#9974;</button>
                     <button class="hud-icon-btn" id="closeMemoBtn" aria-label="Close output">&times;</button>
                 </div>
 
@@ -126,6 +128,14 @@
         <div class="dag-viewport dag-viewport-full" id="dagViewportFull">
             <svg id="dagSvgFull" role="img" aria-label="Execution plan graph"></svg>
         </div>
+    </div>
+
+    <!-- Full-screen output. The card is MOVED in here rather than copied, so
+         the open files, the selected tab and the scroll position all survive
+         the trip -- a second rendered copy would drift out of step. -->
+    <div class="panel-overlay" id="outOverlay" style="display: none;" role="dialog"
+         aria-label="Mission output, expanded">
+        <div class="panel-overlay-host" id="outOverlayHost"></div>
     </div>
 
     <script src="js/office_map.js"></script>
