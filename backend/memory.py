@@ -122,9 +122,18 @@ class AgentMemory:
         duration_sec: float = 0.0,
         total_tokens: int = 0,
         tools_used: Optional[List[str]] = None,
-        artifact: str = ""
+        artifact: str = "",
+        quality: Optional[float] = None
     ) -> Episode:
-        """Append one finished subtask to the log and persist."""
+        """
+        Append one finished subtask to the log and persist.
+
+        `quality` is the critic's score for the artifact, or None when nothing
+        judged this run -- critic disabled, or no credential. None rather than a
+        default number on purpose: an unscored episode is not a perfect one, and
+        anything that later weights routing by quality has to be able to tell
+        the difference.
+        """
         episode = Episode(
             id=f"ep_{uuid.uuid4().hex[:10]}",
             agent_id=agent_id,
@@ -137,6 +146,7 @@ class AgentMemory:
             total_tokens=total_tokens,
             tools_used=tools_used or [],
             artifact=artifact,
+            quality=quality,
             tokens=tokenize(f"{goal} {subtask}")
         )
         self.episodes.append(episode)

@@ -7,6 +7,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
 
+import contracts
+import critic
 import pricing
 import tracing
 from base_agent import BaseAgent
@@ -401,18 +403,26 @@ class Orchestrator:
         after four tool calls and two retries still spent that money, and a
         cost report that only counts successes understates every bad run.
         """
-        self._step_telemetry.setdefault(task_id, {})[step.id] = {
+        rows = self._step_telemetry.setdefault(task_id, {})
+        # Additive, because a step can be dispatched more than once: a repair
+        # attempt is real spend on the same step, and a row that overwrote
+        # would report the cost of quality as the cost of the last try only.
+        prior = rows.get(step.id) or {}
+        rows[step.id] = {
             "step_id": step.id,
             "agent_id": step.agent_id,
-            "model": stats.get("model", ""),
-            "prompt_tokens": int(stats.get("prompt_tokens", 0) or 0),
-            "completion_tokens": int(stats.get("completion_tokens", 0) or 0),
-            "cost_usd": float(stats.get("cost_usd", 0.0) or 0.0),
-            "duration_sec": float(stats.get("duration_sec", 0.0) or 0.0),
-            "tool_calls": len(stats.get("tools_used", []) or []),
-            "retries": int(stats.get("retries", 0) or 0),
-            "fell_back": bool(stats.get("fell_back")),
-            "estimated": bool(stats.get("estimated")),
+            "model": stats.get("model", "") or prior.get("model", ""),
+            "prompt_tokens": prior.get("prompt_tokens", 0) + int(stats.get("prompt_tokens", 0) or 0),
+            "completion_tokens": prior.get("completion_tokens", 0) + int(stats.get("completion_tokens", 0) or 0),
+            "cost_usd": round(prior.get("cost_usd", 0.0)
+                              + float(stats.get("cost_usd", 0.0) or 0.0), 6),
+            "duration_sec": round(prior.get("duration_sec", 0.0)
+                                  + float(stats.get("duration_sec", 0.0) or 0.0), 2),
+            "tool_calls": prior.get("tool_calls", 0) + len(stats.get("tools_used", []) or []),
+            "retries": prior.get("retries", 0) + int(stats.get("retries", 0) or 0),
+            "attempts": prior.get("attempts", 0) + 1,
+            "fell_back": bool(stats.get("fell_back")) or bool(prior.get("fell_back")),
+            "estimated": bool(stats.get("estimated")) or bool(prior.get("estimated")),
         }
 
     def _mission_telemetry(self, task_id: str, plan: Plan) -> Dict[str, Any]:
@@ -693,45 +703,27 @@ class Orchestrator:
         ) as span:
             return await self._run_step_body(step, workspace, task_id, goal, span)
 
-    async def _run_step_body(
+    async def _dispatch_attempt(
         self,
         step: PlanStep,
+        specialist,
+        subtask_id: str,
         workspace: MissionWorkspace,
         task_id: str,
         goal: str,
-        span: Any
-    ) -> Dict[str, Any]:
-        specialist = self._agent_by_id(step.agent_id)
-        if not specialist:
-            raise KeyError(f"step {step.id} names unknown agent '{step.agent_id}'")
+        description: str,
+        grant: Optional[List[str]],
+        attempt: int
+    ) -> str:
+        """
+        Hand the step to its specialist once and wait for the reply.
 
-        # What existed before this step, so anything new is this step's doing.
-        before = set(workspace.names())
-
-        subtask_id = f"{task_id}_{step.id}"
-        # A step that promises an artifact needs the means to write one. The
-        # researcher holds only web_search and read_file, so being told to file
-        # its findings was an instruction it could not follow -- it returned no
-        # text at all and the step filed a 39-byte stub as the research the
-        # rest of the mission was built on. Granted per step through the same
-        # mechanism meetings use, rather than by widening any manifest.
-        grant = ["write_file"] if (step.produces and "write_file" not in specialist.tools) else None
-
-        # Name the deliverable in the task itself. The plan promises this step
-        # produces a specific artifact, and an agent that is never told that
-        # has no reason to write one -- observed: a researcher did its work
-        # entirely through tool calls, returned empty content, and the step
-        # filed base_agent's "Task completed after N execution steps." stub as
-        # the research the rest of the mission was supposed to build on.
-        description = step.description
-        if step.produces:
-            description = (
-                f"{step.description}\n\n"
-                f"Deliverable: write your full output to `{step.produces}` with the "
-                f"write_file tool before you finish. Put the actual content in that "
-                f"file -- the next step reads the file, not your reply."
-            )
-
+        Split out of `_run_step_body` so a repair can re-run it. A repair is a
+        genuine re-dispatch -- same agent, same tools, same station walk, with
+        the reviewer's complaint appended to the instruction -- rather than a
+        second conversation bolted onto the first. The agent that has to fix the
+        work should see the same brief the reader of its artifact saw.
+        """
         subtask = Task(
             id=subtask_id,
             description=description,
@@ -754,11 +746,18 @@ class Orchestrator:
                 "rationale": step.rationale,
                 "routed_from": step.routed_from,
                 "kind": step.kind,
-                "attendees": step.attendees
+                "attendees": step.attendees,
+                # 1 on the original dispatch. Anything higher is a repair, and
+                # the office should show it as one rather than as a new step.
+                "attempt": attempt,
             }
         ))
         if self.boss_agent:
-            if step.kind == "meeting":
+            if attempt > 1:
+                await self.boss_agent.speak(
+                    f"Sending {step.id} back to {specialist.name} for a revision",
+                    task_id=task_id)
+            elif step.kind == "meeting":
                 names = ", ".join(
                     ag.name for a in step.attendees
                     if (ag := self._agent_by_id(a)) is not None
@@ -796,22 +795,227 @@ class Orchestrator:
                     ))
 
             if step.kind == "meeting":
-                result_text = await self._run_meeting(
+                return await self._run_meeting(
                     step, specialist, subtask, workspace, context, hints, goal, task_id)
-            else:
-                # write_file files into the workspace for the length of this
-                # step, so whatever the agent writes is attributed to it.
-                file_ops.bind_workspace(
-                    workspace, step.agent_id, specialist.name, step.id)
-                try:
-                    result_text = await specialist.run(
-                        subtask, context=context, hints=hints, goal=goal,
-                        extra_tools=grant)
-                finally:
-                    file_ops.bind_workspace(None)
 
-        stats = dict(specialist.last_run or {})
-        self._record_step_telemetry(task_id, step, stats)
+            # write_file files into the workspace for the length of this
+            # step, so whatever the agent writes is attributed to it.
+            file_ops.bind_workspace(
+                workspace, step.agent_id, specialist.name, step.id)
+            try:
+                return await specialist.run(
+                    subtask, context=context, hints=hints, goal=goal,
+                    extra_tools=grant)
+            finally:
+                file_ops.bind_workspace(None)
+
+    async def _file_artifact(
+        self,
+        workspace: MissionWorkspace,
+        step: PlanStep,
+        specialist,
+        before: Set[str],
+        before_content: Optional[str],
+        result_text: str
+    ) -> str:
+        """
+        File what this attempt produced, and return the text to be judged.
+
+        `before_content` is what stood under the promised name when the attempt
+        started. A repair usually rewrites that same file, and `_best_artifact`
+        compares *names* -- so an in-place rewrite looks like nothing new was
+        written at all, and the repair would be silently discarded. Comparing
+        the content is what catches it.
+        """
+        if not step.produces:
+            return result_text
+
+        current = workspace.get(step.produces)
+        if current is not None and current.content != before_content:
+            # Rewritten in place, under the name the plan promised.
+            return current.content
+
+        # Prefer what the agent actually wrote over what it said about it.
+        # `result_text` is the closing chat message -- filing that as the
+        # artifact meant downstream steps consumed "Task completed after 4
+        # execution steps." instead of the 2.4KB report the agent produced.
+        written = self._best_artifact(workspace, step, before)
+        if written is not None:
+            if written.name != step.produces:
+                # Re-file under the name the plan promised, so `consumes`
+                # on the next step still resolves.
+                await workspace.put(
+                    name=step.produces,
+                    content=written.content,
+                    author_id=step.agent_id,
+                    author_name=specialist.name,
+                    step_id=step.id
+                )
+            return written.content
+
+        if current is not None:
+            # A repair that wrote nothing new. Keep what the previous attempt
+            # filed rather than replacing real work with a chat message.
+            return current.content
+
+        await workspace.put(
+            name=step.produces,
+            content=result_text,
+            author_id=step.agent_id,
+            author_name=specialist.name,
+            step_id=step.id
+        )
+        return result_text
+
+    async def _emit_critique(
+        self,
+        task_id: str,
+        step: PlanStep,
+        specialist,
+        verdict: str,
+        score: Optional[float],
+        reasons: List[str],
+        attempt: int,
+        source: str,
+        repairing: bool
+    ):
+        await event_bus.emit(Event(
+            type=EventType.STEP_CRITIQUED,
+            agent_id=step.agent_id,
+            task_id=f"{task_id}_{step.id}",
+            data={
+                "step_id": step.id,
+                "agent_name": specialist.name,
+                "verdict": verdict,
+                "score": round(score, 3) if score is not None else None,
+                "reasons": reasons[:5],
+                "attempt": attempt,
+                # "contract" is the regex layer, "critic" the model. Worth
+                # distinguishing in the log: one is free and certain, the other
+                # costs a call and is a judgement.
+                "source": source,
+                # False on a "revise" means the budget was spent, so the step
+                # completes with work its reviewer rejected. That has to be
+                # visible, or a capped repair looks like an accepted one.
+                "repairing": repairing,
+                "artifact": step.produces,
+            }
+        ))
+
+    async def _run_step_body(
+        self,
+        step: PlanStep,
+        workspace: MissionWorkspace,
+        task_id: str,
+        goal: str,
+        span: Any
+    ) -> Dict[str, Any]:
+        specialist = self._agent_by_id(step.agent_id)
+        if not specialist:
+            raise KeyError(f"step {step.id} names unknown agent '{step.agent_id}'")
+
+        subtask_id = f"{task_id}_{step.id}"
+        # A step that promises an artifact needs the means to write one. The
+        # researcher holds only web_search and read_file, so being told to file
+        # its findings was an instruction it could not follow -- it returned no
+        # text at all and the step filed a 39-byte stub as the research the
+        # rest of the mission was built on. Granted per step through the same
+        # mechanism meetings use, rather than by widening any manifest.
+        grant = ["write_file"] if (step.produces and "write_file" not in specialist.tools) else None
+
+        # Name the deliverable in the task itself. The plan promises this step
+        # produces a specific artifact, and an agent that is never told that
+        # has no reason to write one -- observed: a researcher did its work
+        # entirely through tool calls, returned empty content, and the step
+        # filed base_agent's "Task completed after N execution steps." stub as
+        # the research the rest of the mission was supposed to build on.
+        description = step.description
+        if step.produces:
+            description = (
+                f"{step.description}\n\n"
+                f"Deliverable: write your full output to `{step.produces}` with the "
+                f"write_file tool before you finish. Put the actual content in that "
+                f"file -- the next step reads the file, not your reply."
+            )
+
+        # Citations are asked for only when they were obtainable. Whether a
+        # source could be fetched at all depends on this agent's tool grants and
+        # on a Tavily key being set, and a contract that demands one regardless
+        # fails every offline run for a reason the agent cannot fix.
+        spec = contracts.infer_spec(
+            step.produces, step.description,
+            citations_expected=bool(settings.tavily_api_key)
+            and "web_search" in specialist.tools,
+        )
+
+        feedback = ""
+        attempt = 0
+        quality: Optional[float] = None
+        verdict = "accept"
+        stats: Dict[str, Any] = {}
+        result_text = ""
+        artifact_text = ""
+
+        while True:
+            attempt += 1
+            before = set(workspace.names())
+            existing = workspace.get(step.produces) if step.produces else None
+            before_content = existing.content if existing is not None else None
+
+            async with tracing.span(
+                "attempt", f"{step.id} attempt {attempt}",
+                step_id=step.id, attempt=attempt, repair=attempt > 1
+            ) as attempt_span:
+                result_text = await self._dispatch_attempt(
+                    step, specialist, subtask_id, workspace, task_id, goal,
+                    f"{description}\n\n{feedback}" if feedback else description,
+                    grant, attempt)
+                attempt_span.set(chars=len(result_text or ""))
+
+            stats = dict(specialist.last_run or {})
+            self._record_step_telemetry(task_id, step, stats)
+            artifact_text = await self._file_artifact(
+                workspace, step, specialist, before, before_content, result_text)
+
+            # A re-dispatch is only worth paying for if something could come
+            # back different. The built-in simulator returns the same canned
+            # reply to the same input, so repairing it spends the budget to
+            # receive a byte-identical artifact. The verdict is still emitted,
+            # so the office shows the work was judged and found wanting.
+            simulated = bool(stats.get("estimated"))
+            budget_left = attempt <= settings.max_repair_attempts
+            can_repair = budget_left and not simulated
+
+            check = (contracts.check(artifact_text, spec) if settings.contracts_enabled
+                     else contracts.CheckResult(ok=True))
+            if not check.ok:
+                verdict = "revise"
+                await self._emit_critique(
+                    task_id, step, specialist, verdict="revise", score=None,
+                    reasons=check.failures, attempt=attempt, source="contract",
+                    repairing=can_repair)
+                if can_repair:
+                    feedback = check.as_guidance()
+                    continue
+                break
+
+            critique = await critic.critique(goal, step.description, artifact_text)
+            if critique.skipped:
+                verdict = "accept"
+                break
+
+            quality = critique.score
+            verdict = critique.verdict
+            await self._emit_critique(
+                task_id, step, specialist, verdict=critique.verdict,
+                score=critique.score, reasons=critique.reasons, attempt=attempt,
+                source="critic",
+                repairing=can_repair and critique.verdict == "revise")
+            if critique.verdict == "revise" and can_repair:
+                feedback = critique.guidance
+                continue
+            break
+
         span.set(
             model=stats.get("model", ""),
             cost_usd=stats.get("cost_usd", 0.0),
@@ -819,33 +1023,10 @@ class Orchestrator:
             retries=stats.get("retries", 0),
             estimated=bool(stats.get("estimated")),
             tools=len(stats.get("tools_used", []) or []),
+            attempts=attempt,
+            verdict=verdict,
+            quality=quality,
         )
-
-        if step.produces:
-            # Prefer what the agent actually wrote over what it said about it.
-            # `result_text` is the closing chat message -- filing that as the
-            # artifact meant downstream steps consumed "Task completed after 4
-            # execution steps." instead of the 2.4KB report the agent produced.
-            written = self._best_artifact(workspace, step, before)
-            if written is not None:
-                if written.name != step.produces:
-                    # Re-file under the name the plan promised, so `consumes`
-                    # on the next step still resolves.
-                    await workspace.put(
-                        name=step.produces,
-                        content=written.content,
-                        author_id=step.agent_id,
-                        author_name=specialist.name,
-                        step_id=step.id
-                    )
-            else:
-                await workspace.put(
-                    name=step.produces,
-                    content=result_text,
-                    author_id=step.agent_id,
-                    author_name=specialist.name,
-                    step_id=step.id
-                )
 
         if settings.memory_enabled:
             memory.record(
@@ -858,7 +1039,10 @@ class Orchestrator:
                 duration_sec=stats.get("duration_sec", 0.0),
                 total_tokens=stats.get("tokens", 0),
                 tools_used=stats.get("tools_used", []),
-                artifact=step.produces
+                artifact=step.produces,
+                # None when nothing judged this run -- an unscored episode is
+                # not a perfect one, and WP5's routing has to be able to tell.
+                quality=quality,
             )
 
         return {
@@ -872,7 +1056,10 @@ class Orchestrator:
             "consumes": step.consumes,
             "result": result_text,
             "duration_sec": stats.get("duration_sec", 0.0),
-            "tools_used": stats.get("tools_used", [])
+            "tools_used": stats.get("tools_used", []),
+            "attempts": attempt,
+            "verdict": verdict,
+            "quality": quality,
         }
 
     # ---------------------------------------------------------------- synthesis

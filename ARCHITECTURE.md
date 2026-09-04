@@ -117,6 +117,32 @@ turns them into a prompt block, and `suggest_agent` proposes a different
 specialist when one has a materially better record on similar work — gated on a
 minimum episode count and a margin, so a cold store never overrides the planner.
 
+### `contracts.py` — is this artifact usable
+
+Pure functions, no model and no I/O. `infer_spec` derives a bar from the promised
+filename and the step description (a `*_report.md` demands more than a
+`*_notes.md`); `check` measures the artifact against it and returns the specific
+failures as text an agent can act on. The first `must_not_match` pattern is the
+literal stub a real run once filed as its research artifact. Deliberately
+permissive: a spec that rejects reasonable work costs a repair attempt and then
+completes anyway, having paid for nothing.
+
+### `critic.py` — is this artifact any good
+
+The judgement contracts cannot make. One `llm.acompletion` call at temperature 0
+returning a strict JSON verdict, reusing `planner._extract_json` rather than a
+second scraper. Runs on `settings.critic_model`, which defaults to the small
+`fallback_model` — criticism that costs more than the work is not worth having.
+Never raises: a failed or unparseable judgement is a *skipped* one, and a skip
+never reads as a rejection. Skipped entirely with no credential, because the
+built-in simulator grading itself is not a measurement.
+
+The repair loop that consumes both lives in `orchestrator._run_step_body`:
+contract, then critic, then at most `settings.max_repair_attempts` extra
+dispatches of the same step to the same agent with the complaint appended. The
+cap is the feature. Each attempt is its own span under the step, so the cost of
+quality shows up in the trace and in `mission.json`'s `per_step`.
+
 ### `pricing.py` — what a call cost
 
 A table of per-1M-token input/output prices keyed by litellm model string, with

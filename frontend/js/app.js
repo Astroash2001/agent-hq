@@ -199,6 +199,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
 
+            // An artifact was checked before anything downstream read it.
+            // {step_id, verdict, score, reasons[], attempt, source, repairing}
+            case 'step.critiqued':
+                {
+                    const accepted = payload.verdict === 'accept';
+                    const score = (payload.score === null || payload.score === undefined)
+                        ? '' : ` (${Math.round(payload.score * 100)}%)`;
+                    const why = (payload.reasons && payload.reasons.length)
+                        ? ` — ${payload.reasons[0]}` : '';
+                    // A rejected step that is NOT being repaired has spent its
+                    // budget and completes anyway. That reads as an accept
+                    // unless it is called out, so it is logged as an error.
+                    const level = accepted ? 'SUCCESS' : (payload.repairing ? 'ANALYSIS' : 'ERROR');
+                    const verb = accepted
+                        ? 'accepted'
+                        : (payload.repairing ? 'sent back for revision' : 'rejected, no retries left');
+                    hud.addTerminalLog(
+                        `${payload.step_id} ${verb}${score} by ${payload.source}${why}`,
+                        level);
+                    canvas.showSpeech(
+                        agentId,
+                        accepted ? `Work accepted${score}` : 'Reviewer wants changes');
+                }
+                break;
+
             case 'task.completed':
                 // A mission reaches this event whatever its steps did. Calling a
                 // run where everything failed a SUCCESS is how a rate-limited

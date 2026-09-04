@@ -133,6 +133,20 @@ Fix is to scope the counter to the mission rather than the agent, which changes
 what the budget means — deliberately out of scope for the telemetry work that
 found it.
 
+### Steps returned free text that nothing checked
+
+**Done.** `contracts.py` measures every artifact against a spec inferred from its
+promised filename and step description -- empty, the known stub, far under length,
+missing structure or promised sections -- and `critic.py` asks a small model
+whether the work answers its brief. A failure re-dispatches the same step to the
+same agent with the complaint appended, at most `max_repair_attempts` (1) extra
+times, shared across both checkers. A step that exhausts the budget completes
+with `repairing: false` on its `step.critiqued` event rather than failing and
+stranding the DAG behind it.
+
+`_best_artifact` and the "Deliverable:" instruction both remain -- they make a
+good artifact likelier, which is still worth having now that something checks.
+
 ### Synthesis is string assembly
 
 `_synthesize_results` concatenates Markdown. The "Final Orchestrator Verdict" is a

@@ -290,3 +290,63 @@ constants, so a mission run on Claude reported a Gemini bill.
 An out-parameter (`usage_out={}`) would have avoided changing any call site, and
 was rejected: a future call site can forget to pass it and silently stop being
 counted. A return value cannot be forgotten.
+
+---
+
+## Artifact quality
+
+### Two checkers, not one: a regex layer and a model layer
+
+`contracts.py` is pure and free, so it runs on every artifact and the decision to
+run it is never a decision. It answers "is this the right shape": is it empty, is
+it the known stub, is it far shorter than a deliverable of this kind should be,
+does it have the structure it promised. `critic.py` answers the question regexes
+cannot -- "does this actually do what the step was asked to do" -- and costs a
+model call, so it runs second and only on artifacts that already passed the cheap
+layer. Paying for a judgement on an artifact that is visibly a stub is waste.
+
+The split also means the offline path keeps a real check. Contracts run with no
+credential; the critic does not.
+
+### The critic never judges the simulator
+
+With no key configured there is no judge. The built-in simulator would be grading
+its own output through the same fallback that wrote it, and a verdict produced
+that way looks like a measurement while being nothing of the kind -- which is the
+exact failure the telemetry work was undertaken to stop.
+
+For the same reason a *simulated* step is checked but never re-dispatched. The
+simulator returns the same canned reply to the same input, so a repair spends the
+budget to receive a byte-identical artifact. The verdict is still emitted, so the
+office shows the work was judged and found wanting; only the pointless retry is
+suppressed.
+
+### One shared repair budget, and a rejected step still completes
+
+`max_repair_attempts` (default 1) is the number of EXTRA dispatches a step may
+have, and contract failures and critic revisions draw on the same allowance -- a
+step cannot be repaired twice by taking one from each. An unbounded loop is how
+an agent system spends a whole mission on one step.
+
+When the budget runs out the step **completes** rather than failing. A step that
+failed would strand everything downstream of it in the DAG over what is usually a
+quality problem, not a broken one. The rejection is instead carried in the
+`step.critiqued` event as `repairing: false`, and the UI is told to render that
+case loudly, because a capped repair drawn like an accept is a lie.
+
+### A skipped judgement is never a rejection
+
+Every degenerate path in `critic.py` -- disabled, no key, empty artifact, network
+failure, unparseable reply, a verdict outside the two allowed values -- resolves
+to `accept` with `skipped=True`. The repair loop costs a real dispatch, and
+spending it because a judge misparsed its own JSON is worse than letting ordinary
+work through. `skipped` is kept separate from `verdict` so a caller can tell "was
+judged and passed" from "was never judged".
+
+### Quality is Optional[float], and None means unmeasured
+
+`Episode.quality` defaults to `None`, not to 1.0 or 0.5. Every episode in
+`data/memory.json` predates the field and must still load; and a run with no
+critic genuinely did not measure this. A numeric default would record "perfect"
+for both cases, and the quality-weighted routing that reads this later would be
+weighting invented data.

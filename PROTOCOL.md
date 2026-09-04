@@ -166,6 +166,37 @@ The agent started this step holding relevant past episodes.
 
 ---
 
+## Artifact quality
+
+### `step.critiqued`
+
+An artifact was checked before anything downstream was allowed to read it.
+Fires once per attempt, from either checker.
+
+```json
+{ "step_id": "s2", "agent_name": "Alice", "verdict": "revise", "score": 0.4,
+  "reasons": ["No figures are given for either chemistry"], "attempt": 1,
+  "source": "critic", "repairing": true, "artifact": "research_notes.md" }
+```
+
+| Field | Means |
+|---|---|
+| `source` | `"contract"` (regex layer, free and certain) or `"critic"` (a model call, a judgement) |
+| `verdict` | `"accept"` or `"revise"` |
+| `score` | 0..1 from the critic; **null** from a contract check, which does not score |
+| `attempt` | 1 on the original dispatch, higher on a repair |
+| `repairing` | whether a re-dispatch follows |
+
+**`repairing: false` on a `revise` is the case to render loudest.** It means the
+repair budget was spent and the step completes carrying work its reviewer
+rejected. Drawn the same as an accept, a capped repair looks like a pass.
+
+A step with no `step.critiqued` event was not judged — the critic is skipped
+when no credential is configured, because the built-in simulator grading itself
+would look like a measurement while being nothing of the kind.
+
+---
+
 ## Existing events that gained fields
 
 All additive — old readers keep working.
@@ -173,7 +204,7 @@ All additive — old readers keep working.
 | Event | New in `data` |
 |---|---|
 | `agent.status` | `station_id`, `station_label` on `tool_calling` |
-| `task.assigned` | `step_id`, `produces`, `consumes`, `rationale`, `routed_from` |
+| `task.assigned` | `step_id`, `produces`, `consumes`, `rationale`, `routed_from`, `attempt` (1 on the original dispatch, higher on a repair) |
 | `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0` |
 | `task.progress` | `wave` (which parallel wave just finished), `failed` |
 | `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated` |
@@ -240,6 +271,12 @@ bug is yours or mine.
 | `memory_enabled` | no recall, no rerouting, nothing recorded |
 | `tracing_enabled` | no `trace.jsonl`; spans still yield, they are simply not recorded |
 | `otel_enabled` | (default **off**) no OTLP export; needs a collector and the dev-only opentelemetry packages |
+| `contracts_enabled` | artifacts are filed unchecked, as before |
+| `critic_enabled` | no model judges any artifact; contracts still run |
+
+`max_repair_attempts` (1) is the extra dispatches a rejected step may have.
+Setting it to 0 leaves the checks running and the verdicts emitting, and
+simply never re-dispatches.
 
 Pacing knobs worth having: `walk_seconds_per_tile` (0.06),
 `min_walk_seconds` / `max_walk_seconds` (0.25 / 2.0), `max_parallel_agents` (3).

@@ -163,6 +163,23 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
     otel_endpoint: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
+    # --- artifact quality (WP2) ----------------------------------------------
+    # Steps used to return free text that nothing ever checked, which is why
+    # `_best_artifact` and the "Deliverable:" instruction in _run_step exist --
+    # both make a good artifact likelier, neither verifies one. Contracts are
+    # regex-cheap and always on; the critic costs a model call and is skipped
+    # when no credential is configured.
+    contracts_enabled: bool = True
+    critic_enabled: bool = True
+    # Empty means settings.fallback_model -- the small, cheap one. Criticism
+    # that costs more than the work is not worth having.
+    critic_model: str = ""
+    # EXTRA dispatches of a failed step, beyond the first. The cap is the
+    # feature: an unbounded repair loop is how an agent system spends a whole
+    # mission budget on one step. Shared across contract and critic failures,
+    # so a step cannot be repaired twice by taking one from each.
+    max_repair_attempts: int = 1
+
     # Memory (P6)
     memory_enabled: bool = True
     memory_path: str = os.path.join(os.path.dirname(__file__), "data", "memory.json")
