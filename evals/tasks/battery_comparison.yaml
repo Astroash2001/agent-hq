@@ -1,0 +1,18 @@
+# Seeded from a real run: backend/data/missions/task_2f4a2b87.
+id: battery_comparison
+goal: "Compare sodium-ion and lithium-ion home batteries and recommend one."
+tags: [research, synthesis, multi_step, smoke]
+expect:
+  min_steps: 3
+  max_steps: 5
+  agents_involved: [researcher, creative]
+  artifacts: ["*report*.md"]
+  rubric:
+    - "Names at least two specific battery chemistries with figures"
+    - "States a recommendation with a stated reason"
+    - "Cites at least one source when web_search was available"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.25
+  max_duration_sec: 180

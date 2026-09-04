@@ -174,6 +174,11 @@ class Settings(BaseSettings):
     # Empty means settings.fallback_model -- the small, cheap one. Criticism
     # that costs more than the work is not worth having.
     critic_model: str = ""
+    # The eval suite's rubric grader (evals/judge.py). Fixed and separate from
+    # the models under test: grading a model with itself measures its
+    # self-consistency, not the quality of its output. Empty means
+    # settings.fallback_model.
+    judge_model: str = ""
     # EXTRA dispatches of a failed step, beyond the first. The cap is the
     # feature: an unbounded repair loop is how an agent system spends a whole
     # mission budget on one step. Shared across contract and critic failures,

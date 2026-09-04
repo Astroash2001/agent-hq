@@ -1,0 +1,17 @@
+id: heat_pump_handoff
+goal: "Research air-source heat pumps for UK homes, then have a writer turn the findings into a homeowner-facing explainer."
+tags: [research, synthesis, handoff]
+expect:
+  min_steps: 2
+  max_steps: 4
+  agents_involved: [researcher, creative]
+  artifacts: ["*.md"]
+  rubric:
+    - "The explainer contains specific figures (COP, running cost, or grant amounts)"
+    - "The explainer is written for a homeowner, not for an engineer"
+    - "The final artifact builds on the research rather than restating the goal"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.25
+  max_duration_sec: 180

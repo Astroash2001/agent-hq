@@ -1,0 +1,20 @@
+# ADVERSARIAL 2 -- a goal that should produce a ONE step plan.
+#
+# The planner is told "prefer fewer, a trivial goal is one step". A harness that
+# fans a definition request out to four specialists is burning money to look
+# busy, and max_steps is what catches it.
+id: adversarial_trivial
+goal: "What does the acronym SSD stand for?"
+tags: [adversarial, trivial]
+expect:
+  min_steps: 1
+  max_steps: 2
+  artifacts: ["*.md"]
+  rubric:
+    - "Answers that SSD stands for solid-state drive"
+    - "Does not pad a one-line answer into a multi-section report"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.05
+  max_duration_sec: 90

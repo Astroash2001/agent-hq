@@ -147,6 +147,25 @@ stranding the DAG behind it.
 `_best_artifact` and the "Deliverable:" instruction both remain -- they make a
 good artifact likelier, which is still worth having now that something checks.
 
+### No eval suite
+
+**Done.** `evals/` holds 14 golden tasks across four shapes, a cassette
+record/replay transport that makes a scored run reproducible, an LLM judge that
+scores each rubric line against the artifact files, and a committed
+`scorecard.md` with a regression delta. `python -m evals.runner --suite all
+--replay` runs offline with no key, and `--compare` proves two runs agree:
+verified 14/14 identical.
+
+Two things it measured immediately, both left visible rather than tuned away:
+
+- `heuristic_plan` has no notion of a trivial goal. "What does SSD stand for?"
+  fans out to its full 4-step bucket, so `adversarial_trivial` fails `max_steps`.
+- `adversarial_missing_tool` targets the planner-tool-grants gap below. It is
+  expected to be the weakest row; it is there to be measured, not to pass.
+
+The quality column is empty until cassettes are recorded, which needs a real key
+and real spend. The scorecard says so in prose rather than printing a number.
+
 ### Synthesis is string assembly
 
 `_synthesize_results` concatenates Markdown. The "Final Orchestrator Verdict" is a

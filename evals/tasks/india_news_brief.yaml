@@ -1,0 +1,21 @@
+# Seeded from a real run: backend/data/missions/task_00ffebf4. This one is the
+# reason config.date_context() exists -- the first attempt filed a three-week-old
+# article under the heading "Today", because nothing told the model what day it
+# was.
+id: india_news_brief
+goal: "Tell me what happened today in Indian news and write it up as a short brief."
+tags: [research, synthesis, time_sensitive]
+expect:
+  min_steps: 2
+  max_steps: 4
+  agents_involved: [researcher, creative]
+  artifacts: ["*.md"]
+  rubric:
+    - "Reports at least three distinct news items"
+    - "Does not present undated or clearly old material as today's news"
+    - "Is written as a brief a reader could skim, not as raw search output"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.30
+  max_duration_sec: 200

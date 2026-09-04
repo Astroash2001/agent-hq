@@ -1,0 +1,17 @@
+id: code_review_fix
+goal: "Analyse this function for bugs and propose a fix: def average(xs): return sum(xs) / len(xs)"
+tags: [code, analysis]
+expect:
+  min_steps: 1
+  max_steps: 4
+  agents_involved: [coder]
+  artifacts: ["*.md"]
+  rubric:
+    - "Identifies the division-by-zero on an empty input"
+    - "Proposes a concrete corrected implementation"
+    - "Does not invent bugs that are not present in the function"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.20
+  max_duration_sec: 150

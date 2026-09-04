@@ -117,6 +117,21 @@ turns them into a prompt block, and `suggest_agent` proposes a different
 specialist when one has a materially better record on similar work — gated on a
 minimum episode count and a margin, so a cold store never overrides the planner.
 
+### `evals/` — the scorecard
+
+Not part of the running app, and the app does not know it exists. `runner.py`
+drives real missions through `orchestrator.handle_user_input` with nothing mocked
+below that line, and `replay.py` swaps only the `llm.acompletion` symbol so a
+scored run replays from committed cassettes rather than from a provider. A
+cassette miss is a hard error, never a live call.
+
+`judge.py` scores each rubric line independently against the **artifact files** —
+never `report.md`, because `_synthesize_results` is string assembly around a
+template and would score identically on a mission where every specialist produced
+nothing. `report.py` renders `scorecard.md` with a delta against the previous run.
+
+See `evals/README.md`.
+
 ### `contracts.py` — is this artifact usable
 
 Pure functions, no model and no I/O. `infer_spec` derives a bar from the promised

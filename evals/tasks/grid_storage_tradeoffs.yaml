@@ -1,0 +1,17 @@
+id: grid_storage_tradeoffs
+goal: "Compare grid-scale storage options on cost and duration, then produce an executive briefing with a recommendation."
+tags: [research, synthesis, handoff, fan_in]
+expect:
+  min_steps: 3
+  max_steps: 5
+  agents_involved: [creative]
+  artifacts: ["*brief*.md", "*.md"]
+  rubric:
+    - "Compares at least three storage technologies"
+    - "Quantifies cost or duration for each rather than describing them qualitatively"
+    - "Ends with a single clear recommendation"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.30
+  max_duration_sec: 200

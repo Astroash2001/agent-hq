@@ -350,3 +350,63 @@ judged and passed" from "was never judged".
 critic genuinely did not measure this. A numeric default would record "perfect"
 for both cases, and the quality-weighted routing that reads this later would be
 weighting invented data.
+
+---
+
+## Evals
+
+### Cassettes over live eval calls
+
+A suite that needs a key cannot run in CI, and one that calls a provider gives a
+different answer every run -- so it measures the provider's mood as much as the
+code. Model exchanges are recorded once and committed, and a scored run replays
+them. `replay.py` monkeypatches the `llm.acompletion` symbol rather than editing
+`llm.py`, because the harness must not know the eval layer exists.
+
+A cassette miss in replay mode is a **hard error naming the key**, never a
+fall-through to the network. A silent fall-through is exactly how a deterministic
+suite turns into a flaky one that nobody trusts and everybody re-runs.
+
+### The cassette key ignores today's date
+
+`config.date_context()` puts `Today's date is <weekday, dd Month yyyy>.` at the
+top of every agent system prompt and the planner's. That is deliberate and
+correct. It also means the request bytes change at every midnight, so a cassette
+recorded yesterday would miss today and the entire suite would go red overnight
+for a change that has nothing to do with the code. The date is normalised out of
+the hash rather than frozen in the harness -- the hash is the eval layer's
+concern, and the harness is not.
+
+### A missing cassette degrades to the simulator, and says so
+
+`--replay` on a fresh clone with no recordings would be a wall of misses. Instead
+the runner falls back to the built-in simulator and labels the row `simulate`,
+with the model column reading `(simulator)` rather than naming a model that was
+never called. Such a row still carries a real structural score -- planning,
+scheduling, the workspace, the spatial runtime and the contract layer all ran --
+but its quality column is `—` and the scorecard states in prose that this is not
+a passing quality score. The alternative, letting an offline run print a number
+in the quality column, would be the same class of lie the telemetry work was
+undertaken to remove.
+
+### Determinism is verdicts, not measurements
+
+`runner.determinism_signature` compares every check's `ok`, the structural score,
+the rubric verdicts, artifacts, steps, cost and span count -- and deliberately
+excludes wall-clock duration and each check's `detail` string. The duration check
+renders the clock into its own text ("10.9s of 120s"), so comparing whole rows
+reported every run as non-deterministic over a number that is supposed to vary.
+A signal that cries wolf on every run is one everybody learns to ignore.
+
+### The judge grades artifacts, never the briefing
+
+`_synthesize_results` is string assembly around a template. Grading its output
+grades the template -- and it would score well on a mission where every
+specialist produced nothing, because the template renders identically either way.
+`judge.py` reads the artifact files and skips `report.md` outright.
+
+Each rubric line is scored independently as pass/partial/fail with a reason,
+rather than as one overall mark. A single "out of ten" is unattributable: you
+cannot tell which requirement it docked points for, so you cannot fix anything
+from it. A criterion the judge omits counts as **fail**, so a truncated reply
+cannot raise its own score by leaving out what it could not satisfy.
