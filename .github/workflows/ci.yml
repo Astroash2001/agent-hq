@@ -35,4 +35,9 @@ jobs:
         run: |
           cd backend && python -m pytest -q
 
-      # TODO(WP3): python -m evals.runner --suite smoke --replay
+      # The eval suite running here is the whole point of it being real. Replay
+      # mode serves recorded exchanges and never calls a provider, so this needs
+      # no credential and cannot go red because someone's key expired.
+      - name: Run the eval smoke suite
+        run: |
+          python -m evals.runner --suite smoke --replay
