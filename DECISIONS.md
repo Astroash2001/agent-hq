@@ -410,3 +410,96 @@ rather than as one overall mark. A single "out of ten" is unattributable: you
 cannot tell which requirement it docked points for, so you cannot fix anything
 from it. A criterion the judge omits counts as **fail**, so a truncated reply
 cannot raise its own score by leaving out what it could not satisfy.
+
+---
+
+## Durable execution
+
+### SQLite in the repo, not a service
+
+The run store is one file, written with the stdlib `sqlite3` module. Postgres or
+Redis would add a dependency, a container and a connection string to a project
+whose whole pitch is that it starts with no credentials at all -- to record a
+handful of rows per mission. WAL mode plus one short transaction per write means
+a hard kill leaves a readable database rather than a lock file and a half-written
+page, which matters here far more than throughput ever will.
+
+Every method is failure-tolerant by design: an unwritable store logs once and
+becomes a no-op. Bookkeeping that can take a mission down has turned a durability
+feature into a new way to lose one.
+
+### The database is written before the event is emitted
+
+Not after. If the event goes first, a process killed in the gap has shown the
+user a completed step the store has no record of -- and the resume, reading the
+store, runs that step a second time and overwrites an artifact that was already
+correct. The ordering is the whole contract.
+
+For the same reason only `completed` is resumable. A step recorded `running` was
+in flight when the process died: its outcome is unknown and its artifact may be
+half written, so re-running it is the only safe reading of that state.
+
+### A resume re-uses the stored plan and never re-plans
+
+Re-planning would be a different mission wearing the same id. The artifacts on
+disk were produced against the original graph, and a freshly planned one would
+`consumes` files that no step in it produces. Memory routing is skipped on a
+resume for the same reason -- a step that has already run cannot change hands
+now, and letting the router move a still-pending step mid-mission would silently
+change the graph the completed work was built for.
+
+This is why the plan is written to the store the moment planning finishes rather
+than at the end with everything else.
+
+### The workspace is rehydrated from the artifacts on disk
+
+`MissionWorkspace` is in-memory and dies with the process, but its mirror in
+`data/missions/<id>/` does not. That mirror was built so a finished mission would
+outlive the browser tab; it turns out to be what makes a resume possible at all.
+Without it a resumed step `consumes` an artifact the store has never heard of,
+receives an empty context, and redoes upstream work that is sitting on disk
+beside it. `report.md`, `mission.json` and `trace.jsonl` are skipped -- they are
+records *of* the run, not artifacts *from* it.
+
+### A semaphore, not a slice
+
+`max_parallel_agents` was applied as `ready[:limit]`, which made it a batch size:
+a wave of five ran three, waited for all three to finish, then ran two, leaving
+slots idle whenever one step finished sooner than its neighbours. It is now an
+`asyncio.Semaphore` held around each `_run_step`, with the whole ready set
+dispatched, and the scheduler re-evaluates on every completion rather than
+draining a wave -- so a step starts the moment either a slot frees or its
+dependencies land.
+
+`_peak_active_steps` records the high-water mark, because it is the only honest
+way to assert the cap works. A counter read at rest reads zero however broken the
+scheduler is, and the old slice never exceeded the cap either -- the entire
+difference between the two is *when* the fourth step starts.
+
+### A step deadline is terminal, and is not called a timeout
+
+`step_timeout_sec` (300s) is enforced with `asyncio.wait_for`, and the slot is
+taken *before* the clock starts -- a step queued behind the concurrency cap has
+not begun work, and timing it out for waiting its turn would punish it for the
+scheduler's decision rather than its own.
+
+Exceeding it is **not** retried. The step has already spent the entire time
+budget, and the usual cause -- a model that will not stop -- recurs on the next
+attempt at the same price. The exception is called `StepDeadlineExceeded` rather
+than anything containing "Timeout", because `llm.is_transient` reads that
+substring in a class name as retryable: a name that quietly re-enables the retry
+it was meant to prevent is a trap for whoever edits this next.
+
+Genuine transient failures do get `step_max_attempts` (2), classified by
+`llm.is_transient` rather than a second classifier -- one place decides what
+"worth trying again" means, or the two drift and a 401 starts being retried in
+one of them. A step that failed because the agent produced garbage is
+`contracts.py` and `critic.py`'s problem, not a retry candidate: retrying it just
+buys the same garbage twice.
+
+### Four endpoints in their own router
+
+`api_missions.py` rather than four more handlers in `main.py`. It keeps the
+durable-execution surface in one place, and `main.py` -- which carries every
+other endpoint inline -- takes a two-line include instead of a large hunk in the
+file most likely to be edited by something else at the same time.

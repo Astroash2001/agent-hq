@@ -231,6 +231,17 @@ Anything that assumed one active agent at a time needs a per-agent keyed state.
 | `GET /api/plan` | the graph for the mission in flight, or `{"plan": null}` |
 | `GET /api/memory?limit=25` | recent episodes plus per-agent lifetime stats |
 | `POST /api/memory/reset` | wipes episodic memory |
+| `GET /api/missions?limit=50` | every mission the run store knows, newest first |
+| `GET /api/missions/{id}` | one mission: plan, steps, status, artifacts, `has_trace` |
+| `GET /api/missions/{id}/trace` | the mission's spans as raw NDJSON (`text/plain`) |
+| `POST /api/missions/{id}/resume` | carry on a mission a killed process left unfinished |
+
+`GET /api/missions/{id}` is served from the run store, not from `mission.json` --
+the manifest is written only when a mission finishes, and an unfinished mission is
+the one you actually want to look at. Resume returns the same payload a normal run
+does, plus `resumed: true` and `skipped_steps`. It answers **409** for a mission
+that already completed, and for one that died before planning finished and so has
+no graph to carry on.
 
 ### On disk, per mission
 

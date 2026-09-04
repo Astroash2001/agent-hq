@@ -163,6 +163,26 @@ class Settings(BaseSettings):
     otel_enabled: bool = False
     otel_endpoint: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
+    # --- durable execution (WP4) ---------------------------------------------
+    # Every mission and every step transition is written to a SQLite file before
+    # the matching event is emitted, so a process killed mid-mission leaves a
+    # record of exactly how far it got and can be resumed instead of re-run.
+    # stdlib sqlite3, so this adds no dependency and no service.
+    runstore_enabled: bool = True
+    runstore_path: str = os.path.join(os.path.dirname(__file__), "data", "runs.db")
+    # Ceiling on one step, enforced with asyncio.wait_for. A model that will not
+    # stop, or a station that never frees, used to hang the whole graph behind
+    # it with nothing in the UI to say why. A timeout is recorded as a step
+    # failure -- which matters, because failure recording is what makes the
+    # competence rerouting in memory.py real.
+    step_timeout_sec: float = 300.0
+    # Total attempts at a step whose failure looks transient (llm.is_transient
+    # decides, so there is one classifier rather than two that drift apart). A
+    # step that failed because the agent produced garbage is contracts.py and
+    # critic.py's problem, not a retry candidate, and a step that exhausted
+    # step_timeout_sec has already spent the time budget -- neither is retried.
+    step_max_attempts: int = 2
+
     # --- artifact quality (WP2) ----------------------------------------------
     # Steps used to return free text that nothing ever checked, which is why
     # `_best_artifact` and the "Deliverable:" instruction in _run_step exist --
@@ -200,6 +220,41 @@ class Settings(BaseSettings):
     # Paths
     agents_dir: str = os.path.join(os.path.dirname(__file__), "agents")
     workspace_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+    # --- Sandboxing and hardening (WP7) --------------------------------------
+    # The jail root is the repository root (one level up from backend/).
+    # settings.workspace_root resolves to the parent of the repo (agentic AI/),
+    # which would leak sibling projects to any path check. jail_root restricts
+    # path traversal, subprocess cwd, and file operations to this repository.
+    jail_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    # Terminal tool allowlist and execution caps.
+    # Empty list means "refuse everything" rather than "allow everything".
+    # Multi-word commands match on binary + subcommands (e.g., "git status").
+    terminal_sandbox_enabled: bool = True
+    terminal_allowed_commands: list[str] = [
+        "python",
+        "pytest",
+        "git status",
+        "git diff",
+        "git log",
+        "ls",
+        "dir",
+    ]
+    terminal_max_output_chars: int = 5000
+
+    # File ops path containment kill switch.
+    file_ops_sandbox_enabled: bool = True
+
+    # API authentication and network hardening.
+    # When api_token is empty, all endpoints remain open (local dev / no-key demo).
+    # When set, require it on /ws connect and on POST /api/emergency-stop.
+    api_token: str = os.getenv("AGENTHQ_API_TOKEN", "")
+    cors_origins: list[str] = ["http://localhost:8080"]
+
+    # Rate limiting on WebSocket task submissions (seconds between submissions).
+    # 0 or negative disables rate limiting.
+    ws_submit_rate_limit: float = 1.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

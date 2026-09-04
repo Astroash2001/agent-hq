@@ -9,7 +9,9 @@ from typing import Any, Dict, List, Optional, Set
 
 import contracts
 import critic
+import llm
 import pricing
+import runstore
 import tracing
 from base_agent import BaseAgent
 from config import settings
@@ -17,12 +19,21 @@ from event_bus import event_bus
 from memory import memory
 from office import office
 from planner import planner
-from schemas import (AgentManifest, AgentStatus, DAGNode, Event, EventType, Plan,
-                     PlanStep, Task)
+from schemas import (AgentManifest, AgentStatus, Artifact, DAGNode, Event,
+                     EventType, Plan, PlanStep, Task)
 from tools import file_ops
 from workspace import MissionWorkspace
 
 logger = logging.getLogger("AgentHQ.Orchestrator")
+
+
+class StepDeadlineExceeded(Exception):
+    """A step ran past `settings.step_timeout_sec` and was stopped.
+
+    Named without the word "Timeout" on purpose: `llm.is_transient` treats that
+    substring in a class name as retryable, and a step that has already spent
+    the entire time budget is the opposite of worth trying again.
+    """
 
 
 class Orchestrator:
@@ -49,6 +60,15 @@ class Orchestrator:
         self._step_telemetry: Dict[str, Dict[str, Dict[str, Any]]] = {}
         # One agent runs one subtask at a time even when the DAG offers it two.
         self._agent_locks: Dict[str, asyncio.Lock] = {}
+        # The real parallelism cap. Rebuilt per mission so a settings change
+        # takes effect, and created there rather than here so it never binds to
+        # the import-time event loop.
+        self._slots: Optional[asyncio.Semaphore] = None
+        # Live and peak concurrent _run_step calls. The peak is the only honest
+        # way to assert the cap actually caps -- a counter that is only ever
+        # read at rest reads zero however broken the scheduler is.
+        self._active_steps = 0
+        self._peak_active_steps = 0
         self._load_agents()
 
     def _load_agents(self):
@@ -121,7 +141,11 @@ class Orchestrator:
 
     # ------------------------------------------------------------------ mission
 
-    async def handle_user_input(self, user_prompt: str) -> Dict[str, Any]:
+    async def handle_user_input(
+        self,
+        user_prompt: str,
+        resume_from: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Main entry point: plan the goal, run the graph, synthesise the briefing,
         and stream the whole thing to the office as it happens.
@@ -130,35 +154,100 @@ class Orchestrator:
         so a mission that raises halfway still leaves a readable trace.jsonl --
         which is then the only record of how far it got. The work itself is in
         `_run_mission`, running inside the mission span.
+
+        `resume_from` picks up a mission that a killed process left unfinished.
+        The goal, the plan and the list of steps that already completed come
+        from the run store rather than from this call, so a resume cannot
+        accidentally run a different mission under an old id.
         """
         if not self.agents:
             self._load_agents()
 
-        task_id = f"task_{uuid.uuid4().hex[:8]}"
+        store = runstore.get_store()
+        resumed: Optional[Dict[str, Any]] = None
+
+        if resume_from:
+            resumed = store.get_mission(resume_from)
+            if not resumed:
+                raise KeyError(f"no mission '{resume_from}' in the run store")
+            if not resumed.get("plan"):
+                raise ValueError(
+                    f"mission '{resume_from}' has no stored plan; it died before "
+                    f"planning finished and there is nothing to resume")
+            task_id = resume_from
+            user_prompt = resumed["goal"]
+        else:
+            task_id = f"task_{uuid.uuid4().hex[:8]}"
+
         workspace = MissionWorkspace(task_id)
         self.workspaces[task_id] = workspace
-        self._step_telemetry[task_id] = {}
+        self._step_telemetry.setdefault(task_id, {})
 
         trace = tracing.start_mission(task_id, workspace.dir)
         try:
             async with tracing.span("mission", user_prompt[:120],
-                                    task_id=task_id) as node:
-                result = await self._run_mission(task_id, workspace, user_prompt)
+                                    task_id=task_id, resumed=bool(resumed)) as node:
+                result = await self._run_mission(
+                    task_id, workspace, user_prompt, resumed)
                 node.set(cost_usd=result.get("cost_usd", 0.0),
                          steps=len(result.get("subtasks") or []))
                 return result
         finally:
             tracing.end_mission()
 
+    @staticmethod
+    def _rehydrate_workspace(workspace: MissionWorkspace) -> List[str]:
+        """
+        Put the artifacts a previous run already wrote back on the blackboard.
+
+        The workspace is in-memory and dies with the process, but its mirror on
+        disk does not -- that mirror exists precisely so a finished mission
+        outlives the browser tab, and it turns out to be what makes a resume
+        possible at all. Without this a resumed step would `consumes` an
+        artifact the store has never heard of and receive an empty context,
+        redoing upstream work that is sitting on disk beside it.
+        """
+        restored: List[str] = []
+        if not workspace.dir or not os.path.isdir(workspace.dir):
+            return restored
+
+        skip = {"report.md", "mission.json", tracing.TRACE_FILENAME}
+        for name in sorted(os.listdir(workspace.dir)):
+            if name in skip:
+                continue
+            path = os.path.join(workspace.dir, name)
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                    content = fh.read()
+            except OSError as exc:
+                logger.warning("could not rehydrate %s: %s", path, exc)
+                continue
+            workspace.artifacts[name] = Artifact(
+                name=name, content=content, author_id="resumed",
+                author_name="a previous run", size_chars=len(content))
+            restored.append(name)
+        return restored
+
     async def _run_mission(
         self,
         task_id: str,
         workspace: MissionWorkspace,
-        user_prompt: str
+        user_prompt: str,
+        resumed: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """The mission proper, run inside the mission span its caller opened."""
         main_task = Task(id=task_id, description=user_prompt, status="in_progress")
         self.active_tasks[task_id] = main_task
+
+        store = runstore.get_store()
+        # Rebuilt per mission so a changed max_parallel_agents takes effect, and
+        # here rather than in __init__ so it binds to the running event loop.
+        limit = settings.max_parallel_agents if settings.parallel_enabled else 1
+        self._slots = asyncio.Semaphore(max(1, limit))
+        self._peak_active_steps = 0
+        self._active_steps = 0
 
         start_time = time.time()
 
@@ -181,9 +270,37 @@ class Orchestrator:
                         station_id=board.id, task_id=task_id
                     )
 
-        # 2. Plan.
-        plan = await planner.plan(user_prompt, self.get_manifests())
-        self._apply_memory_routing(plan, task_id)
+        # 2. Plan -- or recover the one this mission was already running.
+        already_completed: Set[str] = set()
+        if resumed:
+            # Re-planning a resumed mission would be a different mission wearing
+            # the same id: the artifacts already on disk were produced against
+            # the original graph, and a fresh plan would consume files that no
+            # step in it produces. Memory routing is skipped for the same
+            # reason -- a step that has already run cannot change hands now.
+            plan = Plan(goal=resumed["goal"], source=resumed["plan"].get("source", "llm"),
+                        steps=[PlanStep(**s) for s in resumed["plan"].get("steps", [])])
+            already_completed = set(store.completed_step_ids(task_id))
+            restored = self._rehydrate_workspace(workspace)
+            logger.info("[%s] resuming: %d/%d steps already done, %d artifact(s) restored",
+                        task_id, len(already_completed), len(plan.steps), len(restored))
+            if self.boss_agent:
+                await self.boss_agent.speak(
+                    f"Resuming: {len(already_completed)} of {len(plan.steps)} steps "
+                    f"already done", task_id=task_id)
+            await event_bus.emit(Event(
+                type=EventType.TERMINAL_LOG,
+                task_id=task_id,
+                data={"message": f"Resumed {task_id}: skipping "
+                                 f"{sorted(already_completed)}, restored "
+                                 f"{len(restored)} artifact(s)",
+                      "level": "INFO"}
+            ))
+        else:
+            store.start_mission(task_id, user_prompt, workspace.dir or "")
+            plan = await planner.plan(user_prompt, self.get_manifests())
+            self._apply_memory_routing(plan, task_id)
+            store.record_plan(task_id, plan)
         self.current_plan = plan
 
         await event_bus.emit(Event(
@@ -208,7 +325,8 @@ class Orchestrator:
         self.current_dag = self._build_dag(plan)
         await self._emit_dag(task_id, plan.source)
 
-        results = await self._execute_plan(plan, workspace, task_id, user_prompt)
+        results = await self._execute_plan(
+            plan, workspace, task_id, user_prompt, already_completed)
 
         # 4. Synthesise.
         if self.boss_agent:
@@ -225,6 +343,10 @@ class Orchestrator:
         # the only other copy, so a browser that is closed or reloaded at this
         # moment would otherwise take the whole mission with it.
         telemetry = self._mission_telemetry(task_id, plan)
+        store.end_mission(
+            task_id,
+            "failed" if any(s.status == "failed" for s in plan.steps) else "completed",
+            telemetry["cost_usd"])
 
         workspace.save_report(synthesis_text)
         workspace.save_manifest({
@@ -304,6 +426,8 @@ class Orchestrator:
             "cost_usd": telemetry["cost_usd"],
             "tokens_estimated": telemetry["tokens_estimated"],
             "per_step": telemetry["per_step"],
+            "resumed": bool(resumed),
+            "skipped_steps": sorted(already_completed),
         }
 
     # ------------------------------------------------------------------ routing
@@ -476,131 +600,191 @@ class Orchestrator:
             if node.id == step_id:
                 node.status = status
 
+    async def _run_step_scheduled(
+        self,
+        step: PlanStep,
+        workspace: MissionWorkspace,
+        task_id: str,
+        goal: str
+    ) -> Dict[str, Any]:
+        """
+        One step, under a concurrency slot, a deadline, and a retry budget.
+
+        The slot is taken *before* the deadline starts. A step queued behind the
+        parallelism cap has not begun work, and timing it out for waiting its
+        turn would punish it for the scheduler's decision rather than its own.
+        """
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                async with self._slots:
+                    return await asyncio.wait_for(
+                        self._run_step(step, workspace, task_id, goal),
+                        timeout=settings.step_timeout_sec)
+
+            except asyncio.TimeoutError:
+                # Deliberately not retried, and deliberately not re-raised as
+                # anything containing "Timeout" -- llm.is_transient reads that
+                # word in a class name as retryable, and this is the opposite. A
+                # step that burned the whole step_timeout_sec has already spent
+                # the time budget, and the usual cause (a model that will not
+                # stop) recurs on the next attempt at the same price.
+                raise StepDeadlineExceeded(
+                    f"step {step.id} exceeded {settings.step_timeout_sec:.0f}s "
+                    f"and was stopped") from None
+
+            except asyncio.CancelledError:
+                raise
+
+            except Exception as exc:
+                # llm.is_transient rather than a second classifier here: one
+                # place decides what "worth trying again" means, or the two
+                # drift and a 401 starts getting retried in one of them. A step
+                # that failed because the agent produced garbage is contracts.py
+                # and critic.py's problem, not a retry candidate.
+                if attempt >= max(1, settings.step_max_attempts) or not llm.is_transient(exc):
+                    raise
+                logger.warning("[%s] step %s failed transiently (%s), retrying %d/%d",
+                               task_id, step.id, type(exc).__name__,
+                               attempt + 1, settings.step_max_attempts)
+                await event_bus.emit(Event(
+                    type=EventType.TERMINAL_LOG,
+                    task_id=task_id,
+                    data={"message": f"{step.id} hit a transient failure "
+                                     f"({type(exc).__name__}); retrying",
+                          "level": "INFO"}
+                ))
+
     async def _execute_plan(
         self,
         plan: Plan,
         workspace: MissionWorkspace,
         task_id: str,
-        goal: str
+        goal: str,
+        already_completed: Optional[Set[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Run the graph in waves.
+        Run the graph, starting every step the moment it becomes runnable.
 
-        Every step whose dependencies are satisfied starts together, capped at
-        `max_parallel_agents`. That is the whole reason the office looks busy:
-        three desks light up at once instead of one at a time.
+        This used to take a slice of the ready set -- `ready[:limit]` -- which
+        made `max_parallel_agents` a batch size rather than a concurrency limit:
+        a wave of five ran three, waited for all three, then ran two, leaving
+        slots idle whenever one step finished sooner than its neighbours. Now
+        the whole ready set is dispatched and `self._slots` does the capping, so
+        the fourth step starts the instant a slot frees.
+
+        `already_completed` is what a resumed mission has done before: those
+        steps are treated as satisfied dependencies and never re-run.
         """
+        store = runstore.get_store()
         by_id: Dict[str, PlanStep] = {s.id: s for s in plan.steps}
-        pending: Set[str] = set(by_id)
-        completed: Set[str] = set()
+        order = list(by_id)
+        completed: Set[str] = {sid for sid in (already_completed or set()) if sid in by_id}
+        pending: Set[str] = {sid for sid in by_id if sid not in completed}
         failed: Set[str] = set()
         results: List[Dict[str, Any]] = []
+        running: Dict[str, asyncio.Task] = {}
         wave_index = 0
 
-        while pending:
-            ready = [
-                sid for sid in sorted(pending, key=lambda s: list(by_id).index(s))
-                if set(by_id[sid].dependencies) <= completed
-            ]
-            if not ready:
-                # Everything left is waiting on something that failed.
-                for sid in pending:
-                    self._set_node_status(sid, "failed")
-                    by_id[sid].status = "failed"
-                await self._emit_dag(task_id, plan.source)
-                logger.warning(f"[{task_id}] {len(pending)} step(s) unreachable after a failure")
-                break
+        for sid in completed:
+            by_id[sid].status = "completed"
+            self._set_node_status(sid, "completed")
+        if completed:
+            await self._emit_dag(task_id, plan.source)
 
-            # Budget gate. max_tokens_budget_per_task was broadcast to the UI
-            # and enforced nowhere, which was harmless while every run was
-            # simulated and is not once a paid key is in play. Checked between
-            # waves rather than mid-step: a step already dispatched has to be
-            # allowed to finish, or its artifact is lost and the graph stalls.
+        while pending or running:
+            # Budget gate. Checked before dispatching rather than mid-step: a
+            # step already running has to be allowed to finish, or its artifact
+            # is lost and everything downstream of it stalls anyway.
             spent = self._tokens_spent()
-            if spent >= settings.max_tokens_budget_per_task:
-                for sid in pending:
-                    self._set_node_status(sid, "failed")
+            if pending and spent >= settings.max_tokens_budget_per_task:
+                for sid in sorted(pending):
                     by_id[sid].status = "failed"
+                    self._set_node_status(sid, "failed")
+                    store.upsert_step(task_id, by_id[sid], "failed",
+                                      error="token budget exhausted")
                     failed.add(sid)
+                skipped = len(pending)
+                pending.clear()
                 await self._emit_dag(task_id, plan.source)
                 await event_bus.emit(Event(
                     type=EventType.TASK_FAILED,
                     task_id=task_id,
                     data={"error": f"Token budget exhausted: {spent:,} of "
                                    f"{settings.max_tokens_budget_per_task:,} used. "
-                                   f"{len(pending)} step(s) not started."}
+                                   f"{skipped} step(s) not started."}
                 ))
                 logger.warning("[%s] budget exhausted (%s tokens); %d step(s) skipped",
-                               task_id, spent, len(pending))
+                               task_id, spent, skipped)
+
+            ready = [sid for sid in sorted(pending, key=order.index)
+                     if set(by_id[sid].dependencies) <= completed]
+
+            if not ready and not running:
+                # Nothing runnable and nothing in flight: everything left is
+                # waiting on something that failed.
+                for sid in sorted(pending):
+                    by_id[sid].status = "failed"
+                    self._set_node_status(sid, "failed")
+                    store.upsert_step(task_id, by_id[sid], "failed",
+                                      error="unreachable after an upstream failure")
+                    failed.add(sid)
+                if pending:
+                    logger.warning("[%s] %d step(s) unreachable after a failure",
+                                   task_id, len(pending))
                 pending.clear()
+                await self._emit_dag(task_id, plan.source)
                 break
 
-            limit = settings.max_parallel_agents if settings.parallel_enabled else 1
-            wave = ready[:limit]
-            wave_index += 1
-
-            for sid in wave:
+            for sid in ready:
                 pending.discard(sid)
                 by_id[sid].status = "running"
                 self._set_node_status(sid, "running")
-            await self._emit_dag(task_id, plan.source)
+                # Written before the event goes out. A process killed in the gap
+                # would otherwise have shown a step the database never heard of,
+                # and a resume would run it a second time.
+                store.upsert_step(task_id, by_id[sid], "running")
+                running[sid] = asyncio.ensure_future(
+                    self._run_step_scheduled(by_id[sid], workspace, task_id, goal))
 
-            if self.boss_agent and len(wave) > 1:
-                names = ", ".join(
-                    self.agents[by_id[s].agent_id].name
-                    for s in wave if by_id[s].agent_id in self.agents
-                )
-                await self.boss_agent.speak(f"Running {len(wave)} in parallel: {names}", task_id=task_id)
+            if ready:
+                wave_index += 1
+                await self._emit_dag(task_id, plan.source)
+                if self.boss_agent and len(ready) > 1:
+                    names = ", ".join(
+                        self.agents[by_id[s].agent_id].name
+                        for s in ready if by_id[s].agent_id in self.agents)
+                    if names:
+                        await self.boss_agent.speak(
+                            f"Running {len(ready)} in parallel: {names}", task_id=task_id)
 
-            outcomes = await asyncio.gather(
-                *[self._run_step(by_id[sid], workspace, task_id, goal) for sid in wave],
-                return_exceptions=True
-            )
+            if not running:
+                continue
 
-            for sid, outcome in zip(wave, outcomes):
+            done, _ = await asyncio.wait(
+                running.values(), return_when=asyncio.FIRST_COMPLETED)
+
+            for finished in done:
+                sid = next(k for k, v in running.items() if v is finished)
+                del running[sid]
                 step = by_id[sid]
-                if isinstance(outcome, Exception):
-                    logger.error(f"Step {sid} ({step.agent_id}) raised: {outcome}", exc_info=outcome)
-                    step.status = "failed"
-                    failed.add(sid)
-                    self._set_node_status(sid, "failed")
-                    await event_bus.emit(Event(
-                        type=EventType.TASK_FAILED,
-                        agent_id=step.agent_id,
-                        task_id=f"{task_id}_{sid}",
-                        data={"step_id": sid, "error": str(outcome)}
-                    ))
-                    # Failures have to reach memory too. memory.record lives at
-                    # the end of _run_step, which a raising step never gets to,
-                    # so every episode ever written said "success" -- leaving
-                    # success_rate at 1.0 for everyone and making the
-                    # competence-based rerouting in _route_step dead code.
-                    # Cost is cost whether the step worked or not. Recorded
-                    # here as well as in _run_step, which a raising step never
-                    # reaches, or the mission's total would quietly omit every
-                    # failure -- and a failed step is often the expensive one.
-                    specialist = self._agent_by_id(step.agent_id)
-                    self._record_step_telemetry(
-                        task_id, step, dict(specialist.last_run or {}) if specialist else {})
+                outcome = finished.exception() or finished.result()
 
-                    if settings.memory_enabled:
-                        memory.record(
-                            agent_id=step.agent_id,
-                            agent_name=specialist.name if specialist else step.agent_id,
-                            goal=goal,
-                            subtask=step.description,
-                            outcome="failure",
-                            summary=f"{type(outcome).__name__}: {outcome}"[:400],
-                            duration_sec=(specialist.last_run.get("duration_sec", 0.0)
-                                          if specialist else 0.0),
-                            total_tokens=(specialist.last_run.get("tokens", 0)
-                                          if specialist else 0),
-                        )
+                if isinstance(outcome, BaseException):
+                    await self._record_step_failure(task_id, step, goal, outcome, store)
+                    failed.add(sid)
                     continue
 
                 step.status = "completed"
                 completed.add(sid)
                 self._set_node_status(sid, "completed")
+                stats = self._step_telemetry.get(task_id, {}).get(sid, {})
+                store.finish_step(
+                    task_id, sid, "completed",
+                    tokens=stats.get("prompt_tokens", 0) + stats.get("completion_tokens", 0),
+                    cost_usd=stats.get("cost_usd", 0.0),
+                    artifact_path=step.produces or "")
                 results.append(outcome)
 
             await self._emit_dag(task_id, plan.source)
@@ -616,6 +800,56 @@ class Orchestrator:
             ))
 
         return results
+
+    async def _record_step_failure(self, task_id: str, step: PlanStep, goal: str,
+                                   outcome: BaseException, store) -> None:
+        """
+        One place where a failed step is written down.
+
+        Was inline in the wave loop. Pulled out because a resumed mission and a
+        timed-out step both reach it by different routes now, and three copies
+        of "and don't forget to tell memory" is how one of them ends up missing
+        it -- which is exactly the bug that once left success_rate at 1.0 for
+        every agent in the office.
+        """
+        logger.error("Step %s (%s) raised: %s", step.id, step.agent_id, outcome,
+                     exc_info=outcome if isinstance(outcome, Exception) else None)
+        step.status = "failed"
+        self._set_node_status(step.id, "failed")
+
+        specialist = self._agent_by_id(step.agent_id)
+        stats = dict(specialist.last_run or {}) if specialist else {}
+        self._record_step_telemetry(task_id, step, stats)
+
+        store.finish_step(
+            task_id, step.id, "failed",
+            tokens=stats.get("prompt_tokens", 0) + stats.get("completion_tokens", 0),
+            cost_usd=stats.get("cost_usd", 0.0),
+            error=f"{type(outcome).__name__}: {outcome}")
+
+        await event_bus.emit(Event(
+            type=EventType.TASK_FAILED,
+            agent_id=step.agent_id,
+            task_id=f"{task_id}_{step.id}",
+            data={"step_id": step.id, "error": str(outcome),
+                  "kind": type(outcome).__name__}
+        ))
+
+        # Failures have to reach memory too. memory.record lives at the end of
+        # _run_step, which a raising step never gets to, so every episode ever
+        # written said "success" -- leaving success_rate at 1.0 for everyone and
+        # making the competence-based rerouting dead code.
+        if settings.memory_enabled:
+            memory.record(
+                agent_id=step.agent_id,
+                agent_name=specialist.name if specialist else step.agent_id,
+                goal=goal,
+                subtask=step.description,
+                outcome="failure",
+                summary=f"{type(outcome).__name__}: {outcome}"[:400],
+                duration_sec=stats.get("duration_sec", 0.0),
+                total_tokens=stats.get("tokens", 0),
+            )
 
     async def _run_meeting(
         self,
@@ -697,11 +931,16 @@ class Orchestrator:
         turn and tool call the specialist makes lands under this step, and two
         steps running in the same wave cannot end up as each other's children.
         """
-        async with tracing.span(
-            "step", f"{step.id}:{step.agent_id}",
-            step_id=step.id, agent_id=step.agent_id, step_kind=step.kind
-        ) as span:
-            return await self._run_step_body(step, workspace, task_id, goal, span)
+        self._active_steps += 1
+        self._peak_active_steps = max(self._peak_active_steps, self._active_steps)
+        try:
+            async with tracing.span(
+                "step", f"{step.id}:{step.agent_id}",
+                step_id=step.id, agent_id=step.agent_id, step_kind=step.kind
+            ) as span:
+                return await self._run_step_body(step, workspace, task_id, goal, span)
+        finally:
+            self._active_steps -= 1
 
     async def _dispatch_attempt(
         self,

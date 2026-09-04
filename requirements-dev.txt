@@ -6,7 +6,7 @@
 -r requirements.txt
 
 # --- Tests ------------------------------------------------------------------
-# 189 tests in backend/tests/. httpx is not imported directly -- it is what
+# 211 tests in backend/tests/. httpx is not imported directly -- it is what
 # fastapi.testclient.TestClient is built on, so the suite will not collect
 # without it.
 pytest==9.1.1

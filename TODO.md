@@ -66,8 +66,36 @@ lacks the tool for it. `validate_plan` does not check that.
 `asyncio.gather` wave, capped by `max_parallel_agents` (3). One agent still runs
 one subtask at a time, held by a per-agent lock.
 
-Still open: the cap is a slice of the ready set, not a semaphore, so a wave of
-five runs 3 then 2 rather than starting the fourth the moment a slot frees.
+**Also done.** The cap is now `asyncio.Semaphore(max_parallel_agents)` held
+around each `_run_step`, and the whole ready set is dispatched rather than a
+slice of it, so the fourth step starts the instant a slot frees. The scheduler
+re-evaluates on every completion (`asyncio.wait(..., FIRST_COMPLETED)`) instead
+of draining a whole wave, so a step also starts the moment its dependencies land
+rather than at the next wave boundary. `orchestrator._peak_active_steps` records
+the high-water mark, which is the only way to assert the cap actually caps -- a
+counter read at rest reads zero however broken the scheduler is.
+
+Steps also gained a deadline (`step_timeout_sec`, 300s) and a retry budget
+(`step_max_attempts`, 2) for transient failures only, classified by
+`llm.is_transient` so there is one classifier rather than two that drift.
+
+### A killed process loses the mission
+
+**Done.** `runstore.py` writes every mission and step transition to a SQLite file
+(stdlib, no service) *before* the matching event is emitted, so there is no
+window in which the UI has been shown a step the store never heard of.
+`POST /api/missions/{id}/resume` picks a killed mission back up: completed steps
+are skipped, their artifacts are read back off disk into the workspace, and
+everything else -- including anything left `running` when the process died --
+runs again.
+
+Verified by killing a real process mid-mission: the store held
+`s1=completed, s2=running, s3=running`, and a fresh process resumed it, skipped
+`s1`, ran `s2`/`s3`/`s4` and finished.
+
+Only `completed` is resumable. A step recorded `running` was in flight when the
+process died -- its outcome is unknown and its artifact may be half written, so
+re-running it is the only safe reading of that state.
 
 ### Subtask results are not fed forward
 

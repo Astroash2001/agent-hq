@@ -132,6 +132,29 @@ nothing. `report.py` renders `scorecard.md` with a delta against the previous ru
 
 See `evals/README.md`.
 
+### `runstore.py` — what happened, while it is still happening
+
+A SQLite file (stdlib `sqlite3`, WAL, one short transaction per write) holding
+`missions` and `steps`. Every status change is written here **before** the
+matching event reaches the bus -- in that order, because the reverse leaves a
+window where the UI has been shown a completed step the store has no record of,
+and a resume would then run it twice.
+
+It stores the plan as soon as planning finishes, not at the end. `mission.json`
+carries the plan too but is written only when a mission completes, so a killed
+run leaves none and there would be nothing to resume *from*.
+
+Never raises at the call site: bookkeeping that can kill a run has turned a
+durability feature into a new way to lose one.
+
+### `api_missions.py` — mission history and resume
+
+`GET /api/missions`, `GET /api/missions/{id}`, `GET /api/missions/{id}/trace` and
+`POST /api/missions/{id}/resume`, as an `APIRouter` that `main.py` includes in
+two lines. The trace endpoint returns raw NDJSON rather than parsed JSON: the
+file is line-delimited precisely so a partially written one is still readable,
+and parsing it server-side would discard that property at the moment it matters.
+
 ### `contracts.py` — is this artifact usable
 
 Pure functions, no model and no I/O. `infer_spec` derives a bar from the promised
