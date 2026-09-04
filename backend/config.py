@@ -196,6 +196,41 @@ class Settings(BaseSettings):
     agents_dir: str = os.path.join(os.path.dirname(__file__), "agents")
     workspace_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+    # --- Sandboxing and hardening (WP7) --------------------------------------
+    # The jail root is the repository root (one level up from backend/).
+    # settings.workspace_root resolves to the parent of the repo (agentic AI/),
+    # which would leak sibling projects to any path check. jail_root restricts
+    # path traversal, subprocess cwd, and file operations to this repository.
+    jail_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    # Terminal tool allowlist and execution caps.
+    # Empty list means "refuse everything" rather than "allow everything".
+    # Multi-word commands match on binary + subcommands (e.g., "git status").
+    terminal_sandbox_enabled: bool = True
+    terminal_allowed_commands: list[str] = [
+        "python",
+        "pytest",
+        "git status",
+        "git diff",
+        "git log",
+        "ls",
+        "dir",
+    ]
+    terminal_max_output_chars: int = 5000
+
+    # File ops path containment kill switch.
+    file_ops_sandbox_enabled: bool = True
+
+    # API authentication and network hardening.
+    # When api_token is empty, all endpoints remain open (local dev / no-key demo).
+    # When set, require it on /ws connect and on POST /api/emergency-stop.
+    api_token: str = os.getenv("AGENTHQ_API_TOKEN", "")
+    cors_origins: list[str] = ["http://localhost:8080"]
+
+    # Rate limiting on WebSocket task submissions (seconds between submissions).
+    # 0 or negative disables rate limiting.
+    ws_submit_rate_limit: float = 1.0
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

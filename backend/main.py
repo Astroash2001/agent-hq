@@ -2,10 +2,11 @@ import asyncio
 import json
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import Set
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -82,11 +83,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS for local dev
+# Enable CORS
+# Browsers reject allow_credentials=True with wildcard allow_origins=["*"].
+# We set allow_credentials only when origins are explicitly specified.
+cors_origins = getattr(settings, "cors_origins", ["http://localhost:8080"])
+allow_creds = cors_origins != ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=allow_creds,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -154,8 +159,27 @@ async def reset_memory():
 
 
 @app.post("/api/emergency-stop")
-async def emergency_stop():
+async def emergency_stop(request: Request):
     """Emergency kill switch to halt all running agents."""
+    expected_token = getattr(settings, "api_token", "")
+    if expected_token:
+        auth_header = request.headers.get("authorization", "").strip()
+        token = ""
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif auth_header:
+            token = auth_header
+        if not token:
+            token = request.headers.get("x-api-token", "").strip()
+        if not token:
+            token = request.query_params.get("token", "").strip()
+
+        if token != expected_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized: invalid or missing API token."
+            )
+
     orchestrator.cancel_all()
     await event_bus.emit(Event(
         type=EventType.SYSTEM_STATUS,
@@ -169,6 +193,22 @@ async def websocket_endpoint(websocket: WebSocket):
     """
     Bidirectional WebSocket connection for live 2D canvas, logs, DAG updates, and token telemetry.
     """
+    expected_token = getattr(settings, "api_token", "")
+    if expected_token:
+        token = websocket.query_params.get("token", "").strip()
+        if not token:
+            auth_header = websocket.headers.get("authorization", "").strip()
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:].strip()
+            elif auth_header:
+                token = auth_header
+        if not token:
+            token = websocket.headers.get("x-api-token", "").strip()
+
+        if token != expected_token:
+            await websocket.close(code=1008, reason="Unauthorized: invalid or missing API token.")
+            return
+
     await manager.connect(websocket)
 
     try:
@@ -188,6 +228,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json(past_event.model_dump())
 
         # 3. Main client message receive loop
+        last_submit_time = 0.0
         while True:
             raw_text = await websocket.receive_text()
             try:
@@ -195,6 +236,22 @@ async def websocket_endpoint(websocket: WebSocket):
                 action = msg_data.get("action")
 
                 if action == "submit_task":
+                    rate_limit = getattr(settings, "ws_submit_rate_limit", 1.0)
+                    now = time.monotonic()
+                    if rate_limit > 0 and (now - last_submit_time < rate_limit):
+                        logger.warning("Rate limit exceeded for submit_task on websocket")
+                        await websocket.send_json({
+                            "type": EventType.SYSTEM_STATUS.value,
+                            "data": {
+                                "message": (
+                                    f"Rate limit exceeded. Please wait {rate_limit:.1f}s "
+                                    "between task submissions."
+                                )
+                            }
+                        })
+                        continue
+                    last_submit_time = now
+
                     prompt = msg_data.get("message", "").strip()
                     if prompt:
                         logger.info(f"Received user task via WebSocket: {prompt}")

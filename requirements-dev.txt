@@ -37,3 +37,8 @@ scipy==1.15.3
 # disables export rather than breaking startup.
 opentelemetry-sdk==1.29.0
 opentelemetry-exporter-otlp-proto-http==1.29.0
+
+# --- Linting ------------------------------------------------------------------
+# Fast Python linter used in CI.
+ruff==0.9.9
+

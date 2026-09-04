@@ -226,10 +226,40 @@ listing, WebSocket handshake and event flow.
 
 ## Housekeeping
 
-- `frontend/assets/modern_interiors/` still holds the **non-commercial** free pack.
-  Confirm no free-pack sprite survives in the atlas before any commercial use —
-  licence detail in [[STACK]]
-- `furniture/new/` is a byte-identical duplicate of the free pack; safe to delete
-- `tools/_slices/` holds 614 one-off debug crops from earlier sessions
 - `backend/.pytest_cache/` is committed alongside the source
 - `Preview.png` in the project root is unreferenced
+
+---
+
+## Hardening and Sandboxing (WP7)
+
+### Terminal tool allowlist and sandboxing
+
+**Done.** `backend/tools/terminal.py` enforces `settings.terminal_allowed_commands`,
+rejects shell metacharacters before execution, runs with `asyncio.create_subprocess_exec`
+(`shell=False`), jails `cwd` to `settings.jail_root`, scrubs secrets from child
+environments (preserving only `PATH` and `SYSTEMROOT`), caps output at
+`settings.terminal_max_output_chars`, and hard-kills and reaps timed-out children.
+Refusals return structured dictionary payloads with `refused: true`.
+
+### File ops path containment
+
+**Done.** `backend/tools/file_ops.py` (`read_file`, `write_file`, `list_files`)
+enforces containment within `settings.jail_root` (the repository root) or the active
+mission workspace directory. Traversal attacks ('..') and absolute escapes are rejected.
+Unbound writes are jailed to designated data/missions paths.
+
+### API authentication and network hardening
+
+**Done.** `backend/main.py` enforces explicit CORS origin configuration with
+`allow_credentials` disabled when origins is wildcard `["*"]`. Optional shared
+secret token `settings.api_token` gates `POST /api/emergency-stop` and `WS /ws`.
+Per-connection rate limiting throttles rapid `submit_task` WebSocket requests.
+
+### Project shipping artifacts
+
+**Done.** Added `pyproject.toml` (packaging metadata, pytest asyncio mode, ruff),
+`Dockerfile` (non-root `agenthq` user, healthcheck on `/api/health`, minimal runtime),
+`docker-compose.yml`, `.dockerignore`, `LICENSE` (MIT), and GitHub Actions CI workflow
+matrixing Python 3.10 and 3.12 with linting and tests.
+
