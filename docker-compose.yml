@@ -1,0 +1,11 @@
+services:
+  agenthq:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/data:/app/backend/data
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+    restart: unless-stopped

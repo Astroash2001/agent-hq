@@ -6,7 +6,7 @@
 -r requirements.txt
 
 # --- Tests ------------------------------------------------------------------
-# 211 tests in backend/tests/. httpx is not imported directly -- it is what
+# 227 tests in backend/tests/. httpx is not imported directly -- it is what
 # fastapi.testclient.TestClient is built on, so the suite will not collect
 # without it.
 pytest==9.1.1
@@ -42,3 +42,6 @@ opentelemetry-exporter-otlp-proto-http==1.29.0
 # evals/ reads its task files as YAML. Already present transitively via litellm;
 # pinned here because the eval suite imports it directly.
 PyYAML==6.0.3
+# --- Linting ------------------------------------------------------------------
+# Fast Python linter used in CI.
+ruff==0.9.9

@@ -503,3 +503,67 @@ buys the same garbage twice.
 durable-execution surface in one place, and `main.py` -- which carries every
 other endpoint inline -- takes a two-line include instead of a large hunk in the
 file most likely to be edited by something else at the same time.
+## Sandboxing, hardening, and shipping (WP7)
+
+### `jail_root` rather than `workspace_root` for filesystem containment
+
+`settings.workspace_root` resolved to `os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))` --
+which evaluates to the parent folder of the repository (`agentic AI`), exposing
+every sibling project on disk to any traversal or path check anchored to it.
+
+Rather than quietly redefining `workspace_root` (which might break external expectations),
+we introduced `settings.jail_root`, explicitly set to the repository root
+(`os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))`). All file tools
+(`read_file`, `list_files`), subprocess working directory checks, and symlink
+resolution are jailed strictly to `jail_root` or the active mission directory.
+
+### Basename and subcommand matching for terminal execution
+
+The terminal tool allowlist (`settings.terminal_allowed_commands`) matches on the
+basename of `argv[0]` (with `.exe` stripped and case-folded) plus any defined
+subcommands (e.g. `git status`, `git diff`). Substring matching on the raw command
+string was deliberately rejected: `"rm -rf /"` contains `"git"` in realistic phrasings
+and is trivially circumvented.
+
+Multi-word entries require exact matches on `argv[0]` and `argv[1]`, blocking
+destructive invocations such as `git push --force` while permitting inspection commands
+like `git status`. Shell metacharacters (`;`, `&`, `|`, '`', `$()`, `>`, `<`, newlines)
+are rejected outright before any execution, and processes are spawned directly with
+`asyncio.create_subprocess_exec` (`shell=False`) using a scrubbed environment containing
+only `PATH` and `SYSTEMROOT`. An empty allowlist explicitly refuses all commands.
+
+### Refusals as structured payloads, not raised exceptions
+
+Both `execute_terminal` and `file_ops` return refusals as structured dictionary results
+(`{"success": False, "refused": True, "error": "<reason>"}`) rather than raising
+exceptions. An unhandled exception causes the agent loop to crash or blindly retry
+the same failing call; a structured refusal explaining what was blocked and what is
+allowed lets the LLM agent understand the constraint and route around it.
+
+### Path containment for file operations
+
+`read_file`, `write_file`, and `list_files` enforce strict containment using
+`os.path.realpath` and `os.path.commonpath`. Cross-drive checks on Windows raise
+`ValueError`, which is caught and treated as a refusal. When a mission is active,
+`write_file` is strictly jailed to that mission's workspace directory (`MissionWorkspace.dir`).
+Direct writes without an active mission are restricted to designated data/missions
+scratch directories; arbitrary writes to source trees or system directories are rejected.
+
+### Opt-in API token and CORS hardening
+
+`settings.cors_origins` defaults to `["http://localhost:8080"]`. Setting
+`allow_credentials=True` is restricted to explicit origin lists, avoiding the
+invalid browser configuration of wildcard origin with credentials.
+
+`settings.api_token` provides a single shared secret protecting `POST /api/emergency-stop`
+and `WS /ws`. When unset (empty string), all endpoints remain open to preserve the
+zero-credential local development and demo experience. Additionally, a per-connection
+rate limit (`settings.ws_submit_rate_limit`) throttles rapid `submit_task` WebSocket
+messages.
+
+### MIT license with art pack exclusions
+
+The core harness and server code are licensed under the MIT License. The pixel-art
+source packs and generated tilesets (including Modern Interiors, Modern Office Revamped,
+and LimeZu assets) are commercial/third-party licensed assets and are not covered
+by the MIT license. Source art packs are excluded from version control.

@@ -1,0 +1,27 @@
+.git/
+.github/
+.pytest_cache/
+backend/.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+backend/data/*
+!backend/data/.gitkeep
+backend/tests/
+furniture/
+Modern_Interiors_Free_v2.2/
+Little_Bits_Office_tileset/
+lpc_the_office/
+kenney_emotes-pack/
+PIPOYA FREE RPG Character Sprites NEKONIN/
+Pixel Life - Desk Essentials/
+tools/_slices/
+*.zip
+*.rar
+*.exe
+.env
+.env.*

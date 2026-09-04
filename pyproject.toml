@@ -1,0 +1,37 @@
+[project]
+name = "agent-hq"
+version = "0.1.0"
+description = "Multi-agent LLM orchestration harness with live 2D pixel-art office observability"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
+    "venv",
+    "furniture",
+    "tools",
+    "evals",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E402",
+    "E501",
+    "E722",
+    "F401",
+    "F541",
+    "F841",
+]
