@@ -6,7 +6,7 @@
 -r requirements.txt
 
 # --- Tests ------------------------------------------------------------------
-# 32 tests in backend/tests/. httpx is not imported directly -- it is what
+# 113 tests in backend/tests/. httpx is not imported directly -- it is what
 # fastapi.testclient.TestClient is built on, so the suite will not collect
 # without it.
 pytest==9.1.1
@@ -29,3 +29,11 @@ httpx==0.28.1
 pillow==12.1.1
 numpy==1.26.4
 scipy==1.15.3
+
+# --- Optional telemetry export ------------------------------------------------
+# Only needed with OTEL_ENABLED and an OTLP collector to point at. tracing.py
+# imports these lazily, inside the export function, so neither the app nor the
+# test suite needs them installed -- a missing package logs a warning and
+# disables export rather than breaking startup.
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-http==1.29.0

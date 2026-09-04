@@ -146,6 +146,23 @@ class Settings(BaseSettings):
     persist_missions: bool = True
     missions_path: str = os.path.join(os.path.dirname(__file__), "data", "missions")
 
+    # --- telemetry -----------------------------------------------------------
+    # Every mission also leaves a trace.jsonl beside its artifacts: one span per
+    # mission, step, turn, tool call and model call. On by default because it
+    # needs no credential, no service and no extra package -- and because the
+    # numbers it carries (real tokens, real cost, real latency) are the ones the
+    # HUD was previously inventing.
+    tracing_enabled: bool = True
+    # Span attributes are written on every span. Without a ceiling an agent's
+    # reply or a whole search result ends up in the trace, which then costs more
+    # to read than the artifacts it describes.
+    trace_max_attr_chars: int = 400
+    # Optional mirror to an OTLP collector. Off by default: it needs a collector
+    # running somewhere and the opentelemetry packages, which are in
+    # requirements-dev.txt only and imported lazily, so neither is needed to run.
+    otel_enabled: bool = False
+    otel_endpoint: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
     # Memory (P6)
     memory_enabled: bool = True
     memory_path: str = os.path.join(os.path.dirname(__file__), "data", "memory.json")

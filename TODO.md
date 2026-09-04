@@ -104,9 +104,34 @@ until agent runs can actually fail.
 
 ### Token telemetry is estimated on the simulator path
 
-`_simulate_specialist_action` returns hardcoded counts (90–180 prompt, 40–95
-completion). The gauge is honest only when a real LLM is answering. Also
-`max_tokens_budget_per_task` (150000) is defined and broadcast but never enforced.
+**Done.** `llm.acompletion` now returns an `LLMResult` carrying the provider's own
+token counts, the model that actually answered, the attempt count and whether it
+fell back; `pricing.py` costs it at that model's rate instead of two hardcoded
+Gemini-flash constants. `_simulate_specialist_action` still estimates — it has to,
+nothing was called — but every simulated turn is tagged `estimated: true` on
+`token.update` and the mission is tagged `tokens_estimated` on `task.completed`, so
+the gauge can say it is guessing rather than presenting a guess as a reading.
+`max_tokens_budget_per_task` is enforced between waves in `_execute_plan`.
+
+Every mission now also leaves a `trace.jsonl` beside its artifacts and a `per_step`
+cost breakdown in `mission.json`. See `tracing.py` and [[PROTOCOL]].
+
+### `_tokens_spent()` is a lifetime total, not a mission total
+
+`BaseAgent.token_usage` accumulates across every mission the process has served and
+is never reset, so `_tokens_spent()` — which sums it across the roster — climbs
+monotonically. Two consequences, both real:
+
+- `total_tokens` in `mission.json` is the process's running total, not the run's.
+  `mission_tokens` (added with the per-step breakdown) is the correct per-mission
+  figure; `total_tokens` is left alone because the budget gate reads it.
+- The budget gate in `_execute_plan` therefore tightens as a process serves more
+  missions, and a long-lived server will eventually refuse a mission on a budget
+  that a fresh process would pass.
+
+Fix is to scope the counter to the mission rather than the agent, which changes
+what the budget means — deliberately out of scope for the telemetry work that
+found it.
 
 ### Synthesis is string assembly
 

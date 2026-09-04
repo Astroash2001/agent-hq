@@ -117,6 +117,25 @@ turns them into a prompt block, and `suggest_agent` proposes a different
 specialist when one has a materially better record on similar work — gated on a
 minimum episode count and a margin, so a cold store never overrides the planner.
 
+### `pricing.py` — what a call cost
+
+A table of per-1M-token input/output prices keyed by litellm model string, with
+`price()` and `is_priced()`. Deliberately incomplete: a model with no row returns
+`0.0` and is reported through `is_priced()` as unpriced, because a guessed rate is
+silently wrong forever while an unpriced model is visible in `mission.json` and
+fixable with one line. Prefix matching is boundary-checked, so `gpt-4o-2024-08-06`
+resolves to `gpt-4o` and `gpt-5.5` does not resolve to `gpt-5`.
+
+### `tracing.py` — the run, recorded
+
+Nested spans (`mission` → `step` → `turn` → `tool`/`llm`) written to
+`data/missions/<id>/trace.jsonl`. Parentage lives in a `ContextVar`, so asyncio's
+per-task context copy makes a step span the parent of everything that step does,
+and two steps in the same wave cannot become each other's children — no signature
+anywhere has to carry a span. Appended as spans close so a killed process leaves a
+parseable file, then rewritten in start order at the end. An exception inside a
+span is recorded as `status="error"` and re-raised, never swallowed.
+
 ### `base_agent.py` — the ReAct loop
 
 `run(task)` loops up to `settings.max_agent_steps` (8):

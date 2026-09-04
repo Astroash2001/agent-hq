@@ -119,7 +119,7 @@ def stub(monkeypatch):
 async def test_retries_then_succeeds(fast, stub):
     calls = stub(_mk("RateLimitError", status=429), "OK")
     got = await llm.acompletion([{"role": "user", "content": "hi"}])
-    assert got == "OK"
+    assert got.response == "OK"
     assert len(calls) == 2
     assert len(fast) == 1
 
@@ -145,7 +145,7 @@ async def test_falls_back_to_the_other_model_once(fast, stub, monkeypatch):
     seq = [_mk("RateLimitError", status=429)] * 2 + ["OK"]
     calls = stub(*seq)
     got = await llm.acompletion([{"role": "user", "content": "hi"}])
-    assert got == "OK"
+    assert got.response == "OK"
     assert calls == ["openai/primary", "openai/primary", "gemini/backup"]
 
 

@@ -7,6 +7,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
 
+import pricing
+import tracing
 from base_agent import BaseAgent
 from config import settings
 from event_bus import event_bus
@@ -38,6 +40,11 @@ class Orchestrator:
         self.current_dag: List[DAGNode] = []
         self.current_plan: Optional[Plan] = None
         self.workspaces: Dict[str, MissionWorkspace] = {}
+        # Per-mission, per-step cost and latency, keyed task_id -> step_id.
+        # Kept here rather than on the agents because an agent's token_usage is
+        # a lifetime total that never resets, so it cannot answer what one step
+        # of one mission cost.
+        self._step_telemetry: Dict[str, Dict[str, Dict[str, Any]]] = {}
         # One agent runs one subtask at a time even when the DAG offers it two.
         self._agent_locks: Dict[str, asyncio.Lock] = {}
         self._load_agents()
@@ -116,15 +123,40 @@ class Orchestrator:
         """
         Main entry point: plan the goal, run the graph, synthesise the briefing,
         and stream the whole thing to the office as it happens.
+
+        Thin on purpose. The trace is opened here and closed in the `finally`,
+        so a mission that raises halfway still leaves a readable trace.jsonl --
+        which is then the only record of how far it got. The work itself is in
+        `_run_mission`, running inside the mission span.
         """
         if not self.agents:
             self._load_agents()
 
         task_id = f"task_{uuid.uuid4().hex[:8]}"
-        main_task = Task(id=task_id, description=user_prompt, status="in_progress")
-        self.active_tasks[task_id] = main_task
         workspace = MissionWorkspace(task_id)
         self.workspaces[task_id] = workspace
+        self._step_telemetry[task_id] = {}
+
+        trace = tracing.start_mission(task_id, workspace.dir)
+        try:
+            async with tracing.span("mission", user_prompt[:120],
+                                    task_id=task_id) as node:
+                result = await self._run_mission(task_id, workspace, user_prompt)
+                node.set(cost_usd=result.get("cost_usd", 0.0),
+                         steps=len(result.get("subtasks") or []))
+                return result
+        finally:
+            tracing.end_mission()
+
+    async def _run_mission(
+        self,
+        task_id: str,
+        workspace: MissionWorkspace,
+        user_prompt: str
+    ) -> Dict[str, Any]:
+        """The mission proper, run inside the mission span its caller opened."""
+        main_task = Task(id=task_id, description=user_prompt, status="in_progress")
+        self.active_tasks[task_id] = main_task
 
         start_time = time.time()
 
@@ -190,6 +222,8 @@ class Orchestrator:
         # Put the run on disk before announcing it. The websocket payload is
         # the only other copy, so a browser that is closed or reloaded at this
         # moment would otherwise take the whole mission with it.
+        telemetry = self._mission_telemetry(task_id, plan)
+
         workspace.save_report(synthesis_text)
         workspace.save_manifest({
             "mission_id": task_id,
@@ -198,6 +232,13 @@ class Orchestrator:
             "duration_seconds": round(duration, 2),
             "total_tokens": self._tokens_spent(),
             "token_budget": settings.max_tokens_budget_per_task,
+            # `total_tokens` above is the roster's lifetime figure, which the
+            # budget gate reads; `mission_tokens` is what this run alone spent.
+            "mission_tokens": telemetry["mission_tokens"],
+            "cost_usd": telemetry["cost_usd"],
+            "unpriced_models": telemetry["unpriced_models"],
+            "tokens_estimated": telemetry["tokens_estimated"],
+            "per_step": telemetry["per_step"],
             "steps": [
                 {
                     "id": s.id,
@@ -230,6 +271,10 @@ class Orchestrator:
                 "plan_source": plan.source,
                 "artifacts": workspace.summary(),
                 "mission_dir": workspace.dir,
+                "cost_usd": telemetry["cost_usd"],
+                # False here does not mean free -- it means the numbers came
+                # from a provider rather than the simulator.
+                "tokens_estimated": telemetry["tokens_estimated"],
             }
         ))
 
@@ -253,7 +298,10 @@ class Orchestrator:
             "plan_source": plan.source,
             "artifacts": workspace.summary(),
             "mission_dir": workspace.dir,
-            "duration_seconds": round(duration, 2)
+            "duration_seconds": round(duration, 2),
+            "cost_usd": telemetry["cost_usd"],
+            "tokens_estimated": telemetry["tokens_estimated"],
+            "per_step": telemetry["per_step"],
         }
 
     # ------------------------------------------------------------------ routing
@@ -344,6 +392,64 @@ class Orchestrator:
         if self.boss_agent:
             total += self.boss_agent.token_usage.total_tokens
         return total
+
+    def _record_step_telemetry(self, task_id: str, step: PlanStep, stats: Dict[str, Any]):
+        """
+        File what one step cost, from the agent's `last_run`.
+
+        Written for failed steps as well as completed ones: a step that raised
+        after four tool calls and two retries still spent that money, and a
+        cost report that only counts successes understates every bad run.
+        """
+        self._step_telemetry.setdefault(task_id, {})[step.id] = {
+            "step_id": step.id,
+            "agent_id": step.agent_id,
+            "model": stats.get("model", ""),
+            "prompt_tokens": int(stats.get("prompt_tokens", 0) or 0),
+            "completion_tokens": int(stats.get("completion_tokens", 0) or 0),
+            "cost_usd": float(stats.get("cost_usd", 0.0) or 0.0),
+            "duration_sec": float(stats.get("duration_sec", 0.0) or 0.0),
+            "tool_calls": len(stats.get("tools_used", []) or []),
+            "retries": int(stats.get("retries", 0) or 0),
+            "fell_back": bool(stats.get("fell_back")),
+            "estimated": bool(stats.get("estimated")),
+        }
+
+    def _mission_telemetry(self, task_id: str, plan: Plan) -> Dict[str, Any]:
+        """
+        The mission's cost breakdown, one row per plan step.
+
+        `cost_usd` here is this mission's, summed from the steps -- not
+        `_tokens_spent()`, which sums the roster's lifetime totals and so keeps
+        climbing across every mission the process has served.
+
+        A model with no row in `pricing` contributes 0.0 and is named in
+        `unpriced_models`, because a total that silently omits a model is worse
+        than one that admits what it could not price.
+        """
+        rows = self._step_telemetry.get(task_id, {})
+        per_step = []
+        unpriced = set()
+        for step in plan.steps:
+            row = dict(rows.get(step.id, {"step_id": step.id, "agent_id": step.agent_id}))
+            row["status"] = step.status
+            model = row.get("model") or ""
+            if model and not pricing.is_priced(model):
+                unpriced.add(model)
+            per_step.append(row)
+
+        return {
+            "per_step": per_step,
+            "cost_usd": round(sum(float(r.get("cost_usd", 0.0) or 0.0)
+                                  for r in per_step), 6),
+            "mission_tokens": sum(int(r.get("prompt_tokens", 0) or 0)
+                                  + int(r.get("completion_tokens", 0) or 0)
+                                  for r in per_step),
+            "unpriced_models": sorted(unpriced),
+            # True when any step's numbers came from the simulator rather than
+            # a provider, so nothing downstream presents a guess as a reading.
+            "tokens_estimated": any(r.get("estimated") for r in per_step),
+        }
 
     async def _emit_dag(self, task_id: str, source: str = ""):
         await event_bus.emit(Event(
@@ -459,8 +565,15 @@ class Orchestrator:
                     # so every episode ever written said "success" -- leaving
                     # success_rate at 1.0 for everyone and making the
                     # competence-based rerouting in _route_step dead code.
+                    # Cost is cost whether the step worked or not. Recorded
+                    # here as well as in _run_step, which a raising step never
+                    # reaches, or the mission's total would quietly omit every
+                    # failure -- and a failed step is often the expensive one.
+                    specialist = self._agent_by_id(step.agent_id)
+                    self._record_step_telemetry(
+                        task_id, step, dict(specialist.last_run or {}) if specialist else {})
+
                     if settings.memory_enabled:
-                        specialist = self._agent_by_id(step.agent_id)
                         memory.record(
                             agent_id=step.agent_id,
                             agent_name=specialist.name if specialist else step.agent_id,
@@ -566,7 +679,28 @@ class Orchestrator:
         task_id: str,
         goal: str
     ) -> Dict[str, Any]:
-        """Assign one step, wait for the specialist, and file what it produced."""
+        """
+        Assign one step, wait for the specialist, and file what it produced.
+
+        The span is opened here rather than around the gather in `_execute_plan`
+        because asyncio copies the context when it creates each task -- so every
+        turn and tool call the specialist makes lands under this step, and two
+        steps running in the same wave cannot end up as each other's children.
+        """
+        async with tracing.span(
+            "step", f"{step.id}:{step.agent_id}",
+            step_id=step.id, agent_id=step.agent_id, step_kind=step.kind
+        ) as span:
+            return await self._run_step_body(step, workspace, task_id, goal, span)
+
+    async def _run_step_body(
+        self,
+        step: PlanStep,
+        workspace: MissionWorkspace,
+        task_id: str,
+        goal: str,
+        span: Any
+    ) -> Dict[str, Any]:
         specialist = self._agent_by_id(step.agent_id)
         if not specialist:
             raise KeyError(f"step {step.id} names unknown agent '{step.agent_id}'")
@@ -677,6 +811,15 @@ class Orchestrator:
                     file_ops.bind_workspace(None)
 
         stats = dict(specialist.last_run or {})
+        self._record_step_telemetry(task_id, step, stats)
+        span.set(
+            model=stats.get("model", ""),
+            cost_usd=stats.get("cost_usd", 0.0),
+            total_tokens=stats.get("tokens", 0),
+            retries=stats.get("retries", 0),
+            estimated=bool(stats.get("estimated")),
+            tools=len(stats.get("tools_used", []) or []),
+        )
 
         if step.produces:
             # Prefer what the agent actually wrote over what it said about it.

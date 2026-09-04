@@ -176,7 +176,14 @@ All additive — old readers keep working.
 | `task.assigned` | `step_id`, `produces`, `consumes`, `rationale`, `routed_from` |
 | `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0` |
 | `task.progress` | `wave` (which parallel wave just finished), `failed` |
-| `task.completed` | `plan_source`, `artifacts` (index, no bodies) |
+| `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated` |
+| `token.update` | `estimated` (the counts are the simulator's, not a provider's), `model` (which model answered) |
+
+**Reading `token.update`:** `estimated: true` means no model was called and the
+counts are the built-in simulator's invention. A gauge that renders those the same
+way it renders a real reading is presenting a guess as a measurement -- mark them.
+`cost_usd` on `task.completed` is this mission's spend, summed per step; it is
+`0.0` on the simulator path because nothing was called, not because it was free.
 
 **Note on parallelism:** several agents are now active at once, so
 `agent.status`, `agent.speaking` and `tool.called` interleave across agents.
@@ -194,6 +201,29 @@ Anything that assumed one active agent at a time needs a per-agent keyed state.
 | `GET /api/memory?limit=25` | recent episodes plus per-agent lifetime stats |
 | `POST /api/memory/reset` | wipes episodic memory |
 
+### On disk, per mission
+
+`backend/data/missions/<task_id>/` holds the artifacts plus:
+
+| File | What it is |
+|---|---|
+| `report.md` | the synthesised briefing |
+| `mission.json` | goal, plan, per-step status, and the cost breakdown below |
+| `trace.jsonl` | one span per line: mission, step, turn, tool, llm |
+
+`mission.json` gained `cost_usd`, `mission_tokens` (this run alone -- `total_tokens`
+is the roster's lifetime figure that the budget gate reads), `unpriced_models`,
+`tokens_estimated`, and `per_step`, one row per plan step carrying `model`,
+`prompt_tokens`, `completion_tokens`, `cost_usd`, `duration_sec`, `tool_calls`,
+`retries`, `fell_back`, `estimated` and `status`.
+
+A span in `trace.jsonl` is `{span_id, parent_id, kind, name, seq, t_start, t_end,
+duration_sec, status, error, attrs}`. `parent_id` is null on the one mission span
+that roots the tree. The file is written append-as-you-close, so a killed process
+still leaves every finished line readable, and rewritten in `(t_start, seq)` order
+when the mission ends -- `seq` because the clock is ~15ms granular on Windows and
+a parallel wave routinely ties.
+
 ---
 
 ## Feature flags
@@ -208,6 +238,8 @@ bug is yours or mine.
 | `parallel_enabled` | one step at a time, as before |
 | `spatial_enabled` | no walking, no stations; tools callable from the desk |
 | `memory_enabled` | no recall, no rerouting, nothing recorded |
+| `tracing_enabled` | no `trace.jsonl`; spans still yield, they are simply not recorded |
+| `otel_enabled` | (default **off**) no OTLP export; needs a collector and the dev-only opentelemetry packages |
 
 Pacing knobs worth having: `walk_seconds_per_tile` (0.06),
 `min_walk_seconds` / `max_walk_seconds` (0.25 / 2.0), `max_parallel_agents` (3).

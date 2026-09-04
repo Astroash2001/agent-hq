@@ -229,3 +229,64 @@ seats seven a side and every one of them overlaps the slab.
 `preview_map.py` renders without a browser; Playwright drives real Chromium for the
 full page. Both are scriptable, so a change can be rendered, measured against the
 reference numerically, and compared side by side in one command.
+
+---
+
+## Telemetry
+
+### A pricing table in the repo, not a pricing API
+
+`pricing.py` hardcodes per-1M-token rates. A live pricing endpoint would mean a
+network call on a path that must work with no credentials at all, and a cost
+figure that changes under you between two runs of the same eval — which is the
+opposite of what a scorecard is for. The table is versioned with the code, so a
+number in a committed scorecard can be traced to the rates that produced it.
+
+The cost of that choice is staleness, and it is paid deliberately: a model with no
+row is reported as **unpriced** rather than priced at zero. `price()` returning
+`0.0` is meaningless on its own, so it is always paired with `is_priced()`, and
+`mission.json` names every model it could not price in `unpriced_models`. A total
+that admits what it omitted is worth more than a tidy one that hides it.
+
+### NDJSON appended as spans close, then sorted at the end
+
+`trace.jsonl` is written one line per span, as each span finishes. A single JSON
+document would be unreadable if the process died mid-mission, which is precisely
+the run whose trace you most want. Append order is close order though, and a
+reader wants the run as it happened — so `finalise()` rewrites the file in start
+order once the mission ends. A killed process leaves the file unsorted and fully
+parseable; a finished one leaves it sorted.
+
+Ordering is `(t_start, seq)`, not `t_start` alone. `time.time()` is about 15ms
+granular on Windows, so the steps of a parallel wave are routinely stamped
+identically and a plain sort silently fell back to close order — observed with a
+two-step fan-out written shortest-first. `seq` is a process-monotonic counter
+stamped when the span opens, and it ships in the file so a replay reader can
+reproduce the same order.
+
+### Span parentage in a ContextVar, not in every signature
+
+The alternative was threading a span or trace id through `handle_user_input`,
+`_run_step`, `BaseAgent.run`, `_call_llm`, `tool_registry.execute` and back. A
+`ContextVar` gets the same tree for free, because asyncio copies the context when
+it creates a task: a step span set inside `_run_step` is inherited by every turn
+and tool call that step makes, and the steps `asyncio.gather` runs in one wave get
+independent copies, so they cannot become each other's children.
+
+It also means tracing is genuinely optional. With `tracing_enabled` off, `span()`
+still yields a `Span` object that call sites can set attributes on — it is simply
+never recorded — so not one call site needs an `if`.
+
+### The LLM call returns what it cost, not just what it said
+
+`llm.acompletion` returns an `LLMResult`, with the provider response on
+`.response`. It previously returned the raw response and discarded everything the
+retry loop knew: which model in the fallback chain actually answered, how many
+attempts it took, and what the tokens were worth. The callers then invented the
+missing numbers — `base_agent` defaulted to 100/50 tokens when a response carried
+no usage block, and priced every model in the roster at two hardcoded Gemini flash
+constants, so a mission run on Claude reported a Gemini bill.
+
+An out-parameter (`usage_out={}`) would have avoided changing any call site, and
+was rejected: a future call site can forget to pass it and silently stop being
+counted. A return value cannot be forgotten.
