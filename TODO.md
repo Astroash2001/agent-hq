@@ -658,10 +658,42 @@ simulator. They say so; they do not borrow a score.
   reports the miss with the command to re-record, which is the behaviour that
   entry was designed for.
 
-Still open: re-record `battery_team_review` and the two quota-blocked tasks when
-quota allows; and the whole sweep against `gemini-3.5-flash` rather than the
-lite model, once *that* quota returns, since the lite model is the fallback and
-not what the office is configured to run on.
+**And then recording turned out not to be enough**, which is the more
+interesting finding. The transport wrapped `llm.acompletion` and nothing else,
+so every *tool* call was live on every replay. An agent's first turn searches
+the web; the results land verbatim in the second turn's prompt; when the web
+moves, that prompt changes and the second turn misses its own cassette.
+
+Observed rather than reasoned about: `adversarial_trivial` replayed 7 hits / 0
+misses at 04:48 and again at 04:55, then at 05:08 missed on Alice's second turn
+with a *stable* new key — stable because the search had settled on new results,
+not because a line of the repo had changed. Four tasks dropped to quality 0 with
+no code change between the runs. A suite that goes red overnight for reasons
+outside the repo is the exact failure the cassettes exist to prevent, and it had
+simply been moved from the model to the tools.
+
+`tool_registry.execute` is wrapped now, keyed on tool name and arguments. Only
+tools whose answer comes from outside the office are served from disk —
+`web_search` and any `mcp__*` server. **`write_file` must genuinely run on
+replay**: its side effect is the artifact the structural checks look for, so
+serving it a recorded "ok" leaves the workspace empty and scores the mission as
+having produced nothing. The rule is "record what the office cannot control",
+not "record every tool".
+
+A cassette also records the model that answered it, and a replay resolving to a
+different model is now refused. Found because CI's smoke step, running on the
+default `gemini-3.5-flash`, replayed flash-lite cassettes with 16 hits and 0
+misses and printed `gemini-3.5-flash` in the model column beside answers that
+model never produced. The key cannot fix this on its own — `base_agent` calls
+`acompletion` with no model, so every agent turn hashes `""` — and resolving the
+default into the key invalidates every committed cassette, which was verified by
+doing it and watching all 14 tasks go to `CassetteMiss`.
+
+Still open: the sweep against `gemini-3.5-flash` itself, once that model's quota
+returns. It is rate-limited to nothing today — every request exhausts three
+attempts and falls back — so the recorded suite is the fallback model, not what
+the office is configured to run on. The scorecard names it, which is the least
+that can be done about it.
 
 ### The container ran uvicorn's reloader
 

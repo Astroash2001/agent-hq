@@ -342,3 +342,35 @@ simply never re-dispatches.
 
 Pacing knobs worth having: `walk_seconds_per_tile` (0.06),
 `min_walk_seconds` / `max_walk_seconds` (0.25 / 2.0), `max_parallel_agents` (3).
+
+
+## Cassettes, and what a replay actually replays
+
+`evals/replay.py` swaps two symbols for the length of one task: `llm.acompletion`
+and `tool_registry.execute`. Both are restored on the way out, including when the
+task raises.
+
+Model exchanges are keyed on the model, the whole message history, the tool
+schemas offered and the temperature, with two things normalised out because they
+change for reasons that have nothing to do with the code: today's date, which
+`config.date_context()` puts in every system prompt, and the `, took 41.2s` wall
+clock that `memory.render_hints` writes into recalled episodes.
+
+Tool calls are keyed on the tool name and its arguments, and **only tools whose
+answer comes from outside the office are served from disk** — `web_search` and
+any `mcp__*` server. Everything else really runs, because a local tool's side
+effect *is* the mission's output: serving `write_file` a recorded "ok" leaves the
+workspace empty and the run scores as having produced nothing.
+
+Recording only the model calls is not enough, and the failure is quiet. An
+agent's first turn searches; the results land verbatim in the second turn's
+prompt; when the web moves, that prompt changes and the second turn misses its
+own cassette — a suite that replayed cleanly an hour ago going red with nothing
+in the repo having changed.
+
+A cassette also records the model that answered it, and a replay resolving to a
+different model is refused rather than served. The key does not include the
+resolved default — `base_agent` calls `acompletion` with no model at all, so
+every agent turn hashes the empty string — which meant a suite recorded on one
+model replayed clean under another and the scorecard printed the wrong name in
+its model column.
