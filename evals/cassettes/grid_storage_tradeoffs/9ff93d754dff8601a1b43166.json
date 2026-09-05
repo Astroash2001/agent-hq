@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 31,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1503,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"long duration energy storage capital cost LCOS discharge duration pumped storage compressed air flow batteries\"}",
+        "name": "web_search"
+       },
+       "id": "call_529176eb8bdd4388beea7f177e4c__thought__El4KXAERTTIPpltcin/JDTsDgJXIp3iimulspmoU1J4SNoGCyz9odQWLug6a19rU/haVVnxxuiz+SSdro7euoAHz8S83Uo/9+awoom3hSMiH0OXh6EJeX2SochdDe6Xe"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 31,
+   "prompt_tokens": 1503
+  }
+ }
+}

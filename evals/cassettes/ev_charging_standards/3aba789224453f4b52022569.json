@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 32,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 525,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"EV charging connector standards CCS1 CCS2 NACS CHAdeMO fleet adoption reliability speeds\"}",
+        "name": "web_search"
+       },
+       "id": "call_11596f13411d4d1aa0d45ded7a4e__thought__El4KXAERTTIPzWZGoWf5ggIxcqIz5bKhXdieAGmEzaA5E6NpoI6HAN79UeCmBLZ158zmrBEcEXmKL01AHx09CBcPQjt9sgg6zFmcB448nYtwJnU1LaFa0FDNPKrTd/cP"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 32,
+   "prompt_tokens": 525
+  }
+ }
+}

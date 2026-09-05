@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 23,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 531,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"python -c \\\"print('Python environment works')\\\"\"}",
+        "name": "terminal"
+       },
+       "id": "call_758d7bf2095c42eab143b373ff48__thought__El4KXAERTTIPPtazZbCUO8waI41rlqlPtG/cgYWNRG3PQUUCynLcuEDBA2uEmRXtV3r9pM4UaLBRfP2jP1iUORhvOSIe6JedzICsQm+W7OOFo6oCMCm4lURX03Cai1cQ"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 23,
+   "prompt_tokens": 531
+  }
+ }
+}

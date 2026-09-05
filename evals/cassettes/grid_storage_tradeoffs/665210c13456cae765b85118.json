@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 232,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 802,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"steps\": [\n    {\n      \"id\": \"s1\",\n      \"agent_id\": \"researcher\",\n      \"description\": \"Gather market data on grid-scale storage options focusing on capital cost, levelized cost of storage, and discharge duration.\",\n      \"dependencies\": [],\n      \"produces\": \"storage_research.md\",\n      \"consumes\": [],\n      \"rationale\": \"Expert in market discovery and external research.\",\n      \"needs_tools\": [\"web_search\"]\n    },\n    {\n      \"id\": \"s2\",\n      \"agent_id\": \"creative\",\n      \"description\": \"Synthesize the research data into a clear executive briefing comparing costs and durations, and provide a final recommendation.\",\n      \"dependencies\": [\"s1\"],\n      \"produces\": \"executive_briefing.md\",\n      \"consumes\": [\"storage_research.md\"],\n      \"rationale\": \"Expert in markdown reports and professional formatting.\",\n      \"needs_tools\": []\n    }\n  ]\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 232,
+   "prompt_tokens": 802
+  }
+ }
+}

@@ -208,8 +208,15 @@ words survive at both ends instead.
 - Walk time is straight-line distance; it ignores walls and the collision grid
   the renderer paths against, so a backend walk and a drawn walk can disagree on
   a route that has to go around the conference room
-- Station capacity is modelled (`Station.capacity`) but the lock is always
-  exclusive, so a capacity of 2 does nothing
+- ~~Station capacity is modelled but the lock is always exclusive~~ — **stale.**
+  `_lock_for` is an `asyncio.Semaphore(capacity)` (`office.py:284`), so the
+  conference table's capacity of 4 admits four. Now covered by
+  `test_station_capacity.py`, which is worth having because the difference is
+  invisible without contention: one agent at a time passes either way, and a
+  regression to `asyncio.Lock` would only show up as meetings queueing.
+  The tests wait on the admitted count rather than sleeping, because
+  `use_tool_station` walks the agent to the station first and that is simulated
+  time that varies with distance.
 - `station_wait_timeout` (45s) drops the agent through to calling the tool
   without the station rather than failing the step
 
@@ -511,8 +518,8 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**344 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
-across 27 files: the original phase tests plus telemetry, contracts, the critic,
+**354 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+across 29 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool
 grants and the conclusion. CI runs the same suite on

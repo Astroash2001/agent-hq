@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 101,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 458,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"python3 -c \\\"\\ndef average(xs):\\n    return sum(xs) / len(xs)\\n\\ntry:\\n    print(average([]))\\nexcept Exception as e:\\n    print('Empty list:', type(e).__name__)\\n\\ntry:\\n    print(average(['a', 'b']))\\nexcept Exception as e:\\n    print('Non-numeric:', type(e).__name__)\\n\\\"\"}",
+        "name": "terminal"
+       },
+       "id": "call_81d6022a073f4e8bb24c64333735__thought__El4KXAERTTIPecbvo2mLK+I1ljT1i/65xxLFIa7uJUZKKaAGGtzcZV5C0IFKC79jTmzZLqob8N8lxPAhYxbvHGEl1KCgZGmYJGoTroBMBiqA7nIwcP7yxd0qKNQmuPHT"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 101,
+   "prompt_tokens": 458
+  }
+ }
+}
