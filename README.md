@@ -184,7 +184,7 @@ The office speaks Model Context Protocol in both directions.
     "filesystem": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "./backend/data/missions"],
-      "grant_to": ["coder", "data_analyst"]
+      "grant_to": { "coder": ["read_file", "write_file"], "data_analyst": "*" }
     },
     "docs": { "url": "https://example.com/mcp", "grant_to": ["researcher"] }
 } }
@@ -192,9 +192,14 @@ The office speaks Model Context Protocol in both directions.
 
 Every tool a server lists is registered as `mcp__<server>__<tool>` and is then an
 ordinary tool: same `tool.called` / `tool.result` events, same timing, and the
-agent walks to the **Integrations Bench** station to use it. `grant_to` picks who
-may call it; omit it and every specialist gets it. A server that will not connect
-is a logged warning — the office still opens.
+agent walks to the **Integrations Bench** station to use it. A server that will
+not connect is a logged warning — the office still opens.
+
+`grant_to` picks who may call what, as a list (every tool, to those agents) or a
+map (named tools per agent, `"*"` for all). The map exists because the list is
+all-or-nothing, and an agent granted a filesystem server gets its `delete_file`
+along with its `read_file` — the wrong default for the server type most likely to
+be pointed at a real disk. Omit `grant_to` and every specialist gets everything.
 
 **This office, out there.** `python -m mcp_server` (from `backend/`) serves
 `run_mission`, `get_mission` and `list_agents` over stdio, so Claude Code or any
@@ -234,7 +239,7 @@ OpenAI-compatible gateway. See [[DECISIONS]].
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 339 tests, all passing
+cd backend && python -m pytest -q      # 344 tests, all passing
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, plus `ruff check` and the eval

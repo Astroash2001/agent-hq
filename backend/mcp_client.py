@@ -158,12 +158,63 @@ def _plain(result: Any) -> Any:
     return out
 
 
+def _resolve_grants(
+    server_name: str,
+    grant_to: Optional[Any],
+    agents: Dict[str, Any],
+    registered: List[str],
+    by_raw: Dict[str, str],
+) -> Dict[str, List[str]]:
+    """
+    Work out which prefixed tool names each agent may call.
+
+    Kept separate from `register_server` so the grant rules can be read and
+    tested without a tool registry, an office or a server. Unknown agents and
+    unknown tool names are warned about and skipped rather than raising: a typo
+    in one line of `mcp_servers.json` should cost that line, not the server.
+    """
+    if grant_to is None:
+        return {aid: list(registered) for aid in agents}
+
+    if isinstance(grant_to, dict):
+        wanted = grant_to
+    else:
+        wanted = {aid: "*" for aid in grant_to}
+
+    out: Dict[str, List[str]] = {}
+    for agent_id, tools in wanted.items():
+        if agent_id not in agents:
+            logger.warning(f"MCP server '{server_name}' grants tools to unknown "
+                           f"agent '{agent_id}'; ignoring that grant")
+            continue
+        if tools == "*" or tools is None:
+            out[agent_id] = list(registered)
+            continue
+        if isinstance(tools, str):
+            tools = [tools]
+
+        granted: List[str] = []
+        for raw in tools:
+            # Written either way round: the server's own name, or the prefixed
+            # one somebody copied out of a log.
+            name = by_raw.get(raw) or (raw if raw in registered else None)
+            if name is None:
+                logger.warning(f"MCP server '{server_name}' grants unknown tool "
+                               f"'{raw}' to '{agent_id}'; ignoring that grant")
+                continue
+            granted.append(name)
+        if granted:
+            out[agent_id] = granted
+
+    return out
+
+
 def register_server(
     server_name: str,
     tools: List[Dict[str, Any]],
     call: Callable[[str, Dict[str, Any]], Awaitable[Any]],
     agents: Optional[Dict[str, Any]] = None,
-    grant_to: Optional[List[str]] = None,
+    grant_to: Optional[Any] = None,
 ) -> List[str]:
     """
     Put one server's tools on the floor.
@@ -172,12 +223,27 @@ def register_server(
     descriptors and something async to call -- so it can be exercised against
     an in-process stub without a subprocess, a socket or the `mcp` package.
 
-    `grant_to` names the agents allowed to call them. Omitted means every
-    specialist, which is the useful default once someone has gone to the
-    trouble of enabling MCP and configuring a server; the boss is excluded
-    because it plans rather than executes.
+    `grant_to` names who may call them, in either of two shapes:
+
+        ["coder", "data_analyst"]                    every tool, to those agents
+        {"coder": ["read_file"], "researcher": "*"}  named tools, per agent
+
+    The list form was all there was, and it is all-or-nothing: an agent granted
+    a filesystem server got its `delete_file` along with its `read_file`, which
+    is the wrong default for the one server type most likely to be pointed at a
+    real disk. The dict form grants per tool. Both are honoured, because the
+    list form is right whenever a server's tools are uniformly safe and is
+    shorter to write.
+
+    Omitted means every specialist gets everything, which is the useful default
+    once someone has gone to the trouble of enabling MCP and configuring a
+    server; the boss is excluded because it plans rather than executes.
     """
     registered: List[str] = []
+    # Raw name as the server calls it -> prefixed name as the office knows it.
+    # A grant is written against the server's own names, because that is what
+    # the server's documentation lists.
+    by_raw: Dict[str, str] = {}
     for tool in tools:
         raw_name = tool.get("name") if isinstance(tool, dict) else getattr(tool, "name", None)
         if not raw_name:
@@ -197,16 +263,13 @@ def register_server(
         )
         office.bind_tool(name, STATION_ID)
         registered.append(name)
+        by_raw[raw_name] = name
 
     if agents:
-        allowed = grant_to if grant_to is not None else list(agents.keys())
-        for agent_id in allowed:
-            agent = agents.get(agent_id)
-            if agent is None:
-                logger.warning(f"MCP server '{server_name}' grants tools to unknown "
-                               f"agent '{agent_id}'; ignoring that grant")
-                continue
-            for name in registered:
+        for agent_id, names in _resolve_grants(
+                server_name, grant_to, agents, registered, by_raw).items():
+            agent = agents[agent_id]
+            for name in names:
                 if name not in agent.tools:
                     agent.tools.append(name)
 

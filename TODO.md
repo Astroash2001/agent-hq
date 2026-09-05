@@ -340,10 +340,22 @@ Off by default (`mcp_enabled`), `mcp` pinned in `requirements-dev.txt` only and
 imported lazily, and an unreachable server is a logged warning that does not
 block startup.
 
-Still open: `grant_to` is per server, not per tool, so an agent granted a
-server gets everything that server offers. And nothing re-lists tools after
-startup -- a server that gains a tool while the office is running is not seen
-until a restart.
+**Also done: `grant_to` is now per tool as well as per server.** The list form
+is all-or-nothing, and an agent granted a filesystem server got its
+`delete_file` along with its `read_file` — the wrong default for the one server
+type most likely to be pointed at a real disk.
+
+`grant_to` now takes either shape: `["coder"]` for every tool, or
+`{"coder": ["read_file"], "researcher": "*"}` per tool. Grants are written
+against the server's own tool names, since that is what a server's
+documentation lists, though the prefixed name is accepted too for anyone
+copying out of a log. `_resolve_grants` is separate from `register_server` so
+the rules can be read without a registry or an office in the way. An unknown
+agent or tool name is a logged warning that costs that line, not the server —
+a typo in `mcp_servers.json` should not lose a working integration.
+
+Still open: nothing re-lists tools after startup — a server that gains a tool
+while the office is running is not seen until a restart.
 
 ### Synthesis is string assembly
 
@@ -478,7 +490,7 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**339 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+**344 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
 across 27 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool

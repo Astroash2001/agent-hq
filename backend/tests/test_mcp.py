@@ -82,6 +82,11 @@ class StubServer:
         return StubResult(f"{tool_name}:{arguments.get('text', '')}")
 
 
+def _mcp_tools(agent):
+    """Just the MCP grants -- an agent arrives with its own built-in tools."""
+    return [t for t in agent.tools if t.startswith("mcp__")]
+
+
 def _agent(agent_id, name):
     from base_agent import BaseAgent
     return BaseAgent(AgentManifest(
@@ -193,6 +198,60 @@ def test_a_tool_reaches_only_the_agents_it_was_granted_to(stub):
 
     assert "mcp__demo__echo" in bob_schemas
     assert "mcp__demo__echo" not in eve_schemas
+
+
+def test_a_dict_grant_hands_over_only_the_named_tools(stub):
+    """
+    The list form is all-or-nothing: an agent granted a filesystem server gets
+    its `delete_file` along with its `read_file`, which is the wrong default for
+    the server type most likely to be pointed at a real disk.
+    """
+    server, register = stub
+    agents = {"coder": _agent("coder", "Bob"), "creative": _agent("creative", "Eve")}
+    register(agents=agents, grant_to={"coder": ["echo"]})
+
+    assert "mcp__demo__echo" in agents["coder"].tools
+    assert "mcp__demo__slow" not in agents["coder"].tools, "granted one, given two"
+    assert _mcp_tools(agents["creative"]) == []
+
+
+def test_a_star_in_a_dict_grant_means_every_tool(stub):
+    """So the two shapes can be mixed in one config without a second server."""
+    server, register = stub
+    agents = {"coder": _agent("coder", "Bob"), "creative": _agent("creative", "Eve")}
+    register(agents=agents, grant_to={"coder": "*", "creative": ["slow"]})
+
+    assert "mcp__demo__echo" in agents["coder"].tools
+    assert "mcp__demo__slow" in agents["coder"].tools
+    assert _mcp_tools(agents["creative"]) == ["mcp__demo__slow"]
+
+
+def test_a_grant_may_name_the_prefixed_tool_instead(stub):
+    """Whichever name someone copied -- the server's own, or one out of a log."""
+    server, register = stub
+    agents = {"coder": _agent("coder", "Bob")}
+    register(agents=agents, grant_to={"coder": ["mcp__demo__echo"]})
+
+    assert _mcp_tools(agents["coder"]) == ["mcp__demo__echo"]
+
+
+def test_an_unknown_tool_in_a_grant_costs_that_line_not_the_server(stub):
+    """A typo in one line of mcp_servers.json must not lose the whole server."""
+    server, register = stub
+    agents = {"coder": _agent("coder", "Bob")}
+    registered = register(agents=agents,
+                          grant_to={"coder": ["echo", "no_such_tool"]})
+
+    assert len(registered) == 2, "both tools are still on the floor"
+    assert _mcp_tools(agents["coder"]) == ["mcp__demo__echo"]
+
+
+def test_an_unknown_agent_in_a_dict_grant_is_skipped(stub):
+    server, register = stub
+    agents = {"coder": _agent("coder", "Bob")}
+    register(agents=agents, grant_to={"ghost": ["echo"], "coder": ["echo"]})
+
+    assert _mcp_tools(agents["coder"]) == ["mcp__demo__echo"]
 
 
 def test_an_omitted_grant_list_means_every_specialist(stub):
