@@ -259,7 +259,7 @@ OpenAI-compatible gateway. See [[DECISIONS]].
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 354 tests, all passing
+cd backend && python -m pytest -q      # 357 tests, all passing
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, plus `ruff check` and the eval

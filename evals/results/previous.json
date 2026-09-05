@@ -175,14 +175,12 @@
     "trivial"
    ],
    "error": null,
-   "duration_sec": 5.72,
+   "duration_sec": 6.6,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 1,
-   "artifacts": [
-    "ssd_definition.md"
-   ],
-   "structural": 1.0,
+   "artifacts": [],
+   "structural": 0.714,
    "checks": [
     {
      "check": "min_steps",
@@ -196,24 +194,23 @@
     },
     {
      "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['ssd_definition.md']"
+     "ok": false,
+     "detail": "no artifact matched ['*.md']"
     },
     {
      "check": "all_steps_completed",
-     "ok": true,
-     "detail": "1/1 completed"
+     "ok": false,
+     "detail": "0/1 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+     "detail": "$0.0000 of $0.05"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "5.7s of 90s"
+     "detail": "6.6s of 90s"
     },
     {
      "check": "must_not_stub",
@@ -221,25 +218,25 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": 1.0,
+   "quality": 0.0,
    "quality_skipped": "",
    "rubric": [
     {
      "n": 1,
      "criterion": "Answers that SSD stands for solid-state drive",
-     "verdict": "pass",
-     "reason": "The document correctly states that SSD stands for Solid-State Drive."
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     },
     {
      "n": 2,
      "criterion": "Does not pad a one-line answer into a multi-section report",
-     "verdict": "pass",
-     "reason": "The output is concise and does not pad the answer into a multi-section report."
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     }
    ],
-   "spans": 10,
-   "cassette_hits": 7,
-   "cassette_misses": 0,
+   "spans": 6,
+   "cassette_hits": 2,
+   "cassette_misses": 1,
    "cassettes_recorded": 0
   },
   {
@@ -253,16 +250,12 @@
     "synthesis"
    ],
    "error": null,
-   "duration_sec": 18.29,
+   "duration_sec": 6.55,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 3,
-   "artifacts": [
-    "meeting_decision.md",
-    "solar_efficiency_report.md",
-    "solar_research.md"
-   ],
-   "structural": 1.0,
+   "artifacts": [],
+   "structural": 0.75,
    "checks": [
     {
      "check": "min_steps",
@@ -276,8 +269,8 @@
     },
     {
      "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['solar_research.md', 'meeting_decision.md', 'solar_efficiency_report.md']"
+     "ok": false,
+     "detail": "no artifact matched ['*.md']"
     },
     {
      "check": "requires_meeting",
@@ -286,19 +279,18 @@
     },
     {
      "check": "all_steps_completed",
-     "ok": true,
-     "detail": "3/3 completed"
+     "ok": false,
+     "detail": "0/3 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+     "detail": "$0.0000 of $0.35"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "18.3s of 240s"
+     "detail": "6.5s of 240s"
     },
     {
      "check": "must_not_stub",
@@ -306,31 +298,31 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": 1.0,
+   "quality": 0.0,
    "quality_skipped": "",
    "rubric": [
     {
      "n": 1,
      "criterion": "A meeting artifact records an agreed angle for the report",
-     "verdict": "pass",
-     "reason": "The meeting decision artifact clearly records the agreed angle: 'Bridging the Gap: From Lab Records to Rooftop Reality.'"
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     },
     {
      "n": 2,
      "criterion": "The written report follows the angle that was agreed",
-     "verdict": "pass",
-     "reason": "The written report explicitly adopts the agreed angle 'Bridging the Gap: From Lab Records to Rooftop Reality' in its title and structure."
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     },
     {
      "n": 3,
      "criterion": "The research is used rather than restated",
-     "verdict": "pass",
-     "reason": "The final report synthesizes the research data into a cohesive narrative rather than merely copying the research markdown file verbatim."
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     }
    ],
-   "spans": 38,
-   "cassette_hits": 22,
-   "cassette_misses": 0,
+   "spans": 6,
+   "cassette_hits": 2,
+   "cassette_misses": 1,
    "cassettes_recorded": 0
   },
   {
@@ -346,15 +338,12 @@
     "smoke"
    ],
    "error": null,
-   "duration_sec": 11.78,
+   "duration_sec": 6.4,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 2,
-   "artifacts": [
-    "battery_comparison_research.md",
-    "battery_recommendation_report.md"
-   ],
-   "structural": 0.857,
+   "artifacts": [],
+   "structural": 0.625,
    "checks": [
     {
      "check": "min_steps",
@@ -373,24 +362,23 @@
     },
     {
      "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['battery_comparison_research.md', 'battery_recommendation_report.md']"
+     "ok": false,
+     "detail": "no artifact matched ['*report*.md']"
     },
     {
      "check": "all_steps_completed",
-     "ok": true,
-     "detail": "2/2 completed"
+     "ok": false,
+     "detail": "0/2 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+     "detail": "$0.0000 of $0.25"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "11.8s of 180s"
+     "detail": "6.4s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -398,31 +386,31 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": 1.0,
+   "quality": 0.0,
    "quality_skipped": "",
    "rubric": [
     {
      "n": 1,
      "criterion": "Names at least two specific battery chemistries with figures",
-     "verdict": "pass",
-     "reason": "The report compares Sodium-Ion, Lithium Iron Phosphate (LFP), and NMC Lithium-Ion with specific metric figures."
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     },
     {
      "n": 2,
      "criterion": "States a recommendation with a stated reason",
-     "verdict": "pass",
-     "reason": "It recommends LFP for standard temperate environments and sodium-ion for cold climates, supported by specific rationale."
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     },
     {
      "n": 3,
      "criterion": "Cites at least one source when web_search was available",
-     "verdict": "pass",
-     "reason": "It includes a dedicated sources section citing multiple specific industry guides and reports."
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
     }
    ],
-   "spans": 28,
-   "cassette_hits": 16,
-   "cassette_misses": 0,
+   "spans": 6,
+   "cassette_hits": 2,
+   "cassette_misses": 1,
    "cassettes_recorded": 0
   },
   {
@@ -437,15 +425,12 @@
     "multi_step"
    ],
    "error": null,
-   "duration_sec": 13.06,
+   "duration_sec": 6.73,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 4,
-   "artifacts": [
-    "battery_one_research.md",
-    "battery_two_research.md"
-   ],
-   "structural": 0.857,
+   "artifacts": [],
+   "structural": 0.75,
    "checks": [
     {
      "check": "min_steps",
@@ -459,8 +444,8 @@
     },
     {
      "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['battery_one_research.md', 'battery_two_research.md']"
+     "ok": false,
+     "detail": "no artifact matched ['*.md']"
     },
     {
      "check": "requires_meeting",
@@ -470,18 +455,17 @@
     {
      "check": "all_steps_completed",
      "ok": false,
-     "detail": "1/4 completed"
+     "detail": "0/4 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+     "detail": "$0.0000 of $0.35"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "13.1s of 240s"
+     "detail": "6.7s of 240s"
     },
     {
      "check": "must_not_stub",
@@ -489,12 +473,31 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "CassetteMiss: No cassette for key ab9c214969fb065ca653917f in evals\\cassettes\\battery_team_review. Re-record this task with:  python -m evals.runner --suite battery_team_review --record",
-   "rubric": [],
-   "spans": 29,
-   "cassette_hits": 13,
-   "cassette_misses": 3,
+   "quality": 0.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "The report reflects both technologies, not only one",
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
+    },
+    {
+     "n": 2,
+     "criterion": "A recorded decision exists and names what the team agreed",
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
+    },
+    {
+     "n": 3,
+     "criterion": "The final report is consistent with the decision that was recorded",
+     "verdict": "fail",
+     "reason": "The mission produced no artifacts."
+    }
+   ],
+   "spans": 9,
+   "cassette_hits": 2,
+   "cassette_misses": 2,
    "cassettes_recorded": 0
   },
   {
@@ -509,7 +512,7 @@
     "smoke"
    ],
    "error": null,
-   "duration_sec": 10.77,
+   "duration_sec": 10.82,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 1,
@@ -691,7 +694,7 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 10.76,
+   "duration_sec": 10.72,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 2,
@@ -735,7 +738,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.8s of 180s"
+     "detail": "10.7s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -783,7 +786,7 @@
     "fan_in"
    ],
    "error": null,
-   "duration_sec": 12.63,
+   "duration_sec": 12.57,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 2,
@@ -874,7 +877,7 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 11.87,
+   "duration_sec": 11.79,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 2,
@@ -918,7 +921,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "11.9s of 180s"
+     "detail": "11.8s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -965,7 +968,7 @@
     "time_sensitive"
    ],
    "error": null,
-   "duration_sec": 7.84,
+   "duration_sec": 7.85,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 2,
@@ -1009,7 +1012,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "7.8s of 200s"
+     "detail": "7.9s of 200s"
     },
     {
      "check": "must_not_stub",
@@ -1055,7 +1058,7 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 12.17,
+   "duration_sec": 12.26,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -1100,7 +1103,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "12.2s of 150s"
+     "detail": "12.3s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -1127,7 +1130,7 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 12.21,
+   "duration_sec": 12.3,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -1172,7 +1175,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "12.2s of 150s"
+     "detail": "12.3s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -1198,17 +1201,17 @@
    "structural": 1.0,
    "quality": null,
    "cost_usd": 0.0,
-   "p50_latency": 12.19
+   "p50_latency": 12.28
   },
   {
    "model": "gemini/gemini-3.5-flash-lite",
    "tasks": 12,
    "runs": 12,
    "errors": 0,
-   "structural": 0.952,
-   "quality": 0.97,
+   "structural": 0.879,
+   "quality": 0.639,
    "cost_usd": 0.0,
-   "p50_latency": 11.46
+   "p50_latency": 9.29
   }
  ]
 }

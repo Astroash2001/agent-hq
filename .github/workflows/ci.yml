@@ -38,6 +38,11 @@ jobs:
       # The eval suite running here is the whole point of it being real. Replay
       # mode serves recorded exchanges and never calls a provider, so this needs
       # no credential and cannot go red because someone's key expired.
+      #
+      # The model is named because it has to be: the cassettes were recorded
+      # against flash-lite, and replaying them under a different model is
+      # refused rather than silently served. Change this line when the suite is
+      # re-recorded against something else.
       - name: Run the eval smoke suite
         run: |
-          python -m evals.runner --suite smoke --replay
+          python -m evals.runner --suite smoke --replay --model gemini/gemini-3.5-flash-lite

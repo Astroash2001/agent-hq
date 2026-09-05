@@ -78,6 +78,22 @@ def cassette_key(
     history, the tool schemas offered, and the temperature. Sorted keys and no
     whitespace, so two structurally identical requests hash identically whatever
     order the dicts were built in.
+
+    `model` is hashed exactly as the caller passed it, which is emphatically not
+    the same as the model that answers. `base_agent` calls
+    `acompletion(messages, tools=...)` with no model at all and lets the default
+    apply, so every agent turn hashes `""` here and the key does not distinguish
+    models. A sweep recorded on flash-lite replays clean under flash.
+
+    Resolving the default into the key is the obvious fix and is wrong to do on
+    its own: it invalidates every cassette already recorded, and a cassette
+    stores only the response, so there is nothing to re-key from. That would
+    trade a labelling bug for the loss of the whole recorded suite.
+
+    `_check_model` below closes the hole instead, by comparing the model the
+    cassette was answered by against the one this run resolves to and refusing
+    the mismatch out loud. Resolve it here as well when the suite is next
+    re-recorded from scratch, and the two mechanisms agree.
     """
     payload = {
         "model": model or "",
@@ -216,6 +232,37 @@ class Cassettes:
         self.recorded += 1
 
 
+class CassetteModelMismatch(RuntimeError):
+    """A cassette was recorded by a different model than this run asks for."""
+
+
+def _check_model(entry: Dict[str, Any], requested: Optional[str], key: str,
+                 task_id: str) -> None:
+    """
+    Refuse to serve one model's answers as another's.
+
+    The cassette key does not include the resolved model (see `cassette_key`),
+    so without this a suite recorded on flash-lite replays clean under flash and
+    the scorecard prints the model that was *asked for* beside answers that
+    model never produced. The model column is the scorecard's central claim
+    about what was measured; serving it wrong is worse than not serving it.
+
+    Compared against the model that ANSWERED, which is what a cassette stores.
+    When a recording fell back, that is the fallback -- and a replay under the
+    primary is then correctly refused, because the primary is not what produced
+    these answers either.
+    """
+    recorded = (entry.get("model") or "").strip()
+    from config import settings
+    effective = (requested or settings.default_model or "").strip()
+    if not recorded or not effective or recorded == effective:
+        return
+    raise CassetteModelMismatch(
+        f"Cassette {key} in {task_id} was answered by {recorded}, but this run "
+        f"resolves to {effective}. Replay with --model {recorded}, or re-record "
+        f"with:  python -m evals.runner --suite {task_id} --record")
+
+
 def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
     """
     Build the `llm.acompletion` stand-in for one task.
@@ -232,6 +279,8 @@ def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
         entry = cassettes.load(key)
 
         if entry is not None:
+            if mode != "record":
+                _check_model(entry, model, key, cassettes.task_id)
             cassettes.hits += 1
             return llm.LLMResult(
                 response=ReplayResponse(entry["response"]),

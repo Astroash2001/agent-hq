@@ -21,6 +21,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 
+from config import settings                   # noqa: E402
 from evals import judge as judge_mod          # noqa: E402
 from evals import replay as replay_mod        # noqa: E402
 from evals import report as report_mod        # noqa: E402
@@ -82,9 +83,13 @@ def cassettes():
     shutil.rmtree(root, ignore_errors=True)
 
 
-def _entry(content="hello", tool_calls=None):
+def _entry(content="hello", tool_calls=None, model=None):
+    # The model has to match what the replay resolves to, or `_check_model`
+    # refuses to serve it -- which is the point of that check, and makes a
+    # hardcoded model here a fixture that tests the guard instead of the
+    # transport.
     return {
-        "model": "gemini/gemini-2.5-flash",
+        "model": model or settings.default_model,
         "prompt_tokens": 120, "completion_tokens": 30,
         "cost_usd": 0.000111, "attempts": 1, "fell_back": False,
         "response": {
@@ -119,7 +124,7 @@ async def test_a_recorded_exchange_replays_in_the_shape_the_harness_reads(casset
     assert json.loads(call.function.arguments) == {"query": "x"}
     assert got.response.usage.prompt_tokens == 120
     assert (got.model, got.cost_usd, got.attempts) == (
-        "gemini/gemini-2.5-flash", 0.000111, 1)
+        settings.default_model, 0.000111, 1)
     assert cassettes.hits == 1
 
 
@@ -155,7 +160,7 @@ async def test_a_miss_is_fatal_and_never_calls_through(cassettes):
 
 
 @pytest.mark.asyncio
-async def test_record_mode_calls_through_and_writes_a_cassette(cassettes):
+async def test_record_mode_calls_through_and_writes_a_cassette(cassettes, monkeypatch):
     import llm
 
     class _Msg:
@@ -187,7 +192,11 @@ async def test_record_mode_calls_through_and_writes_a_cassette(cassettes):
     assert stored["response"]["choices"][0]["message"]["content"] == "recorded"
     assert stored["model"] == "gpt-4o"
 
-    # And it now replays without touching the provider.
+    # And it now replays without touching the provider -- under the model that
+    # recorded it, which is what `_check_model` requires and what a real replay
+    # of this suite does.
+    monkeypatch.setattr(settings, "default_model", "gpt-4o")
+
     async def _never(*a, **k):
         raise AssertionError("should have been served from disk")
 
@@ -569,3 +578,47 @@ def test_the_committed_baseline_is_readable_and_deterministic_against_itself():
         report = json.load(fh)
     assert report["rows"] and report["summary"]
     assert runner_mod.compare_runs(path, path) == 0
+
+
+# ------------------------------------------- one model's answers are not another's
+
+def test_a_cassette_is_not_served_for_a_different_model(monkeypatch):
+    """
+    `base_agent` calls `acompletion(messages, tools=...)` with no model, so the
+    cassette key hashes "" for every agent turn and does not distinguish models
+    at all. Without this check a suite recorded on flash-lite replays clean
+    under flash, and the scorecard prints the model that was *asked for* beside
+    answers that model never produced -- which is the one column the whole
+    scorecard is about.
+    """
+    monkeypatch.setattr(settings, "default_model", "gemini/gemini-3.5-flash")
+    entry = {"model": "gemini/gemini-3.5-flash-lite"}
+
+    with pytest.raises(replay_mod.CassetteModelMismatch) as excinfo:
+        replay_mod._check_model(entry, None, "abc123", "code_cache_bug")
+
+    message = str(excinfo.value)
+    assert "gemini/gemini-3.5-flash-lite" in message
+    assert "gemini/gemini-3.5-flash" in message
+    assert "--record" in message, "the message must say how to fix it"
+
+
+def test_the_recorded_model_replays_without_complaint(monkeypatch):
+    monkeypatch.setattr(settings, "default_model", "gemini/gemini-3.5-flash")
+    entry = {"model": "gemini/gemini-3.5-flash-lite"}
+
+    # Explicitly asked for, the way `--model` sets it.
+    replay_mod._check_model(entry, "gemini/gemini-3.5-flash-lite", "k", "t")
+    # And resolved from the default.
+    monkeypatch.setattr(settings, "default_model", "gemini/gemini-3.5-flash-lite")
+    replay_mod._check_model(entry, None, "k", "t")
+
+
+def test_a_cassette_with_no_recorded_model_is_still_served(monkeypatch):
+    """
+    Older cassettes predate the field. Refusing them would discard a recorded
+    suite over missing metadata, which is a worse trade than serving them.
+    """
+    monkeypatch.setattr(settings, "default_model", "gemini/gemini-3.5-flash")
+    replay_mod._check_model({}, None, "k", "t")
+    replay_mod._check_model({"model": ""}, None, "k", "t")
