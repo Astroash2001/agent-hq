@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 30,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 502,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"UK Boiler Upgrade Scheme BUS grant 2026 air source heat pump\"}",
+        "name": "web_search"
+       },
+       "id": "call_5f2957b5d0734e5ea52f60faf143__thought__El4KXAERTTIPgLlSwjVPYWcap5/T5kZavas43nT3YcCsxNe75GyXjz2nd2SfE/QyV1t/BJr7CbxUKlgYkKBaNxXxcqplZcvH7HnF1KUZOMHjI02C3QqYExTtFxXrVPdj"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 30,
+   "prompt_tokens": 502
+  }
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 32,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1247,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"average cost air source heat pump UK 2026 installation efficiency COP SCOP\"}",
+        "name": "web_search"
+       },
+       "id": "call_d3e210e9b2b94a9c85f097ff6c77__thought__El4KXAERTTIP3/L7trbZVQL9DvyoKE4rRSjjfPWEGX652CgxxkMqNSEeVtYLCXdqPAsHmWqUmcdYsk6pF214QT0SKxUlvMEzuF8CQh6T02wDG9dIwnQeIpv+DjpqjH7A"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 32,
+   "prompt_tokens": 1247
+  }
+ }
+}

@@ -486,9 +486,23 @@ lines. Adding or renaming an agent leaves the offline demo stale.
 
 ### Boss Dave never leaves his desk
 
-`hangouts` are all in the bullpen, lounge and kitchen. The idle-wander code picks
-from that list regardless of which room an agent is in, so the orchestrator would
-have to path out of the boss office to reach any of them.
+**Stale, and the premise does not hold.** The observation is right that
+`hangouts` are all outside the boss office and that the idle-wander picks from
+that list regardless of room. The conclusion — that Dave therefore cannot get to
+one — is wrong: the two doorways at `x=27` (`y=9` and `y=17`, both 2 tiles high)
+connect the boss office to the rest of the floor, and a breadth-first search
+over the masonry grid from his seat at `(32, 8)` reaches **all seven** hangouts,
+the library and conference room included.
+
+So he does wander, whenever the office is not `liveDriven` and he is not
+`active`/`thinking` — the same conditions as everyone else.
+
+What is *not* verified here: the search was over walls and doorways only. The
+walkable grid the renderer actually paths against also marks furniture, computed
+from the atlas rectangles, and reproducing that outside the browser needs
+`check_layout.py`'s prop-rect machinery. A prop could in principle bottleneck a
+doorway that the masonry leaves open. If Dave is ever seen stuck, that is where
+to look — not at the hangout list.
 
 ---
 
