@@ -31,10 +31,85 @@ logger = logging.getLogger("AgentHQ.Workspace")
 # not blow past the context window.
 MAX_INJECTED_CHARS = 2400
 
+# How the budget splits between the start and the end of a long artifact. Not
+# 100/0, which is what a plain `body[:limit]` is: a report puts its findings and
+# its recommendation at the *end*, so cutting the tail hands the next agent the
+# introduction and throws away the conclusion it was supposed to build on.
+HEAD_SHARE = 0.6
+
+# Below this there is no room to keep both ends and say so, and a head-only cut
+# is the honest fallback.
+MIN_SPLIT_CHARS = 400
+
 # Artifact names come from the model, so they reach the filesystem untrusted.
 # Anything that could climb out of the mission directory is stripped rather
 # than rejected -- a bad name should not lose the artifact.
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _break_after(text: str, at: int) -> int:
+    """
+    Nearest line break at or before `at`, so a cut lands between lines.
+
+    Falls back to a space, then to the raw index. Cutting mid-word is not a
+    correctness problem, but it makes the elision read as corruption rather than
+    as an omission, and an agent that thinks its input is corrupt behaves worse
+    than one that knows a middle is missing.
+    """
+    window = text[:at]
+    for sep in ("\n\n", "\n", " "):
+        found = window.rfind(sep)
+        if found > at * 0.5:
+            return found
+    return at
+
+
+def _break_before(text: str, at: int) -> int:
+    """Nearest line break at or after `at`, for the start of the kept tail."""
+    tail_zone = text[at:]
+    for sep in ("\n\n", "\n", " "):
+        found = tail_zone.find(sep)
+        if found != -1 and found < len(tail_zone) * 0.5:
+            return at + found + len(sep)
+    return at
+
+
+def condense(body: str, limit: int = MAX_INJECTED_CHARS) -> str:
+    """
+    Fit `body` into `limit` characters, keeping both ends.
+
+    `body[:limit]` was what this used to be, and it loses the tail -- which for
+    a report is the findings, the recommendation and the numbers everything
+    downstream was waiting for. The next agent received an introduction and an
+    abrupt stop, with nothing to tell it the substance had been cut.
+
+    Deliberately not a model call. Summarising every handoff would put a
+    provider round-trip and a bill on an operation that runs once per edge of
+    the DAG, and would introduce a place where the artifact a downstream agent
+    reads is not the artifact its author wrote. This keeps the author's own
+    words at both ends and says exactly how much is missing in between.
+    """
+    body = body or ""
+    if len(body) <= limit:
+        return body
+
+    if limit < MIN_SPLIT_CHARS:
+        return body[:_break_after(body, limit)] + "\n... [truncated]"
+
+    marker_budget = 80
+    keep = limit - marker_budget
+    head_len = int(keep * HEAD_SHARE)
+    tail_len = keep - head_len
+
+    head_end = _break_after(body, head_len)
+    tail_start = _break_before(body, len(body) - tail_len)
+    elided = tail_start - head_end
+    if elided <= 0:
+        return body
+
+    return (f"{body[:head_end].rstrip()}\n\n"
+            f"... [{elided:,} characters elided from the middle] ...\n\n"
+            f"{body[tail_start:].lstrip()}")
 
 
 def _safe_name(name: str) -> str:
@@ -178,9 +253,7 @@ class MissionWorkspace:
             artifact = self.artifacts.get(name)
             if not artifact:
                 continue
-            body = artifact.content
-            if len(body) > MAX_INJECTED_CHARS:
-                body = body[:MAX_INJECTED_CHARS] + "\n... [truncated]"
+            body = condense(artifact.content, MAX_INJECTED_CHARS)
             blocks.append(
                 f"--- {name} (from {artifact.author_name}) ---\n{body}"
             )

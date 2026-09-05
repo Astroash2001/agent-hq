@@ -165,8 +165,23 @@ what it `produces` and `consumes`; upstream artifacts are delivered to the desk
 and pasted into the agent's prompt before it starts. `MAX_INJECTED_CHARS` (2400)
 truncates long ones.
 
-Still open: truncation is a hard character cut, not a summary, so a very long
-upstream artifact loses its tail rather than being condensed.
+**Also done: truncation keeps both ends.** It was `body[:2400]` — which keeps
+the introduction and throws away the conclusion. For the documents this system
+actually produces, the findings, the recommendation and the numbers are at the
+*end*, so the hard cut discarded precisely the part the next step was waiting
+for, and left nothing to say it had: the downstream agent could not tell a
+truncation from an author who gave up.
+
+`workspace.condense` keeps a 60/40 head/tail split, breaks on line boundaries so
+the elision does not read as corruption, and states the gap — `[N characters
+elided from the middle]`. Below 400 characters there is no room to keep both
+ends and explain the gap, so it falls back to the old head cut, still labelled.
+
+Deliberately **not** a model call, which is what "condensed" would have implied.
+Summarising every handoff puts a provider round-trip and a bill on an operation
+that runs once per edge of the DAG, and introduces a place where the artifact a
+downstream agent reads is not the artifact its author wrote. The author's own
+words survive at both ends instead.
 
 ### Spatial runtime edge cases
 
@@ -463,8 +478,8 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**328 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
-across 26 files: the original phase tests plus telemetry, contracts, the critic,
+**339 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+across 27 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool
 grants and the conclusion. CI runs the same suite on
