@@ -230,9 +230,15 @@ def budget_checks(task: Dict[str, Any], manifest: Dict[str, Any],
         # missing pricing row visible instead of flattering.
         unpriced = manifest.get("unpriced_models") or []
         if unpriced:
+            # Skipped, not failed. A budget that could not be read is neither
+            # respected nor breached, and scoring it either way says something
+            # the suite does not know: failing it would make a pricing gap look
+            # like a planning fault, and passing it would let $0.0000 stand in
+            # as a verified figure. `skipped` checks are left out of the
+            # structural denominator and surface in the row instead.
             checks.append({
-                "check": "max_cost_usd", "ok": False,
-                "detail": f"cost unmeasurable: no price for {', '.join(unpriced)}. "
+                "check": "max_cost_usd", "ok": True, "skipped": True,
+                "detail": f"not scored: no price for {', '.join(unpriced)}. "
                           f"Add a row to backend/pricing.py."})
         else:
             checks.append({"check": "max_cost_usd", "ok": cost <= budget["max_cost_usd"],
@@ -242,6 +248,21 @@ def budget_checks(task: Dict[str, Any], manifest: Dict[str, Any],
                        "ok": duration <= budget["max_duration_sec"],
                        "detail": f"{duration:.1f}s of {budget['max_duration_sec']}s"})
     return checks
+
+
+def structural_score(checks: List[Dict[str, Any]]) -> float:
+    """
+    The fraction of checks that passed, over the checks that could run.
+
+    A check marked `skipped` is out of the denominator entirely. Counting it as
+    a pass inflates the score with something never verified; counting it as a
+    fail blames the run for a gap in the harness -- an unpriced model is a
+    missing row in `pricing.py`, not a bad plan.
+    """
+    scored = [c for c in checks if not c.get("skipped")]
+    if not scored:
+        return 0.0
+    return sum(1 for c in scored if c["ok"]) / len(scored)
 
 
 def must_not_checks(task: Dict[str, Any], mission_dir: str) -> List[Dict[str, Any]]:
@@ -385,7 +406,7 @@ async def run_task(task: Dict[str, Any], mode: str, model: Optional[str],
         # Copied out before isolated_state deletes the scratch directory.
         artifacts = sorted(manifest.get("artifacts") or [])
 
-    structural = (sum(1 for c in checks if c["ok"]) / len(checks)) if checks else 0.0
+    structural = structural_score(checks)
     return {
         "task_id": task_id,
         "run": run_index,

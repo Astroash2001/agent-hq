@@ -344,47 +344,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Standalone Simulation Loop
-    let standaloneTaskSeq = 50;
 
+    /**
+     * The offline demo, for when there is no socket to drive the office.
+     *
+     * Every name and line in here used to be hardcoded — Alice searching, Bob
+     * on the database, Eve compiling — so renaming an agent or adding a sixth
+     * left the demo describing a roster that no longer existed, and confidently.
+     * It now reads whoever is actually in the dock: the backend's manifests when
+     * `/api/agents` has answered, and hud.js's DEFAULT_AGENTS before that.
+     *
+     * The verb comes from each agent's own manifest (`plate_verb`), which is the
+     * one line of copy the manifest already carries for exactly this purpose.
+     */
     function simulateStandaloneTask(text) {
-        const taskId = `#${++standaloneTaskSeq}`;
         hud.addTerminalLog(`User dispatched: '${text}'`, 'ANALYSIS');
         canvas.showSpeech('orchestrator', 'Routing subtasks...');
         canvas.updateAgentStatus('orchestrator', 'thinking');
         hud.setAgentState('orchestrator', 'thinking', { progress: 0.15 });
 
-        const steps = [
-            { at: 1000, id: 'researcher',   log: 'Alice: Searching knowledge base…',        level: 'ANALYSIS' },
-            { at: 2200, id: 'coder',        log: 'Charlie: Running AST syntax checks…',     level: 'ANALYSIS' },
-            { at: 3400, id: 'data_analyst', log: "Bob started 'Task #049'",                 level: 'ANALYSIS' },
-            { at: 4600, id: 'creative',     log: 'Eve: Compiling synthesis report.',        level: 'ANALYSIS' }
-        ];
+        // The boss plans rather than executes, so it is not one of the workers.
+        const roster = [...hud.agents.values()].filter(a => a.id !== 'orchestrator');
 
-        steps.forEach((step, i) => {
+        if (!roster.length) {
+            hud.addTerminalLog('No agents in the roster to simulate.', 'ERROR');
+            return;
+        }
+
+        const STEP_MS = 1200;
+        roster.forEach((agent, i) => {
             setTimeout(() => {
-                canvas.dispatchTaskOrb('orchestrator', step.id);
-                canvas.updateAgentStatus(step.id, 'active');
-                hud.setAgentState(step.id, 'active', { progress: (i + 1) / steps.length });
-                hud.addTerminalLog(step.log, step.level);
+                canvas.dispatchTaskOrb('orchestrator', agent.id);
+                canvas.updateAgentStatus(agent.id, 'active');
+                hud.setAgentState(agent.id, 'active', { progress: (i + 1) / roster.length });
+                hud.addTerminalLog(`${agent.name}: ${agent.verb}…`, 'ANALYSIS');
                 hud.updateTokens({
-                    total_tokens: Math.round(((i + 1) / steps.length) * 7854),
+                    total_tokens: Math.round(((i + 1) / roster.length) * 7854),
                     max_tokens: 10000
                 });
-            }, step.at);
+            }, 1000 + i * STEP_MS);
         });
 
         setTimeout(() => {
             canvas.agents.forEach(a => canvas.updateAgentStatus(a.id, 'done'));
             hud.agents.forEach(a => hud.setAgentState(a.id, 'done', { progress: 1 }));
-            hud.addTerminalLog('Task successfully completed!', 'SUCCESS');
+            hud.addTerminalLog('Simulation complete.', 'SUCCESS');
             hud.showExecutiveMemo(
-                `# 🎯 Task Execution Summary\n\n**Goal:** ${text}\n\n` +
-                `- **Alice (Research)**: Technical references & vector matches retrieved.\n` +
-                `- **Charlie (Code)**: AST syntax verified with 0 linting errors.\n` +
-                `- **Bob (Data)**: Database state synchronized.\n` +
-                `- **Eve (Synthesis)**: Report compiled and verified.\n\n` +
-                `*Status: 100% Operational & Verified.*`);
-        }, 6000);
+                `# 🎯 Offline Simulation\n\n**Goal:** ${text}\n\n` +
+                roster.map(a => `- **${a.name}**: ${a.verb}.`).join('\n') +
+                `\n\n_No backend is connected, so nothing above actually ran._ ` +
+                `This is the office animating against its own roster. Start the ` +
+                `server and dispatch again for a real mission.`);
+        }, 1000 + roster.length * STEP_MS + 800);
     }
 
     // The replay driver. Constructed before the socket so a trace loaded

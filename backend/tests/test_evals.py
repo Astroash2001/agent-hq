@@ -340,6 +340,64 @@ def test_budget_checks_use_the_real_cost():
     assert by_name["max_duration_sec"]["ok"] is True
 
 
+def test_a_cost_budget_on_an_unpriced_model_is_not_scored():
+    """
+    `pricing.py` reports 0.0 for a model it has never heard of rather than
+    guessing, so a run on an unpriced model reported "$0.0000 of $0.05, ok" and
+    the suite claimed to have verified a budget it could not read. That is how
+    the whole 3.5 pricing gap stayed invisible: the check that should have
+    caught it was the one flattering it.
+
+    Skipped rather than failed. A budget nobody could read is neither respected
+    nor breached, and failing it would make a gap in the harness look like a
+    fault in the plan.
+    """
+    task = {"budget": {"max_cost_usd": 0.10}}
+    manifest = _manifest([], [], cost=0.0)
+    manifest["unpriced_models"] = ["gemini/gemini-3.5-flash-lite"]
+
+    check = {c["check"]: c for c in runner_mod.budget_checks(task, manifest, 5.0)}
+    cost = check["max_cost_usd"]
+
+    assert cost["skipped"] is True
+    assert "gemini/gemini-3.5-flash-lite" in cost["detail"]
+    assert "pricing.py" in cost["detail"]
+
+
+def test_a_priced_model_is_scored_as_it_always_was():
+    task = {"budget": {"max_cost_usd": 0.10}}
+    manifest = _manifest([], [], cost=0.02)
+    manifest["unpriced_models"] = []
+
+    cost = {c["check"]: c for c in runner_mod.budget_checks(task, manifest, 5.0)}["max_cost_usd"]
+
+    assert cost.get("skipped") is not True
+    assert cost["ok"] is True
+    assert "$0.0200" in cost["detail"]
+
+
+def test_a_skipped_check_leaves_the_structural_denominator():
+    """
+    Counting it as a pass inflates the score with something never verified;
+    counting it as a fail drags every row down for a missing pricing row. Out
+    of the denominator is the only reading that says neither.
+    """
+    assert runner_mod.structural_score([
+        {"check": "a", "ok": True},
+        {"check": "b", "ok": False},
+        {"check": "c", "ok": True, "skipped": True},
+    ]) == 0.5, "the skipped check must not be one of the three"
+
+    # A skipped check must not turn a clean run into a partial one either.
+    assert runner_mod.structural_score([
+        {"check": "a", "ok": True},
+        {"check": "c", "ok": True, "skipped": True},
+    ]) == 1.0
+
+    assert runner_mod.structural_score([]) == 0.0
+    assert runner_mod.structural_score([{"check": "c", "ok": True, "skipped": True}]) == 0.0
+
+
 # ----------------------------------------------------------------- tasks
 
 def test_every_committed_task_file_is_valid():

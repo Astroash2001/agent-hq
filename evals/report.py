@@ -79,6 +79,12 @@ def _fold(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
             "p50_latency": statistics.median(r["duration_sec"] for r in group),
             "errors": sum(1 for r in group if r["error"]),
             "unjudged": group[0].get("quality_skipped", ""),
+            # Checks that could not run. Out of the structural denominator, so
+            # they must be said out loud somewhere or the scorecard reads as a
+            # clean sweep of things it never actually verified.
+            "unscored": sorted({c["detail"] for r in group
+                                for c in (r.get("checks") or [])
+                                if c.get("skipped")}),
         }
     return out
 
@@ -154,6 +160,18 @@ def render(report: Dict[str, Any], previous: Optional[Dict[str, Any]] = None) ->
             "An unjudged row still carries its structural score, which is "
             "deterministic and needs no model. It is not a passing quality "
             "score and must never be read as one.")
+
+    unscored = sorted({d for r in now.values() for d in r.get("unscored", [])})
+    if unscored:
+        lines += ["", "## Checks that could not be scored", ""]
+        for detail in unscored:
+            lines.append(f"- {detail}")
+        lines.append("")
+        lines.append(
+            "These are left out of the structural denominator rather than "
+            "counted either way. Passing a check nobody ran inflates the score "
+            "with something never verified; failing it blames the run for a gap "
+            "in the harness.")
 
     lines.append("")
     return "\n".join(lines)

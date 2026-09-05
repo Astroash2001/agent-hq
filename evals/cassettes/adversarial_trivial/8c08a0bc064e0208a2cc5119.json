@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 19,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 472,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"SSD acronym stands for\"}",
+        "name": "web_search"
+       },
+       "id": "call_f950d57176b04f06ab789f5ff1a1__thought__El4KXAERTTIPqbYM+Y0UT9zL/uGlWB7VSBw+MkHiUDH5tdaM2sGKykeN8qAsouxctgkBY0NeQOQSNYpKsK229vurfvdo0aIfQ05rTOXepENJAC6odorYDelVoeYBaHyx"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 19,
+   "prompt_tokens": 472
+  }
+ }
+}

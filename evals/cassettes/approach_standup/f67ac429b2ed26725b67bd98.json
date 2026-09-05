@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 34,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1212,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"perovskite silicon tandem solar cell efficiency record 2025 2026\"}",
+        "name": "web_search"
+       },
+       "id": "call_1ecf1891e2b94c379a8a6c97a311__thought__El4KXAERTTIPxnifUxlXX+WYv250dOJMqu/NXbcyzDPUfTF17CYxMi+1HQnLy5a9M4hheDpoxMxgz9adlhqNVFL/bymFoZHyaxBjCGjmpV/J17d4vU3qmyLNzcdCgC26"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 34,
+   "prompt_tokens": 1212
+  }
+ }
+}
