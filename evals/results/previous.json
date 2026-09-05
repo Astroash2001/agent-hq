@@ -11,7 +11,7 @@
     "ambiguous"
    ],
    "error": null,
-   "duration_sec": 7.96,
+   "duration_sec": 7.92,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 2,
@@ -49,7 +49,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "8.0s of 120s"
+     "detail": "7.9s of 120s"
     },
     {
      "check": "must_not_stub",
@@ -76,7 +76,7 @@
     "tool_routing"
    ],
    "error": null,
-   "duration_sec": 11.65,
+   "duration_sec": 11.46,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -121,7 +121,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "11.7s of 150s"
+     "detail": "11.5s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -148,7 +148,7 @@
     "trivial"
    ],
    "error": null,
-   "duration_sec": 5.84,
+   "duration_sec": 5.88,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 1,
@@ -185,7 +185,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "5.8s of 90s"
+     "detail": "5.9s of 90s"
     },
     {
      "check": "must_not_stub",
@@ -212,7 +212,7 @@
     "synthesis"
    ],
    "error": null,
-   "duration_sec": 17.22,
+   "duration_sec": 17.2,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -287,7 +287,7 @@
     "smoke"
    ],
    "error": null,
-   "duration_sec": 11.46,
+   "duration_sec": 11.53,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -360,7 +360,7 @@
     "multi_step"
    ],
    "error": null,
-   "duration_sec": 17.24,
+   "duration_sec": 17.31,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -406,7 +406,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "17.2s of 240s"
+     "detail": "17.3s of 240s"
     },
     {
      "check": "must_not_stub",
@@ -506,7 +506,7 @@
     "analysis"
    ],
    "error": null,
-   "duration_sec": 13.11,
+   "duration_sec": 13.13,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -579,7 +579,7 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 12.14,
+   "duration_sec": 12.17,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -624,7 +624,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "12.1s of 180s"
+     "detail": "12.2s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -653,7 +653,7 @@
     "fan_in"
    ],
    "error": null,
-   "duration_sec": 12.22,
+   "duration_sec": 12.14,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -698,7 +698,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "12.2s of 200s"
+     "detail": "12.1s of 200s"
     },
     {
      "check": "must_not_stub",
@@ -726,7 +726,7 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 12.16,
+   "duration_sec": 12.29,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -771,7 +771,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "12.2s of 180s"
+     "detail": "12.3s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -799,7 +799,7 @@
     "time_sensitive"
    ],
    "error": null,
-   "duration_sec": 11.52,
+   "duration_sec": 11.48,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -871,7 +871,7 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 15.99,
+   "duration_sec": 12.29,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -916,7 +916,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "16.0s of 150s"
+     "detail": "12.3s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -943,7 +943,7 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 14.1,
+   "duration_sec": 12.18,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -988,7 +988,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "14.1s of 150s"
+     "detail": "12.2s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -1014,7 +1014,7 @@
    "structural": 1.0,
    "quality": null,
    "cost_usd": 0.0,
-   "p50_latency": 12.15
+   "p50_latency": 12.16
   }
  ]
 }

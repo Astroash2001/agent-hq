@@ -13,6 +13,7 @@ import debate
 import llm
 import pricing
 import runstore
+import synthesis
 import tracing
 from base_agent import BaseAgent
 from config import settings
@@ -377,7 +378,8 @@ class Orchestrator:
             await self.boss_agent.speak("Synthesizing final executive briefing...", task_id=task_id)
 
         duration = time.time() - start_time
-        synthesis_text = self._synthesize_results(user_prompt, results, duration, plan, workspace)
+        synthesis_text = await self._synthesize_results(
+            user_prompt, results, duration, plan, workspace)
 
         main_task.status = "completed"
         main_task.result = synthesis_text
@@ -1523,7 +1525,31 @@ class Orchestrator:
 
     # ---------------------------------------------------------------- synthesis
 
-    def _synthesize_results(
+    async def _draw_conclusion(
+        self,
+        user_prompt: str,
+        plan: Plan,
+        workspace: MissionWorkspace
+    ) -> synthesis.Conclusion:
+        """
+        Ask the model what the mission actually found.
+
+        Reads the artifact bodies, not the steps' closing chat messages: the
+        message is "Task completed after 4 execution steps", the artifact is the
+        work. Failed steps are named so the conclusion can say what is missing
+        rather than concluding confidently around a hole.
+        """
+        artifacts = []
+        for name in workspace.names():
+            art = workspace.get(name)
+            if art is not None:
+                artifacts.append((name, art.content or ""))
+
+        failures = [f"{s.id} ({s.agent_id}): {s.description[:120]}"
+                    for s in plan.steps if s.status == "failed"]
+        return await synthesis.conclude(user_prompt, artifacts, failures)
+
+    async def _synthesize_results(
         self,
         user_prompt: str,
         results: List[Dict[str, Any]],
@@ -1534,6 +1560,8 @@ class Orchestrator:
         """Create a polished executive Markdown summary."""
         planner_label = "LLM planner" if plan.source == "llm" else "heuristic planner"
         rerouted = [r for r in results if r.get("routed_from")]
+        regranted = [s for s in plan.steps if getattr(s, "regranted_from", None)]
+        conclusion = await self._draw_conclusion(user_prompt, plan, workspace)
 
         lines = [
             "# 🎯 AgentHQ Mission Briefing",
@@ -1542,8 +1570,17 @@ class Orchestrator:
             f"**Specialists Coordinated:** `{len(results)}` | "
             f"**Planned by:** `{planner_label}`\n",
             "---",
-            "## 🗺️ Execution Graph\n"
         ]
+
+        # The finding goes first. A reader who opens a report wants the answer
+        # before the audit trail, and the audit trail is the rest of this file.
+        if not conclusion.skipped:
+            lines.append("## 🧠 What the mission found\n")
+            lines.append(conclusion.text)
+            lines.append("")
+            lines.append("---")
+
+        lines.append("## 🗺️ Execution Graph\n")
 
         for step in plan.steps:
             deps = ", ".join(step.dependencies) if step.dependencies else "start"
@@ -1556,6 +1593,13 @@ class Orchestrator:
             lines.append("")
             lines.append("**Memory rerouted this mission:** " + "; ".join(
                 f"`{r['step_id']}` {r['routed_from']} → {r['agent_id']}" for r in rerouted
+            ))
+
+        if regranted:
+            lines.append("")
+            lines.append("**Reassigned for tool access:** " + "; ".join(
+                f"`{s.id}` {s.regranted_from} → {s.agent_id} "
+                f"(needs {', '.join(s.needs_tools)})" for s in regranted
             ))
 
         lines.append("")
@@ -1581,15 +1625,27 @@ class Orchestrator:
 
         lines.append("")
         lines.append("---")
-        lines.append("### ✅ Final Orchestrator Verdict")
+        # Deliberately bookkeeping, and only bookkeeping. This used to close on
+        # "System state is healthy and ready for the next command", which is a
+        # claim about the scheduler dressed as a claim about the work -- it
+        # printed identically for a mission that answered the goal and one where
+        # every specialist filed a stub. The finding is at the top now; what
+        # belongs here is what can be counted.
+        lines.append("### 📊 Run Record")
         completed = sum(1 for s in plan.steps if s.status == "completed")
         failed = sum(1 for s in plan.steps if s.status == "failed")
         if failed:
             lines.append(f"{completed} of {len(plan.steps)} steps completed; **{failed} failed**. "
                          f"Review the failed branches before acting on this briefing.")
         else:
-            lines.append(f"All {completed} steps completed and every artifact filed. "
-                         f"System state is healthy and ready for the next command.")
+            lines.append(f"All {completed} steps completed and every artifact filed.")
+
+        if conclusion.skipped:
+            # Named, not hidden. A briefing with no conclusion and a briefing
+            # whose conclusion was that everything is fine must not look alike.
+            lines.append("")
+            lines.append(f"_No conclusion was drawn: {conclusion.reason_skipped}. "
+                         f"The artifacts above are the mission's output._")
 
         return "\n".join(lines)
 

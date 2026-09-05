@@ -207,6 +207,18 @@ class Settings(BaseSettings):
     # Empty means settings.fallback_model -- the small, cheap one. Criticism
     # that costs more than the work is not worth having.
     critic_model: str = ""
+    # The briefing's closing verdict used to be a fixed sentence -- "System
+    # state is healthy and ready for the next command" -- printed whether the
+    # mission had answered the goal or produced four empty files. This asks a
+    # small model to draw the conclusion from the artifacts instead. One call,
+    # no tools, and skipped entirely without a credential, which leaves the
+    # deterministic step-count line exactly as it was.
+    synthesis_enabled: bool = True
+    # Empty means settings.fallback_model.
+    synthesis_model: str = ""
+    # A conclusion, not a second report. The artifacts are already in the
+    # briefing directly below it, so anything longer is restating them.
+    synthesis_max_tokens: int = 600
     # The eval suite's rubric grader (evals/judge.py). Fixed and separate from
     # the models under test: grading a model with itself measures its
     # self-consistency, not the quality of its output. Empty means

@@ -332,8 +332,37 @@ until a restart.
 
 ### Synthesis is string assembly
 
-`_synthesize_results` concatenates Markdown. The "Final Orchestrator Verdict" is a
-fixed sentence, not a conclusion drawn from the results.
+**Done for the part that mattered.** The assembly is still assembly — the
+execution graph, the handoffs and the artifact list are bookkeeping and should
+be — but the closing "Final Orchestrator Verdict" was a fixed sentence: *"All N
+steps completed and every artifact filed. System state is healthy and ready for
+the next command."* That is a claim about the scheduler dressed as a claim about
+the work, and it printed identically for a mission that answered the goal and
+one where four specialists each filed a stub. It is why `evals/judge.py` grades
+the artifact files and pointedly never the briefing.
+
+`synthesis.py` asks a small model the one question the assembly cannot: given
+the goal and what the specialists actually produced, what is the answer? It
+reads the artifact *bodies*, not the steps' closing chat messages, and it is
+told which steps failed so it can name the hole rather than conclude confidently
+around it. The result leads the briefing, above the execution graph, because a
+reader wants the finding before the audit trail.
+
+Bounded like the critic: one call, no tools, `synthesis_model` defaulting to the
+small one, `synthesis_max_tokens` (600), each artifact trimmed to 3000 chars
+before a 12000-char total so one 40KB report cannot crowd out the four short
+ones that disagree with it. `synthesis_enabled=False` restores the old closing
+line exactly.
+
+Skipped with no credential — there is no offline conclusion, because the
+simulator would be summarising its own invented text. The skip is *stated* in
+the briefing rather than hidden: a mission with no conclusion and a mission
+whose conclusion was that everything is fine must not look alike, which was the
+original bug in a different costume.
+
+Still open: nothing grades the conclusion. The judge still reads artifacts only,
+which is right — but it means the one part of the briefing that now makes a
+claim is the one part the eval suite does not check.
 
 ### CORS is fully open
 
@@ -434,10 +463,11 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**296 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
-across 23 files: the original phase tests plus telemetry, contracts, the critic,
+**328 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+across 26 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
-harness, the `dag.update` payload and the token budget. CI runs the same suite on
+harness, the `dag.update` payload, the token budget, the kill switch, plan tool
+grants and the conclusion. CI runs the same suite on
 3.10 and 3.12, with `ruff check` and the eval smoke suite.
 
 The CI eval step is described in the workflow as replaying cassettes, which it

@@ -79,9 +79,9 @@ origin and the WebSocket at `/ws` connects with no CORS or port juggling.
 `evals/` holds 14 golden tasks across four shapes (research, code, meetings,
 adversarial), a cassette record/replay transport that makes a scored run
 reproducible, and an LLM judge that scores each rubric line against the **artifact
-files** — never the synthesised briefing, which is string assembly around a
-template and would score identically on a mission where every specialist produced
-nothing.
+files** — never the synthesised briefing. The briefing's execution graph and
+handoff list are bookkeeping and would score identically on a mission where every
+specialist produced nothing; grading them measures the assembler, not the work.
 
 ```bash
 python -m evals.runner --suite all --replay      # offline, no key, deterministic
@@ -163,6 +163,9 @@ the renderer does (contract in [[PROTOCOL]]):
 | **Meetings that argue** | Attendees each get one bounded turn to object before the chair sums up — concurrent, capped, and billed to their own token usage. | `debate.py` |
 | **Sandboxed by default** | The terminal tool is an allowlist over `argv[0]`, `shell=False`, jailed cwd, scrubbed environment. Refusals come back as readable payloads the model can route around. | `tools/terminal.py` |
 | **Real telemetry** | Provider token counts, priced per model that actually answered, one span per mission/step/turn/tool/call. | `pricing.py`, `tracing.py` |
+| **Plans checked against tool grants** | A step declares the tools it cannot be done without, and one assigned to a specialist that lacks them is moved. The failure it prevents is not a crash — it is an agent with no `terminal` writing a plausible report with an invented number in it. | `planner.py` |
+| **A conclusion, not a closing sentence** | The briefing used to end on "System state is healthy", which printed identically whether the goal was answered or four stubs were filed. A small model now draws the finding from the artifact bodies — and when there is no key, the briefing says it has no conclusion rather than reaching for the reassuring noise. | `synthesis.py` |
+| **A kill switch that stops the mission** | Cancelling the agents only stopped the current turn: `run()` clears its own cancel flag, so the next step came up clean. The scheduler now refuses to dispatch, and waits on the halt alongside the steps so a stuck agent cannot outlast it. | `orchestrator.py` |
 
 Full rationale for each, including the ones that did not work, is in
 [[DECISIONS]].
@@ -231,7 +234,7 @@ OpenAI-compatible gateway. See [[DECISIONS]].
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 296 tests, all passing
+cd backend && python -m pytest -q      # 328 tests, all passing
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, plus `ruff check` and the eval
@@ -265,6 +268,7 @@ you only need them to regenerate it. See [[STACK]].
 | Episodic memory | `backend/memory.py`, `backend/embeddings.py` | Every finished subtask, recalled semantically; quality-weighted routing |
 | Durability | `backend/runstore.py`, `backend/api_missions.py` | SQLite run store, mission history, resume, trace endpoint |
 | Quality | `backend/contracts.py`, `backend/critic.py` | Is the artifact usable, and is it any good |
+| Conclusion | `backend/synthesis.py` | What the mission found, drawn from the artifacts |
 | Meetings | `backend/debate.py` | One bounded objection per attendee before the chair decides |
 | Interop | `backend/mcp_client.py`, `backend/mcp_server.py` | MCP in both directions |
 | Telemetry | `backend/tracing.py`, `backend/pricing.py` | One span per unit of work; real token counts, priced per model |
@@ -309,8 +313,10 @@ above. The ones worth knowing up front:
   around the conference room.
 - **Hashed embeddings measure surface similarity**, not synonymy — "speed up the
   cache" and "optimise memoisation" still score 0.
-- **The mission's conclusion is assembled, not concluded** — `_synthesize_results`
-  concatenates the step artifacts under a fixed closing sentence.
+- **Nothing grades the conclusion.** The briefing now opens with a finding drawn
+  from the artifacts rather than a fixed sentence, but the eval judge still reads
+  artifact files only — so the one part of the briefing that makes a claim is the
+  part the suite does not check.
 - **15 authored sprites and 8 orphaned PNGs** are dead weight in the atlas.
 
 ---
