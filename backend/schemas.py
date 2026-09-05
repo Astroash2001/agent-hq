@@ -120,6 +120,14 @@ class PlanStep(BaseModel):
     rationale: str = Field("", description="Why this specialist was chosen")
     status: str = "pending"  # pending, running, completed, failed
     routed_from: Optional[str] = Field(None, description="Original agent id if memory rerouted this step")
+    needs_tools: List[str] = Field(
+        default_factory=list,
+        description="Tools this step cannot be done without, as named by the planner"
+    )
+    regranted_from: Optional[str] = Field(
+        None,
+        description="Original agent id if validation moved this step to one holding needs_tools"
+    )
 
     # A step used to mean one agent doing one thing, which is why a meeting
     # could not be expressed at all: there was nowhere to name the other people

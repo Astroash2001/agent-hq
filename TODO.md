@@ -93,9 +93,33 @@ old buckets when there is no key or the reply will not validate. The buckets
 survive as `heuristic_plan`, now with real dependencies instead of a fixed chain.
 Contract in [[PROTOCOL]] (`plan.created`).
 
-Still open: the planner sees the roster and each agent's record, but not the
-tools each agent actually holds, so it can still assign work to a specialist that
-lacks the tool for it. `validate_plan` does not check that.
+**Also done: the plan is now checked against tool grants.** The prompt had
+listed each agent's tools for a while, but nothing checked the model read them,
+and a mismatch does not fail cleanly — the agent runs, finds it has no
+`terminal`, and writes a plausible report with an invented number in it, which
+is the worst available outcome.
+
+A step now declares `needs_tools`, and `validate_plan` takes the roster's actual
+grants. A step naming a tool its agent does not hold is **moved** to one that
+does, preferring an agent already in the plan so a three-step plan does not
+scatter across the roster; `regranted_from` records the move, and it reaches
+`mission.json`. Repaired rather than rejected, because the plan is right about
+the work and wrong only about who does it.
+
+Three cases the tests pin, because each could reasonably have gone the other
+way: a hallucinated tool name is held by nobody and is ignored rather than
+treated as a requirement; a real tool nobody in the office holds is dropped the
+same way, with the *rest* of the requirement still honoured, because half a
+capable agent beats none; and a pair of tools that exist but never together
+leaves the step exactly where it was, because reassigning to someone who will
+also fail hides where the plan went wrong.
+
+`agent_tools` is an optional third argument, so `validate_plan(raw, ids)` still
+behaves as it did. `evals/tasks/adversarial_missing_tool.yaml` is the task that
+targets this; its rubric row stays unjudged until cassettes exist.
+
+Still open: `heuristic_plan` does not populate `needs_tools`, so the fallback
+planner is unaffected — with no key, this pass has nothing to check.
 
 ### Everything runs sequentially
 

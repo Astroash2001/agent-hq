@@ -420,6 +420,12 @@ class Orchestrator:
                     "produces": s.produces,
                     "consumes": s.consumes,
                     "status": s.status,
+                    # What the step said it could not be done without, and who
+                    # it was taken off to satisfy that. Recorded even when null:
+                    # "the planner named no tools" and "the planner was not
+                    # asked" read identically otherwise.
+                    "needs_tools": getattr(s, "needs_tools", []),
+                    "regranted_from": getattr(s, "regranted_from", None),
                 }
                 for s in plan.steps
             ],

@@ -44,6 +44,11 @@ parallel, so do not chain steps that do not actually depend on each other.
 - `description` is an instruction addressed to that specialist, concrete enough \
 to act on without seeing the original goal.
 - `rationale` is one short clause explaining why this specialist.
+- `needs_tools` lists the tools this step cannot be done without, chosen from the \
+tools listed against the agents below. Leave it empty when the step is reasoning \
+or writing and needs no tool. Name a tool only when the work is impossible \
+without it -- measuring a runtime needs `terminal`, reporting a current fact needs \
+`web_search`. The agent you pick must hold every tool you name.
 - Use at most %d steps. Prefer fewer. A trivial goal is one step.
 
 MEETINGS
@@ -96,13 +101,24 @@ class PlanValidationError(ValueError):
     """Raised when a model-authored plan cannot be repaired into a runnable DAG."""
 
 
-def validate_plan(raw: Dict[str, Any], valid_agent_ids: List[str]) -> List[PlanStep]:
+def validate_plan(
+    raw: Dict[str, Any],
+    valid_agent_ids: List[str],
+    agent_tools: Optional[Dict[str, List[str]]] = None,
+) -> List[PlanStep]:
     """
     Turn a raw planner payload into runnable steps, or raise.
 
     Repairs what is safely repairable (renumbers ids, drops dangling
-    dependencies, trims to the step cap) and rejects what is not (no steps, no
+    dependencies, trims to the step cap, moves a step to an agent that holds the
+    tools it declared it needs) and rejects what is not (no steps, no
     recognisable agent).
+
+    `agent_tools` maps agent id to the tools that agent actually holds. Omitted,
+    the tool pass is skipped entirely and this behaves as it did before -- the
+    planner prompt lists tools but nothing downstream had ever checked the model
+    took any notice, which is how a step needing `terminal` could be handed to a
+    specialist holding only `write_file`.
     """
     steps_raw = raw.get("steps")
     if not isinstance(steps_raw, list) or not steps_raw:
@@ -157,7 +173,9 @@ def validate_plan(raw: Dict[str, Any], valid_agent_ids: List[str]) -> List[PlanS
             consumes=[str(c) for c in (item.get("consumes") or []) if c],
             rationale=str(item.get("rationale") or "").strip(),
             kind=kind,
-            attendees=attendees
+            attendees=attendees,
+            needs_tools=[str(t).strip() for t in (item.get("needs_tools") or [])
+                         if str(t).strip()],
         ))
 
     if not steps:
@@ -176,7 +194,46 @@ def validate_plan(raw: Dict[str, Any], valid_agent_ids: List[str]) -> List[PlanS
                 deps.append(mapped)
         step.dependencies = deps
 
-    # Pass 3: a step may only consume artifacts its dependencies actually produce,
+    # Pass 3: a step goes to someone who can actually do it.
+    #
+    # The prompt has always listed each agent's tools; nothing ever checked that
+    # the model read them. A step declaring `needs_tools: ["terminal"]` assigned
+    # to a specialist holding only write_file does not fail cleanly -- the agent
+    # runs, cannot call the tool, and writes a plausible report with an invented
+    # number in it, which is the worst available outcome.
+    #
+    # Repaired rather than rejected: the plan is right about the work and wrong
+    # only about who does it, so moving the step is a smaller change than
+    # throwing away the graph. An unknown tool name is not held by anybody, so
+    # it is ignored rather than sending every step to the same agent.
+    if agent_tools:
+        granted = {aid: set(tools or []) for aid, tools in agent_tools.items()}
+        real_tools = set().union(*granted.values()) if granted else set()
+        for step in steps:
+            needed = {t for t in step.needs_tools if t in real_tools}
+            if not needed or needed <= granted.get(step.agent_id, set()):
+                continue
+            candidates = [aid for aid in valid_agent_ids
+                          if needed <= granted.get(aid, set())]
+            if not candidates:
+                # Nobody in the office holds the full set. Left where it is,
+                # loudly: the plan is not repairable and the run is going to
+                # show it, which is more useful than a silent reassignment to
+                # someone who is also going to fail.
+                logger.warning(
+                    "Step %s needs %s and no agent holds all of them; left with %s",
+                    step.id, sorted(needed), step.agent_id)
+                continue
+            # Prefer whoever the plan already trusts with the same tools, so a
+            # multi-step plan does not scatter across the roster.
+            in_plan = [c for c in candidates if c in {s.agent_id for s in steps}]
+            chosen = (in_plan or candidates)[0]
+            logger.info("Step %s regranted %s -> %s (needs %s)",
+                        step.id, step.agent_id, chosen, sorted(needed))
+            step.regranted_from = step.agent_id
+            step.agent_id = chosen
+
+    # Pass 4: a step may only consume artifacts its dependencies actually produce,
     # and it always receives all of them even if the model forgot to ask.
     for step in steps:
         upstream = [steps[known[d]].produces for d in step.dependencies]
@@ -214,6 +271,7 @@ class Planner:
         misconfigured gateway into a mission that looks like it worked.
         """
         valid_ids = [a["id"] for a in roster]
+        agent_tools = {a["id"]: list(a.get("tools") or []) for a in roster}
 
         if settings.planner_enabled and self._has_key():
             for attempt in (1, 2):
@@ -221,7 +279,7 @@ class Planner:
                     raw = await self._call_planner_llm(goal, roster, attempt)
                     if raw is None:
                         raise PlanValidationError("no JSON object in reply")
-                    steps = validate_plan(raw, valid_ids)
+                    steps = validate_plan(raw, valid_ids, agent_tools)
                     self.last_source = "llm"
                     logger.info(f"Planner produced {len(steps)} LLM steps for: {goal[:60]}")
                     return Plan(goal=goal, steps=steps, source="llm")
