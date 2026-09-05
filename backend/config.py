@@ -324,8 +324,21 @@ class Settings(BaseSettings):
     # 0 or negative disables rate limiting.
     ws_submit_rate_limit: float = 1.0
 
+    # Both files are absolute and anchored to this module, because a relative
+    # ".env" is resolved against the process's working directory -- and only
+    # `python main.py`, run from backend/, happens to have the right one. Run
+    # the documented way from the repo root, `python -m evals.runner` loaded no
+    # credential at all: every task fell to the simulator, the judge reported
+    # "no model configured", and no cassette could ever be recorded. The same
+    # was true of `python -m mcp_server` from anywhere but backend/.
+    #
+    # backend/.env is listed last because the later file wins, which keeps the
+    # behaviour of a run started from backend/ exactly as it was.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            os.path.join(os.path.dirname(__file__), "..", ".env"),
+            os.path.join(os.path.dirname(__file__), ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore"
     )

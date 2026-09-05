@@ -122,27 +122,48 @@ def isolated_state(model: Optional[str]):
         shutil.rmtree(scratch, ignore_errors=True)
 
 
-@contextlib.contextmanager
-def replay_credentials(active: bool):
-    """
-    A dummy key while replaying.
+_CREDENTIAL_FIELDS = ("gemini_api_key", "openai_api_key", "anthropic_api_key",
+                      "groq_api_key", "llm_api_key")
 
-    `llm_configured()` gates the whole LLM path: with no credential the agents
-    run the built-in simulator and the planner falls back to keyword buckets, so
-    a replay run would exercise a different code path from the one recorded and
-    the cassettes would never be touched. The key is never used -- the transport
-    is patched above it -- but it has to be present for the harness to take the
-    branch under test.
+
+@contextlib.contextmanager
+def credentials_for(mode: str):
     """
-    if not active:
+    The credentials each mode is allowed to see.
+
+    **replay** gets a dummy key. `llm_configured()` gates the whole LLM path:
+    with no credential the agents run the built-in simulator and the planner
+    falls back to keyword buckets, so a replay run would exercise a different
+    code path from the one recorded and the cassettes would never be touched.
+    The key is never used -- the transport is patched above it -- but it has to
+    be present for the harness to take the branch under test.
+
+    **simulate** -- a replay with no cassette to replay -- gets *none*, and this
+    is enforced here rather than assumed. It used to be assumed: the harness is
+    documented as running offline with no key, and it did, only because
+    `env_file=".env"` was relative and `python -m evals.runner` from the repo
+    root never found `backend/.env`. Fixing that path turned the documented
+    offline command into one that quietly called a provider for every task
+    without a cassette. A promise that depends on the working directory is not
+    a promise.
+
+    **record** and **live** are the two modes that are meant to reach a
+    provider, and get the real thing.
+    """
+    if mode not in ("replay", "simulate"):
         yield
         return
-    saved = settings.gemini_api_key
-    settings.gemini_api_key = "replay-not-a-real-key"
+
+    saved = {field: getattr(settings, field) for field in _CREDENTIAL_FIELDS}
+    for field in _CREDENTIAL_FIELDS:
+        setattr(settings, field, "")
+    if mode == "replay":
+        settings.gemini_api_key = "replay-not-a-real-key"
     try:
         yield
     finally:
-        settings.gemini_api_key = saved
+        for field, value in saved.items():
+            setattr(settings, field, value)
 
 
 # ------------------------------------------------------------- structure
@@ -306,10 +327,18 @@ async def run_task(task: Dict[str, Any], mode: str, model: Optional[str],
     result: Dict[str, Any] = {}
 
     with isolated_state(model):
-        with replay_credentials(effective in ("replay", "record")):
+        # Keyed off the EFFECTIVE mode. Substituting the dummy key in `record`
+        # too -- which is what this did -- meant every `--record` run
+        # authenticated as "replay-not-a-real-key" and died on a 400, which is
+        # why no cassette was ever written and the quality column stayed empty.
+        with credentials_for(effective):
             transport = (replay_mod.installed(cassettes, effective)
                          if effective in ("replay", "record")
                          else contextlib.nullcontext())
+            judgement = judge_mod.Judgement(
+                skipped=True,
+                reason_skipped=("simulate mode: no cassettes recorded for this task, "
+                                "so no model produced or judged the output"))
             with transport:
                 try:
                     result = await orchestrator.handle_user_input(task["goal"])
@@ -318,18 +347,23 @@ async def run_task(task: Dict[str, Any], mode: str, model: Optional[str],
                     # point is the row that records which task failed and why.
                     error = f"{type(exc).__name__}: {exc}"
 
-        duration = time.time() - started
-        mission_dir = result.get("mission_dir") or ""
-        manifest = _read_manifest(mission_dir)
+                duration = time.time() - started
+                mission_dir = result.get("mission_dir") or ""
 
-        judgement = judge_mod.Judgement(
-            skipped=True,
-            reason_skipped=("simulate mode: no cassettes recorded for this task, "
-                            "so no model produced or judged the output"))
-        if not error and effective in ("replay", "record", "live"):
-            judgement = await judge_mod.judge(
-                task["goal"], (task.get("expect") or {}).get("rubric") or [],
-                mission_dir)
+                # The judgement is taken INSIDE the transport, which is what
+                # `judge.py`'s docstring always claimed and what the code did
+                # not do: judging outside it meant a replayed run re-graded
+                # live, so a scored run cost money every time and could not be
+                # scored at all in CI, where there is no key. Its exchange is a
+                # cassette like any other, and the artifacts it grades are
+                # themselves reproduced from cassettes, so the prompt it sees
+                # replays identically.
+                if not error and effective in ("replay", "record", "live"):
+                    judgement = await judge_mod.judge(
+                        task["goal"], (task.get("expect") or {}).get("rubric") or [],
+                        mission_dir)
+
+        manifest = _read_manifest(mission_dir)
 
         checks = (structural_checks(task, manifest)
                   + budget_checks(task, manifest, duration)

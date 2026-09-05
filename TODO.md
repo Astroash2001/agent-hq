@@ -375,6 +375,43 @@ with `ruff check` and the eval smoke suite against its cassettes.
 
 ---
 
+### The eval harness could never record a cassette
+
+**Done -- four separate faults, each fatal on its own.** The quality column was
+empty because nothing had ever recorded; nothing had ever recorded because:
+
+1. `run_task` installed the replay dummy key in `record` mode as well, so every
+   recording authenticated as `replay-not-a-real-key` and died on a 400.
+2. `Settings.model_config` used `env_file=".env"`, resolved against the process
+   working directory. `python -m evals.runner` is documented to run from the
+   repo root, where there is no `.env` -- so the harness saw no credential at
+   all, every task fell to the simulator and the judge reported "no model
+   configured". Both env files are now absolute and anchored to `config.py`,
+   `backend/.env` last so a run started from `backend/` is unchanged. The same
+   bug silently affected `python -m mcp_server` from anywhere but `backend/`.
+3. The judgement was taken *outside* the cassette transport, though
+   `judge.py`'s own docstring says it goes through it. A replayed run therefore
+   re-graded live -- money on every replay, and no grade at all in CI.
+4. `memory.render_hints` writes ", took 41.2s" into the hints block, and that
+   number is wall clock, so a step recorded at 41.2s and replayed at 0.9s
+   missed its own cassette. Normalised out of the cassette key, exactly as the
+   date already was; `test_evals.py` pins it.
+
+Fixing (2) had a consequence worth naming: with credentials now visible from
+the repo root, `--replay` began making real calls for tasks that have no
+cassette. The offline promise had been resting on the working directory rather
+than on the code, so `credentials_for` now clears credentials outright in
+simulate mode. Verified: `--suite all --replay` returns all 14 verdicts
+unchanged, offline, in three minutes.
+
+Still open: **the cassettes themselves.** Recording is now possible and was
+proven on `code_cache_bug` (structural 100%, quality 100%, $0.0258, 14
+cassettes), but the account's Gemini quota ran out partway through --
+`gemini-2.5-flash` now silently answers via the `3.5-flash-lite` fallback, and
+a later recording of the same task produced a run where both steps failed. The
+suite is one `--record` sweep away from a filled quality column once quota
+allows; nothing in the code blocks it now.
+
 ### The container ran uvicorn's reloader
 
 **Done.** `backend/main.py` passed `reload=True` unconditionally, so the image

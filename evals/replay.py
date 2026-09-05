@@ -35,6 +35,16 @@ CASSETTE_ROOT = os.path.join(os.path.dirname(__file__), "cassettes")
 # harness, because the hash is this layer's concern and the harness is not.
 _DATE_LINE = re.compile(r"Today's date is [^.\n]*\.")
 
+# `memory.render_hints` writes ", took 41.2s" into every recalled episode it
+# pastes into an agent's prompt. That number is wall clock, so a step that took
+# 41.2s while being recorded and 0.9s while being replayed asks the provider a
+# different question and misses its own cassette -- which is what stopped a
+# freshly recorded task from replaying at all. Same reasoning as the date:
+# neutralise it in the key rather than take the timing out of the prompt, since
+# the hint is genuinely useful to the agent and the hash is this layer's
+# concern.
+_RECALL_DURATION = re.compile(r", took \d+(?:\.\d+)?s")
+
 
 class CassetteMiss(RuntimeError):
     """Replay wanted an exchange that was never recorded."""
@@ -49,7 +59,8 @@ def _canonical(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         item = dict(message)
         content = item.get("content")
         if isinstance(content, str):
-            item["content"] = _DATE_LINE.sub("Today's date is <DATE>.", content)
+            content = _DATE_LINE.sub("Today's date is <DATE>.", content)
+            item["content"] = _RECALL_DURATION.sub(", took <SECONDS>", content)
         out.append(item)
     return out
 

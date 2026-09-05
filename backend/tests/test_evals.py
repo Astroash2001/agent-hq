@@ -48,6 +48,22 @@ def test_the_key_ignores_todays_date():
     assert replay_mod.cassette_key("m", monday) == replay_mod.cassette_key("m", friday)
 
 
+def test_the_key_ignores_how_long_a_recalled_episode_took():
+    """
+    `memory.render_hints` writes ", took 41.2s" into the hints block it pastes
+    into an agent's prompt, and that number is wall clock. A step recorded at
+    41.2s and replayed at 0.9s therefore asked a different question and missed
+    its own cassette -- which is why a freshly recorded task could not replay
+    at all. Found by recording one for the first time.
+    """
+    hint = ("Relevant things you have done before in this office:\n"
+            "- \"profile the cache\" -- worked, took %ss. Notes: used cProfile\n"
+            "Reuse what worked. Do not repeat what did not.")
+    slow = [{"role": "system", "content": hint % "41.2"}]
+    fast = [{"role": "system", "content": hint % "0.9"}]
+    assert replay_mod.cassette_key("m", slow) == replay_mod.cassette_key("m", fast)
+
+
 def test_the_key_still_changes_when_the_request_does():
     base = [{"role": "user", "content": "hi"}]
     key = replay_mod.cassette_key("m", base)
