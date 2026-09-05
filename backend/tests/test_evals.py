@@ -703,3 +703,74 @@ async def test_an_unrecorded_search_is_fatal_in_replay(cassettes):
 
     assert "web_search" in str(exc.value)
     assert "--record" in str(exc.value)
+
+
+def test_installed_patches_and_restores_both_symbols(cassettes):
+    """
+    The integration point, and the one most able to be silently wrong: the unit
+    tests above drive `make_tool_transport` directly, which proves nothing about
+    whether anything ever calls it. `base_agent` reaches
+    `tool_registry.execute(tool_name=..., arguments=..., ...)` by attribute on
+    the singleton, so the patch has to land there and be given back.
+    """
+    import llm
+    from tool_registry import tool_registry
+
+    before_llm = llm.acompletion
+    before_tool = tool_registry.execute
+
+    with replay_mod.installed(cassettes, "replay"):
+        assert llm.acompletion is not before_llm, "llm.acompletion was not patched"
+        assert tool_registry.execute is not before_tool, \
+            "tool_registry.execute was not patched"
+
+    assert llm.acompletion is before_llm
+    assert tool_registry.execute is before_tool
+
+
+def test_installed_restores_even_when_the_task_raises(cassettes):
+    """One failing eval must not leave the transport patched for every task
+    after it -- which would silently serve cassettes to the rest of the suite."""
+    import llm
+    from tool_registry import tool_registry
+
+    before_llm, before_tool = llm.acompletion, tool_registry.execute
+
+    with pytest.raises(RuntimeError):
+        with replay_mod.installed(cassettes, "replay"):
+            raise RuntimeError("task exploded")
+
+    assert llm.acompletion is before_llm
+    assert tool_registry.execute is before_tool
+
+
+@pytest.mark.asyncio
+async def test_the_patched_execute_accepts_the_call_base_agent_makes(cassettes):
+    """
+    `base_agent` passes every argument by keyword. A wrapper written
+    positionally would still import, still patch, and fail only at the moment an
+    agent used a tool -- inside a recording run that had already been paid for.
+    """
+    from tool_registry import tool_registry
+
+    seen = {}
+
+    async def _real(tool_name, arguments, agent_id=None, task_id=None):
+        seen.update(tool=tool_name, args=arguments, agent=agent_id, task=task_id)
+        return {"success": True}
+
+    original = tool_registry.execute
+    tool_registry.execute = _real
+    try:
+        with replay_mod.installed(cassettes, "record"):
+            await tool_registry.execute(
+                tool_name="write_file",
+                arguments={"name": "a.md", "content": "x"},
+                agent_id="coder",
+                task_id="t1",
+            )
+    finally:
+        tool_registry.execute = original
+
+    assert seen == {"tool": "write_file", "args": {"name": "a.md", "content": "x"},
+                    "agent": "coder", "task": "t1"}
