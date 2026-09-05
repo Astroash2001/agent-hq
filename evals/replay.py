@@ -245,8 +245,13 @@ def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
 
         cassettes.misses.append(key)
         if mode != "record":
+            # Relative, because this message is quoted verbatim into the
+            # committed scorecard when a judge call misses -- and an absolute
+            # path bakes one machine's home directory into the repo.
+            where = os.path.relpath(cassettes.dir, os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__))))
             raise CassetteMiss(
-                f"No cassette for key {key} in {cassettes.dir}. "
+                f"No cassette for key {key} in {where}. "
                 f"Re-record this task with:  python -m evals.runner "
                 f"--suite {cassettes.task_id} --record"
             )

@@ -627,13 +627,39 @@ than on the code, so `credentials_for` now clears credentials outright in
 simulate mode. Verified: `--suite all --replay` returns all 14 verdicts
 unchanged, offline, in three minutes.
 
-Still open: **the cassettes themselves.** Recording is now possible and was
-proven on `code_cache_bug` (structural 100%, quality 100%, $0.0258, 14
-cassettes), but the account's Gemini quota ran out partway through --
-`gemini-2.5-flash` now silently answers via the `3.5-flash-lite` fallback, and
-a later recording of the same task produced a run where both steps failed. The
-suite is one `--record` sweep away from a filled quality column once quota
-allows; nothing in the code blocks it now.
+**The cassettes now exist.** 12 of the 14 tasks are recorded against
+`gemini/gemini-3.5-flash-lite` — 180 exchanges, 818K, committed. `--suite all
+--replay` runs them offline and two consecutive replays agreed on all 14
+verdicts (`--compare`: *14 identical, 0 drifted*). The quality column is filled.
+
+`gemini-3.5-flash` is still rate-limited to nothing — every request to it
+exhausts three attempts and falls back — so the sweep was recorded against the
+lite model deliberately rather than by accident, and the scorecard names it.
+The lite model's own quota then ran out on task 13, which is why
+`solar_efficiency` and `solid_state_batteries` have no cassettes and fall to the
+simulator. They say so; they do not borrow a score.
+
+**What recording immediately measured, all of it left failing:**
+
+- **Three tasks fail `min_steps`** — `battery_comparison`,
+  `grid_storage_tradeoffs`, `code_cache_bug`. The real planner does a comparison
+  in two steps where the suite wants three. On the simulator all three were
+  100%, which is exactly the blindness recording was supposed to remove. Not
+  relaxed: the suite and the model disagree about how much fan-out a comparison
+  needs, and that is worth looking at rather than editing away. Relaxing the
+  expectation to match the model is the over-fitting this suite already warns
+  about, one level up.
+- **`code_cache_bug` scores 67% on quality** — the judge found no execution
+  evidence in the artifacts. The code was written and reasoned about, not run.
+- **`battery_team_review` completed 1 of 4 steps** during recording, so its
+  cassette set is incomplete and the judge call misses on replay. The harness
+  reports the miss with the command to re-record, which is the behaviour that
+  entry was designed for.
+
+Still open: re-record `battery_team_review` and the two quota-blocked tasks when
+quota allows; and the whole sweep against `gemini-3.5-flash` rather than the
+lite model, once *that* quota returns, since the lite model is the fallback and
+not what the office is configured to run on.
 
 ### The container ran uvicorn's reloader
 

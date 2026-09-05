@@ -87,29 +87,49 @@ specialist produced nothing; grading them measures the assembler, not the work.
 python -m evals.runner --suite all --replay      # offline, no key, deterministic
 ```
 
-| task | mode | structural | quality | cost | p50 latency | pass@k |
-|---|---|---|---|---|---|---|
-| `adversarial_ambiguous` | simulate | 100% | — | $0.0000 | 7.9s | 1/1 |
-| `adversarial_missing_tool` | simulate | 100% | — | $0.0000 | 11.5s | 1/1 |
-| `adversarial_trivial` | simulate | 100% | — | $0.0000 | 5.9s | 1/1 |
-| `approach_standup` | simulate | 100% | — | $0.0000 | 17.2s | 1/1 |
-| `battery_comparison` | simulate | 100% | — | $0.0000 | 11.8s | 1/1 |
-| `battery_team_review` | simulate | 100% | — | $0.0000 | 17.2s | 1/1 |
-| `code_cache_bug` | simulate | 100% | — | $0.0000 | 11.6s | 1/1 |
-| `code_review_fix` | simulate | 100% | — | $0.0000 | 13.1s | 1/1 |
-| `ev_charging_standards` | simulate | 100% | — | $0.0000 | 12.3s | 1/1 |
-| `grid_storage_tradeoffs` | simulate | 100% | — | $0.0000 | 12.3s | 1/1 |
-| `heat_pump_handoff` | simulate | 100% | — | $0.0000 | 12.2s | 1/1 |
-| `india_news_brief` | simulate | 100% | — | $0.0000 | 11.5s | 1/1 |
-| `solar_efficiency` | simulate | 100% | — | $0.0000 | 12.2s | 1/1 |
-| `solid_state_batteries` | simulate | 100% | — | $0.0000 | 12.1s | 1/1 |
-| **aggregate** | **simulate** | **100%** | **—** | **$0.0000** | **12.1s** | **14/14** |
+| task | mode | structural | quality | p50 latency | pass@k |
+|---|---|---|---|---|---|
+| `adversarial_ambiguous` | replay | 100% | 100% | 7.5s | 1/1 |
+| `adversarial_missing_tool` | replay | 100% | 100% | 19.5s | 1/1 |
+| `adversarial_trivial` | replay | 100% | 100% | 5.7s | 1/1 |
+| `approach_standup` | replay | 100% | 100% | 18.4s | 1/1 |
+| `battery_comparison` | replay | 86% | 100% | 11.7s | 0/1 |
+| `battery_team_review` | replay | 86% | — | 13.1s | 0/1 |
+| `code_cache_bug` | replay | 86% | 67% | 10.8s | 0/1 |
+| `code_review_fix` | replay | 100% | 100% | 11.2s | 1/1 |
+| `ev_charging_standards` | replay | 100% | 100% | 10.8s | 1/1 |
+| `grid_storage_tradeoffs` | replay | 86% | 100% | 12.7s | 0/1 |
+| `heat_pump_handoff` | replay | 100% | 100% | 11.7s | 1/1 |
+| `india_news_brief` | replay | 100% | 100% | 8.0s | 1/1 |
+| `solar_efficiency` | simulate | 100% | — | 12.3s | 1/1 |
+| `solid_state_batteries` | simulate | 100% | — | 12.2s | 1/1 |
+| **12 on gemini-3.5-flash-lite** | **replay** | **95%** | **97%** | **11.4s** | **8/12** |
 
 Read those numbers as narrowly as they are meant. **structural** is the `expect`
-block — step count, agents involved, artifacts produced, budgets respected — and
-is deterministic with no model involved. **quality** is empty because no cassettes
-have been recorded yet: that column needs a real key and real spend, and an empty
-cell is the honest way to say so rather than a number that came from nowhere.
+block — step count, agents involved, artifacts produced — and is deterministic with
+no model involved. **quality** is `evals/judge.py` scoring each rubric line against
+the artifact files. Twelve tasks replay from committed cassettes recorded against
+`gemini-3.5-flash-lite`; two are unrecorded because the account's quota ran out
+mid-sweep, and they fall to the simulator and say so rather than borrowing a score.
+Two replay runs were compared and agreed on all 14 verdicts.
+
+**Recording changed the picture, which is the entire reason for recording.** On
+the simulator every row was 100%. Against a real model, four are not:
+
+- **Three tasks fail `min_steps`.** The model plans a comparison in two steps
+  where the suite expects three. Left failing rather than relaxed — the
+  expectation and the model disagree about how much fan-out a comparison needs,
+  and that disagreement is worth looking at rather than editing away.
+- **`code_cache_bug` scores 67%.** The judge found no execution evidence in the
+  artifacts: the code was written and reasoned about, not run.
+- **`battery_team_review` completed 1 of 4 steps** during recording, so its
+  cassettes are incomplete and the judge call misses. The harness says exactly
+  that, with the command to re-record it.
+
+The cost column is gone from this table because it is not measurable: neither
+`gemini-3.5-flash` nor `-flash-lite` has a row in `pricing.py`, so every figure
+reads $0.0000. The suite now marks that budget check unscored instead of passing
+it, and the server warns at startup.
 
 Those rows were not always green, and the way they went green is the point of
 having them. Five failed on the first scorecard: the fallback planner answered
@@ -312,8 +332,12 @@ above. The ones worth knowing up front:
 
 - **No hero GIF yet.** The office is best understood moving, and this README has
   no recording of it.
-- **`quality` in the scorecard is empty** until cassettes are recorded against a
-  real key.
+- **Two of the 14 eval tasks have no cassette** — the account's Gemini quota ran
+  out mid-sweep. They fall to the simulator and are marked unjudged.
+- **Cost is unmeasurable on the default models.** Neither `gemini-3.5-flash` nor
+  `-flash-lite` has a row in `pricing.py`, which refuses to guess, so every cost
+  figure reads $0.0000. Startup warns and the eval suite marks the budget check
+  unscored, but the number is still missing until someone adds the verified rate.
 - **Walk times ignore walls**, so a backend route and a drawn route can disagree
   around the conference room.
 - **Hashed embeddings measure surface similarity**, not synonymy — "speed up the
