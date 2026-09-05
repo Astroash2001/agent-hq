@@ -134,7 +134,9 @@ also fail hides where the plan went wrong.
 
 `agent_tools` is an optional third argument, so `validate_plan(raw, ids)` still
 behaves as it did. `evals/tasks/adversarial_missing_tool.yaml` is the task that
-targets this; its rubric row stays unjudged until cassettes exist.
+targets this, and it is now recorded and judged: **structural 100%, quality
+100%** — including the rubric line "the step that needed execution was given to
+an agent holding the terminal tool", which was the whole point of the task.
 
 Still open: `heuristic_plan` does not populate `needs_tools`, so the fallback
 planner is unaffected — with no key, this pass has nothing to check.

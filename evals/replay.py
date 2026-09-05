@@ -322,26 +322,102 @@ def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
     return _transport
 
 
+# ------------------------------------------------------- tools that reach out
+#
+# Recording the model exchanges is not enough to make a run reproducible, and
+# assuming it was is what this set exists to fix. An agent's first turn calls
+# `web_search`; the results land verbatim in the SECOND turn's prompt, so when
+# the web moves, that prompt changes, its key changes, and a suite that replayed
+# cleanly an hour ago misses. Diagnosed on `adversarial_trivial`: turn one calls
+# web_search, turn two missed with a stable new key -- stable because the search
+# had settled on new results, not because anything in the repo had changed.
+#
+# Only tools whose answer comes from OUTSIDE the mission are served from disk.
+# `write_file` must genuinely run on replay: its side effect is the artifact the
+# structural checks look for, so serving a recorded "ok" would leave the
+# workspace empty and score the mission as having produced nothing. The rule is
+# therefore "record what the office cannot control", not "record every tool".
+EXTERNAL_TOOLS = ("web_search",)
+
+
+def is_external(tool_name: str) -> bool:
+    """Whether a tool's result comes from outside the office, and so must be
+    recorded to make a replay reproducible. MCP tools count: they are somebody
+    else's server and this office cannot promise anything about their answers."""
+    return tool_name in EXTERNAL_TOOLS or tool_name.startswith("mcp__")
+
+
+def tool_key(tool_name: str, arguments: Dict[str, Any]) -> str:
+    """A stable id for one tool call. Same canonicalisation as `cassette_key`."""
+    blob = json.dumps({"tool": tool_name, "arguments": arguments or {}},
+                      sort_keys=True, separators=(",", ":"), default=str)
+    return "tool_" + hashlib.sha256(blob.encode("utf-8")).hexdigest()[:20]
+
+
+def make_tool_transport(cassettes: "Cassettes", mode: str, real_execute):
+    """
+    Wrap `tool_registry.execute` so external tools replay from disk.
+
+    Same contract as `make_transport`: record calls through and writes, replay
+    serves and treats a miss as fatal. Anything `is_external` says no to is
+    passed straight through and really runs.
+    """
+    async def _execute(tool_name, arguments, agent_id=None, task_id=None):
+        if not is_external(tool_name):
+            return await real_execute(tool_name, arguments,
+                                      agent_id=agent_id, task_id=task_id)
+
+        key = tool_key(tool_name, arguments)
+        entry = cassettes.load(key)
+        if entry is not None:
+            cassettes.hits += 1
+            return entry["result"]
+
+        cassettes.misses.append(key)
+        if mode != "record":
+            where = os.path.relpath(cassettes.dir, os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__))))
+            raise CassetteMiss(
+                f"No cassette for {tool_name} call {key} in {where}. "
+                f"Re-record this task with:  python -m evals.runner "
+                f"--suite {cassettes.task_id} --record")
+
+        result = await real_execute(tool_name, arguments,
+                                    agent_id=agent_id, task_id=task_id)
+        cassettes.save(key, {"tool": tool_name, "result": result})
+        return result
+
+    return _execute
+
+
 class installed:
     """
-    Context manager that swaps `llm.acompletion` for the duration of one task.
+    Context manager that swaps `llm.acompletion` and `tool_registry.execute` for
+    the duration of one task.
 
-    Restores the original on the way out, including when the task raises, so one
-    failing eval cannot leave the transport patched for every task after it.
+    Restores the originals on the way out, including when the task raises, so
+    one failing eval cannot leave the transport patched for every task after it.
     """
 
     def __init__(self, cassettes: Cassettes, mode: str):
         self.cassettes = cassettes
         self.mode = mode
         self._original = None
+        self._original_tool = None
 
     def __enter__(self):
         import llm
+        from tool_registry import tool_registry
         self._original = llm.acompletion
         llm.acompletion = make_transport(self.cassettes, self.mode, self._original)
+        self._original_tool = tool_registry.execute
+        tool_registry.execute = make_tool_transport(
+            self.cassettes, self.mode, self._original_tool)
         return self.cassettes
 
     def __exit__(self, *exc):
         import llm
+        from tool_registry import tool_registry
         llm.acompletion = self._original
+        tool_registry.execute = self._original_tool
         return False

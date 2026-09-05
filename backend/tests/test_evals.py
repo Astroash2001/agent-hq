@@ -622,3 +622,84 @@ def test_a_cassette_with_no_recorded_model_is_still_served(monkeypatch):
     monkeypatch.setattr(settings, "default_model", "gemini/gemini-3.5-flash")
     replay_mod._check_model({}, None, "k", "t")
     replay_mod._check_model({"model": ""}, None, "k", "t")
+
+
+# --------------------------------------------- tool results have to be recorded too
+
+def test_only_tools_that_reach_outside_the_office_are_replayed():
+    """
+    `write_file` must genuinely run on replay: its side effect is the artifact
+    the structural checks look for, so serving a recorded "ok" would leave the
+    workspace empty and score the mission as having produced nothing. The rule
+    is "record what the office cannot control", not "record every tool".
+    """
+    assert replay_mod.is_external("web_search") is True
+    assert replay_mod.is_external("mcp__fs__read_file") is True
+
+    for local in ("write_file", "read_file", "list_files", "terminal",
+                  "code_analysis"):
+        assert replay_mod.is_external(local) is False, local
+
+
+def test_a_tool_key_is_stable_and_argument_sensitive():
+    a = replay_mod.tool_key("web_search", {"query": "ssd", "depth": 1})
+    b = replay_mod.tool_key("web_search", {"depth": 1, "query": "ssd"})
+    assert a == b, "dict ordering must not change the key"
+    assert replay_mod.tool_key("web_search", {"query": "hdd"}) != a
+    assert replay_mod.tool_key("other", {"query": "ssd", "depth": 1}) != a
+
+
+@pytest.mark.asyncio
+async def test_a_recorded_search_replays_and_never_reaches_the_network(cassettes):
+    """
+    The bug this closes: an agent's first turn calls web_search and the results
+    land verbatim in the SECOND turn's prompt. When the web moves that prompt
+    changes, its key changes, and a suite that replayed cleanly an hour earlier
+    misses -- with nothing in the repo having changed.
+    """
+    live = []
+
+    async def _real(tool_name, arguments, agent_id=None, task_id=None):
+        live.append(tool_name)
+        return {"success": True, "result": "fresh results"}
+
+    record = replay_mod.make_tool_transport(cassettes, "record", _real)
+    got = await record("web_search", {"query": "ssd"})
+    assert got["result"] == "fresh results"
+    assert live == ["web_search"]
+
+    live.clear()
+    replay = replay_mod.make_tool_transport(cassettes, "replay", _real)
+    again = await replay("web_search", {"query": "ssd"})
+
+    assert again["result"] == "fresh results"
+    assert live == [], "replay reached the network"
+
+
+@pytest.mark.asyncio
+async def test_a_local_tool_always_really_runs(cassettes):
+    """Even in replay: the artifact it writes is what gets scored."""
+    ran = []
+
+    async def _real(tool_name, arguments, agent_id=None, task_id=None):
+        ran.append(tool_name)
+        return {"success": True}
+
+    replay = replay_mod.make_tool_transport(cassettes, "replay", _real)
+    await replay("write_file", {"name": "a.md", "content": "x"})
+    await replay("write_file", {"name": "a.md", "content": "x"})
+
+    assert ran == ["write_file", "write_file"], "a local tool must not be cached"
+
+
+@pytest.mark.asyncio
+async def test_an_unrecorded_search_is_fatal_in_replay(cassettes):
+    async def _real(*a, **k):
+        raise AssertionError("replay must not call through")
+
+    replay = replay_mod.make_tool_transport(cassettes, "replay", _real)
+    with pytest.raises(replay_mod.CassetteMiss) as exc:
+        await replay("web_search", {"query": "never recorded"})
+
+    assert "web_search" in str(exc.value)
+    assert "--record" in str(exc.value)
