@@ -48,12 +48,39 @@ top of the loop rather than keeping a second copy of that bookkeeping
 (`base_agent.py:63`, `:181`). A HALT pressed mid-call no longer waits out the
 timeout.
 
-Still open, and worse than it looks: cancelling the calls does not cancel the
-*mission*. `cancel_all` flags the roster, but `_execute_plan` keeps scheduling,
-and `run()` clears `_is_cancelled` on entry (`base_agent.py:102`) — so the step
-in flight halts, and the very next step the DAG offers resets the flag and runs
-normally. A HALT stops one turn, not the run. Stopping the mission means
-cancelling the scheduler's tasks, not just the agents'.
+**The mission now stops too.** Flagging the roster was only ever half of it:
+`_execute_plan` kept scheduling, and `run()` clears `_is_cancelled` on entry
+(`base_agent.py:102`), so the step in flight halted and the very next step the
+DAG offered reset the flag and carried on spending. HALT stopped one turn, not
+the run.
+
+`cancel_all` now marks the mission in `_halted`, and the scheduler refuses to
+dispatch, cancels what is in flight, fails the rest as `halted by emergency stop`
+and emits one `task.failed`. Three things this needed that were not obvious
+until the tests were written:
+
+- **The scheduler had to be woken.** It parks in `asyncio.wait` on the steps in
+  flight, so a flag is only read between waits — fine when the halt makes agents
+  return, useless when one is stuck in a tool call or queueing for a station,
+  which is when the switch actually gets pressed. An `asyncio.Event` per mission
+  waits alongside the steps.
+- **A returning agent looks exactly like a working one.** `BaseAgent.run`
+  catches the cancelled request and *returns* "Task halted by emergency stop."
+  — an ordinary string on an ordinary completed future. Taken at face value the
+  scheduler files that sentence as the step's artifact and lets the DAG read it.
+  Any step landing while the mission is halted is failed instead.
+- **`.exception()` raises on a cancelled task** rather than returning the
+  exception, so `.cancelled()` has to be asked first or the halt comes out of
+  the scheduler unhandled.
+
+`test_emergency_stop.py` pins all four behaviours; four of its five fail on the
+old `cancel_all`.
+
+Still open: a step that genuinely completed a moment before the HALT, and is
+collected in the same batch, is discarded with the rest — the same conservative
+reading resume already takes of a step left `running` by a killed process. And
+the halt is not persisted, so a resume of a halted mission re-runs those steps
+rather than being told the operator stopped them on purpose.
 
 ---
 

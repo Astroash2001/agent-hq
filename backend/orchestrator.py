@@ -65,6 +65,18 @@ class Orchestrator:
         # agent's token_usage rises turn by turn, while `_step_telemetry` only
         # gains a row once a step has finished.
         self._token_baseline: Dict[str, int] = {}
+        # Missions the kill switch has halted. Flagging the roster is not enough
+        # on its own: `BaseAgent.run` clears `_is_cancelled` on entry, so a step
+        # dispatched after the HALT would reset the flag and carry on. The
+        # scheduler reads this before it dispatches anything.
+        self._halted: Set[str] = set()
+        # The scheduler spends nearly all its time parked in `asyncio.wait` on
+        # the steps in flight, so the flag above is only read between waits.
+        # That is enough when the halt makes the agents return -- their futures
+        # complete and the wait comes back -- but not when one is stuck in a
+        # tool call or queueing for a station, which is exactly when someone
+        # reaches for the kill switch. The wait blocks on this too.
+        self._halt_events: Dict[str, asyncio.Event] = {}
         # One agent runs one subtask at a time even when the DAG offers it two.
         self._agent_locks: Dict[str, asyncio.Lock] = {}
         # The real parallelism cap. Rebuilt per mission so a settings change
@@ -139,8 +151,21 @@ class Orchestrator:
         return manifests
 
     def cancel_all(self):
-        """Emergency kill switch - halt all running agents."""
+        """
+        Emergency kill switch -- halt every running agent *and* every mission.
+
+        Cancelling the agents alone stopped one turn, not the run. `cancel()`
+        aborts the request in flight, but `BaseAgent.run` clears `_is_cancelled`
+        at the top of every run, so the next step the scheduler dispatched came
+        up with a clean flag and the mission carried on spending. Marking the
+        missions halted is what stops the scheduler offering it that next step.
+        """
         logger.warning("Emergency kill switch activated! Cancelling all agents.")
+        self._halted.update(self.active_tasks.keys())
+        for task_id in self.active_tasks:
+            waker = self._halt_events.get(task_id)
+            if waker is not None:
+                waker.set()
         if self.boss_agent:
             self.boss_agent.cancel()
         for agent in self.agents.values():
@@ -194,6 +219,12 @@ class Orchestrator:
         # resumed mission re-baselines, because its budget governs the work
         # still to be done and not what the process spent before it died.
         self._token_baseline[task_id] = self._tokens_spent()
+        # A halt belongs to the mission that was running when the button was
+        # pressed, not to the id. A resume of that mission starts unhalted --
+        # including its wakeup, which `_execute_plan` would otherwise pick up
+        # already set and halt the resumed run before it dispatched anything.
+        self._halted.discard(task_id)
+        self._halt_events.pop(task_id, None)
 
         trace = tracing.start_mission(task_id, workspace.dir)
         try:
@@ -766,6 +797,10 @@ class Orchestrator:
         results: List[Dict[str, Any]] = []
         running: Dict[str, asyncio.Task] = {}
         wave_index = 0
+        halt_announced = False
+        # Created here rather than in __init__ so it binds to the running loop,
+        # the same reason `self._slots` is rebuilt per mission.
+        halt_event = self._halt_events.setdefault(task_id, asyncio.Event())
 
         for sid in completed:
             by_id[sid].status = "completed"
@@ -774,6 +809,44 @@ class Orchestrator:
             await self._emit_dag(task_id, plan.source)
 
         while pending or running:
+            # Halt gate, ahead of the budget gate because a halted mission is
+            # not going to spend anything either way. `cancel_all` has already
+            # aborted whatever call was in flight; this is the half that stops
+            # the graph, by refusing to dispatch and cancelling what is running.
+            #
+            # Steps are failed rather than left pending: a halted step did not
+            # produce its artifact, so everything downstream of it would starve
+            # at an empty desk, and "pending forever" is not a state the store
+            # or the panel has any way to draw.
+            #
+            # Announced once. `asyncio.wait` returns on the first completion, so
+            # a halt with three steps in flight comes back round here with two
+            # still running, and without the latch the office would get one
+            # TASK_FAILED per straggler.
+            if task_id in self._halted and not halt_announced:
+                halt_announced = True
+                for sid in sorted(pending):
+                    by_id[sid].status = "failed"
+                    self._set_node_status(sid, "failed")
+                    store.upsert_step(task_id, by_id[sid], "failed",
+                                      error="halted by emergency stop")
+                    failed.add(sid)
+                halted_count = len(pending) + len(running)
+                pending.clear()
+                for fut in running.values():
+                    fut.cancel()
+                await self._emit_dag(task_id, plan.source)
+                await event_bus.emit(Event(
+                    type=EventType.TASK_FAILED,
+                    task_id=task_id,
+                    data={"error": f"Halted by emergency stop. "
+                                   f"{halted_count} step(s) stopped."}
+                ))
+                logger.warning("[%s] halted by emergency stop; %d step(s) stopped",
+                               task_id, halted_count)
+                if not running:
+                    break
+
             # Budget gate. Checked before dispatching rather than mid-step: a
             # step already running has to be allowed to finish, or its artifact
             # is lost and everything downstream of it stalls anyway.
@@ -842,13 +915,58 @@ class Orchestrator:
             if not running:
                 continue
 
-            done, _ = await asyncio.wait(
-                running.values(), return_when=asyncio.FIRST_COMPLETED)
+            # The kill switch waits alongside the steps. Without it the halt
+            # gate at the top of the loop is only reached when a step happens to
+            # finish, so a HALT during a stuck tool call would sit unread until
+            # the step deadline expired.
+            halt_waiter = asyncio.ensure_future(halt_event.wait())
+            try:
+                done, _ = await asyncio.wait(
+                    set(running.values()) | {halt_waiter},
+                    return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                halt_waiter.cancel()
+            # Only the halt fired: nothing to collect, go round and let the gate
+            # deal with it.
+            done.discard(halt_waiter)
 
             for finished in done:
                 sid = next(k for k, v in running.items() if v is finished)
                 del running[sid]
                 step = by_id[sid]
+
+                # Two ways a step arrives here halted, and both have to land in
+                # the same place.
+                #
+                # `.cancelled()` is the scheduler having got there first, and it
+                # must be asked before the outcome is read: `.exception()` on a
+                # cancelled task *raises* CancelledError rather than returning
+                # it, which would come out of the scheduler unhandled.
+                #
+                # The mission being halted is the other race, and the likelier
+                # one in practice: `cancel_all` aborts the agent's in-flight
+                # request, `BaseAgent.run` catches that and *returns* "Task
+                # halted by emergency stop" -- a perfectly ordinary success as
+                # far as the future is concerned. Taking it at face value files
+                # that sentence as the step's artifact and lets the DAG carry on
+                # reading it.
+                #
+                # Read from `_halted` rather than the announcement latch: the
+                # halt can land while this very iteration is parked in the wait
+                # below, so the gate at the top has not run yet. The cost is
+                # that a step which genuinely finished a moment before the HALT,
+                # and is collected in the same batch, is discarded with the
+                # rest. That is the same reading resume already takes of a step
+                # left `running` by a killed process -- unknown outcome, run it
+                # again -- and it is the one that cannot file halt text as work.
+                if finished.cancelled() or task_id in self._halted:
+                    step.status = "failed"
+                    self._set_node_status(sid, "failed")
+                    store.upsert_step(task_id, step, "failed",
+                                      error="halted by emergency stop")
+                    failed.add(sid)
+                    continue
+
                 outcome = finished.exception() or finished.result()
 
                 if isinstance(outcome, BaseException):
