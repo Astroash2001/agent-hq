@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1110,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 2189,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"filepath\": \"homeowner_heat_pump_guide.md\", \"content\": \"# The Homeowner’s Guide to Air-Source Heat Pumps in the UK (2026)\\n\\nSwitching your home heating system is a major decision. With the UK pressing forward toward its net-zero carbon goals by 2050, air-source heat pumps (ASHPs) have become the go-to low-carbon replacement for traditional gas and oil boilers. \\n\\nIf you are wondering how they work, how much they cost, and what grants are available to help you make the switch, this guide breaks down everything you need to know.\\n\\n---\\n\\n## What is an Air-Source Heat Pump and How Does It Work?\\n\\nThink of an air-source heat pump as a reverse fridge. Instead of cooling the inside, it extracts thermal energy from the outside air—even when temperatures drop below freezing—and transfers it inside your home to provide space heating and hot water.\\n\\n* **High Efficiency (COP & SCOP):** Heat pumps do not create heat by burning fuel; they *move* it using electricity. They typically operate with a **Coefficient of Performance (COP) of 2.5 to 3.5**. This means for every 1 kWh of electricity they consume, they pump out 2.5 to 3.5 kWh of heat energy. Over the course of a full year, accounting for weather changes, modern systems achieve a **Seasonal COP (SCOP) of 3.0 or higher**.\\n\\n---\\n\\n## What Do They Cost? (Installation & Running Costs)\\n\\n### 1. Upfront Installation Costs\\nThe gross cost to supply and install a domestic ASHP system typically ranges from **£8,000 to £15,000**. The final price tag depends on several factors:\\n* The size of your property and its heating demand.\\n* The complexity of the installation work.\\n* Whether your home requires complementary upgrades, such as larger radiators or underfloor heating.\\n\\n### 2. Running Costs\\nRunning costs depend heavily on your home’s insulation, energy tariffs, and the efficiency of the setup. Because modern heat pumps deliver 3 units of heat for every unit of electricity, running costs are competitive with—and can be lower than—inefficient gas or oil boilers, especially if you pair your system with smart time-of-use electricity tariffs (such as Octopus Agile or Cosy Octopus).\\n\\n---\\n\\n## Government Grants: The Boiler Upgrade Scheme (BUS)\\n\\nThe UK Government provides significant financial backing to help homeowners ditch fossil fuel heating systems through the **Boiler Upgrade Scheme (BUS)** in England and Wales.\\n\\n### Current Grant Levels (2026):\\n* **£7,500** standard grant for air-to-water heat pumps.\\n* **£9,000** temporary/targeted uplift for off-grid properties previously heated solely by oil or LPG.\\n* **£2,500** for air-to-air heat pumps.\\n\\n### Eligibility Criteria:\\n* You must own the property (landlords are also eligible).\\n* Your property must have a valid Energy Performance Certificate (EPC).\\n* **Crucially:** Your EPC must have no outstanding loft or cavity wall insulation recommendations. If your home needs insulation upgrades to qualify, you must complete them first.\\n\\n---\\n\\n## Key Installation Considerations for Your Home\\n\\nBefore jumping into an installation, it is important to check how your home is set up for a heat pump:\\n\\n1. **Lower Flow Temperatures:** Traditional gas boilers blast water through your radiators at hot temperatures (70°C–80°C). Heat pumps operate much more efficiently at lower flow temperatures (35°C–55°C). \\n2. **Emitters (Radiators & Underfloor Heating):** Because heat pumps operate at lower temperatures, your existing radiators might need to be upgraded to larger models or paired with underfloor heating to keep rooms warm and cozy.\\n3. **Insulation is Key:** Because of those lower flow temperatures, your home needs to be able to trap heat effectively. Good loft, wall, and double-glazing insulation ensures the heat doesn't slip out as fast as the pump puts it in.\\n4. **Planning Permission & Outdoor Placement:** Most domestic ASHP installations fall under **Permitted Development** rights, meaning you won’t need full planning permission. However, strict rules apply regarding proximity to property boundaries, unit size, and noise limits (meeting MCS standards)—especially if you live in a flat or a conservation area. The outdoor unit also requires a solid, level base and plenty of clearance for airflow.\\n\\n---\\n\\n## Next Steps: Is a Heat Pump Right for You?\\n\\n1. **Check your insulation:** Look at your EPC or arrange an energy assessment to ensure your loft and walls are up to scratch.\\n2. **Find an MCS-certified installer:** To qualify for the Boiler Upgrade Scheme, your installation must be carried out by a certified Microgeneration Certification Scheme (MCS) installer. Get multiple quotes and ask for a detailed heat-loss calculation for your specific property.\\n3. **Explore tariffs:** Look into specialized heat pump electricity tariffs to maximize your savings on running costs once your system is up and running.\\n\"}",
+        "name": "write_file"
+       },
+       "id": "call_f0f0a54a934d4a7eb7aba7222e91__thought__El4KXAERTTIPHrPiiVAJwncKZBQlpfwdceqg08CiHpaP6Oa2cfYWpjW/qOFUsOArhj1FfWb1fSGUJsn/kxXh6d2i34rIsDIvmkfLepH4HPVKjjOGMx9LBkdJyvoMs0+X"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1110,
+   "prompt_tokens": 2189
+  }
+ }
+}

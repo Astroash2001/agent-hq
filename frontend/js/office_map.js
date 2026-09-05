@@ -234,7 +234,14 @@ const OFFICE_MAP = {
            fronts the lounge (col 27), which is the one stretch of outside wall
            with open floor behind it and no room to cut into. Two tiles wide,
            matching the 32px leaves. */
-        { x: 24, y: 23, kind: 'door_ext', trigger: 3.4 }
+        { x: 24, y: 23, kind: 'door_ext', trigger: 3.4 },
+        /* The two openings in the col-27 divider, which had none. Both are
+           `doorways` entries of height 2, and a vertical leaf pair hangs from
+           (y+1)*16 covering rows y-1 and y -- so the door's y is the LOWER of
+           the two rows the doorway carves, not its top. The boss office gap is
+           rows 9-10 and the kitchen gap is rows 17-18. */
+        { x: 27, y: 10, v: true, trigger: 3.4 },
+        { x: 27, y: 18, v: true, trigger: 3.4 }
     ],
 
     /* Ceiling downlights: small fixtures on the north wall rail, each washing

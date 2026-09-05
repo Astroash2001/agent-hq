@@ -523,8 +523,13 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ### Not started
 
-- Boss office and kitchen have no automatic doors; the system is general
-  (`map.doors` takes any number) so each is roughly a one-line addition
+- ~~Boss office and kitchen have no automatic doors~~ — **done.** Both openings
+  in the col-27 divider now have sliding leaf pairs. The one thing that is easy
+  to get wrong: a vertical door hangs from `(y+1)*16` and covers rows `y-1` and
+  `y`, so its `y` is the *lower* of the two rows its `doorways` entry carves —
+  the boss gap is rows 9-10 and takes `y: 10`, the kitchen gap is rows 17-18 and
+  takes `y: 18`. Verified by rendering: `python tools/preview_map.py` draws doors
+  and shows both pairs flush in their openings, and `check_layout.py` is clean.
 - The lounge has no games furniture — the reference has a foosball table, which
   neither pack contains
 

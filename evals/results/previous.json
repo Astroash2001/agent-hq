@@ -1,6 +1,168 @@
 {
  "rows": [
   {
+   "task_id": "adversarial_ambiguous",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Make it better.",
+   "tags": [
+    "adversarial",
+    "ambiguous"
+   ],
+   "error": null,
+   "duration_sec": 20.97,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 1,
+   "artifacts": [
+    "clarification_plan.md"
+   ],
+   "structural": 0.857,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "1 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "1 steps, wanted <= 3"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['clarification_plan.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "1/1 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "21.0s of 120s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "The output acknowledges the goal is underspecified rather than inventing a subject",
+     "verdict": "pass",
+     "reason": "The clarification plan explicitly states that the goal 'Make it better' is too vague and breaks down its ambiguity across multiple dimensions."
+    },
+    {
+     "n": 2,
+     "criterion": "It does not fabricate detailed findings about a topic that was never named",
+     "verdict": "pass",
+     "reason": "It avoids fabricating findings and instead asks structured questions to identify what the user actually wants to improve."
+    }
+   ],
+   "spans": 13,
+   "cassette_hits": 0,
+   "cassette_misses": 6,
+   "cassettes_recorded": 6
+  },
+  {
+   "task_id": "adversarial_missing_tool",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Write a short report on how long it takes this machine to sum the numbers 1 to ten million in Python, using a real measured timing.",
+   "tags": [
+    "adversarial",
+    "tool_routing"
+   ],
+   "error": null,
+   "duration_sec": 113.67,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "benchmark.py",
+    "measure_sum.py",
+    "timing_report.md",
+    "timing_result.md"
+   ],
+   "structural": 0.875,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "2 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['measure_sum.py', 'timing_result.md', 'benchmark.py', 'timing_report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "113.7s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Contains a timing figure that came from actually running the code",
+     "verdict": "pass",
+     "reason": "The report includes specific measured times like 0.0568 seconds per run from the benchmark scripts."
+    },
+    {
+     "n": 2,
+     "criterion": "The step that needed execution was given to an agent holding the terminal tool",
+     "verdict": "pass",
+     "reason": "The system used benchmark scripts to execute and measure the Python timing as expected."
+    }
+   ],
+   "spans": 86,
+   "cassette_hits": 9,
+   "cassette_misses": 23,
+   "cassettes_recorded": 22
+  },
+  {
    "task_id": "adversarial_trivial",
    "run": 1,
    "mode": "record",
@@ -11,14 +173,14 @@
     "trivial"
    ],
    "error": null,
-   "duration_sec": 17.91,
+   "duration_sec": 13.16,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 1,
    "artifacts": [
     "ssd_definition.md"
    ],
-   "structural": 1.0,
+   "structural": 0.857,
    "checks": [
     {
      "check": "min_steps",
@@ -42,13 +204,13 @@
     },
     {
      "check": "max_cost_usd",
-     "ok": true,
-     "detail": "$0.0000 of $0.05"
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "17.9s of 90s"
+     "detail": "13.2s of 90s"
     },
     {
      "check": "must_not_stub",
@@ -56,38 +218,985 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": 0.5,
+   "quality": 1.0,
    "quality_skipped": "",
    "rubric": [
     {
      "n": 1,
      "criterion": "Answers that SSD stands for solid-state drive",
      "verdict": "pass",
-     "reason": "The artifact correctly states that SSD stands for Solid-State Drive."
+     "reason": "The document correctly states that SSD stands for Solid-State Drive."
     },
     {
      "n": 2,
      "criterion": "Does not pad a one-line answer into a multi-section report",
-     "verdict": "fail",
-     "reason": "The one-line answer is padded into a multi-section report with detailed overviews and key characteristics."
+     "verdict": "pass",
+     "reason": "The output is concise and does not pad the answer into a multi-section report."
     }
    ],
-   "spans": 22,
+   "spans": 16,
    "cassette_hits": 0,
-   "cassette_misses": 9,
+   "cassette_misses": 7,
+   "cassettes_recorded": 7
+  },
+  {
+   "task_id": "approach_standup",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Research solar panel efficiency, then hold a standup to agree the report's angle before writing it.",
+   "tags": [
+    "meeting",
+    "synthesis"
+   ],
+   "error": null,
+   "duration_sec": 129.41,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 3,
+   "artifacts": [
+    "meeting_decision.md",
+    "solar_efficiency_report.md",
+    "solar_research.md"
+   ],
+   "structural": 0.875,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "3 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "3 steps, wanted <= 5"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['solar_research.md', 'meeting_decision.md', 'solar_efficiency_report.md']"
+    },
+    {
+     "check": "requires_meeting",
+     "ok": true,
+     "detail": "1 meeting step(s)"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "3/3 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "129.4s of 240s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "A meeting artifact records an agreed angle for the report",
+     "verdict": "pass",
+     "reason": "The meeting decision artifact clearly records the agreed angle: 'Bridging the Gap: From Lab Records to Rooftop Reality.'"
+    },
+    {
+     "n": 2,
+     "criterion": "The written report follows the angle that was agreed",
+     "verdict": "pass",
+     "reason": "The written report explicitly adopts the agreed angle 'Bridging the Gap: From Lab Records to Rooftop Reality' in its title and structure."
+    },
+    {
+     "n": 3,
+     "criterion": "The research is used rather than restated",
+     "verdict": "pass",
+     "reason": "The final report synthesizes the research data into a cohesive narrative rather than merely copying the research markdown file verbatim."
+    }
+   ],
+   "spans": 70,
+   "cassette_hits": 2,
+   "cassette_misses": 23,
+   "cassettes_recorded": 22
+  },
+  {
+   "task_id": "battery_comparison",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Compare sodium-ion and lithium-ion home batteries and recommend one.",
+   "tags": [
+    "research",
+    "synthesis",
+    "multi_step",
+    "smoke"
+   ],
+   "error": null,
+   "duration_sec": 116.7,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "battery_comparison_research.md",
+    "battery_recommendation_report.md"
+   ],
+   "structural": 0.75,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": false,
+     "detail": "2 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['battery_comparison_research.md', 'battery_recommendation_report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "116.7s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Names at least two specific battery chemistries with figures",
+     "verdict": "pass",
+     "reason": "The report compares Sodium-Ion, Lithium Iron Phosphate (LFP), and NMC Lithium-Ion with specific metric figures."
+    },
+    {
+     "n": 2,
+     "criterion": "States a recommendation with a stated reason",
+     "verdict": "pass",
+     "reason": "It recommends LFP for standard temperate environments and sodium-ion for cold climates, supported by specific rationale."
+    },
+    {
+     "n": 3,
+     "criterion": "Cites at least one source when web_search was available",
+     "verdict": "pass",
+     "reason": "It includes a dedicated sources section citing multiple specific industry guides and reports."
+    }
+   ],
+   "spans": 51,
+   "cassette_hits": 0,
+   "cassette_misses": 17,
+   "cassettes_recorded": 16
+  },
+  {
+   "task_id": "battery_team_review",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Research two competing home battery technologies in parallel, discuss the findings as a team, then write the comparison report.",
+   "tags": [
+    "meeting",
+    "synthesis",
+    "multi_step"
+   ],
+   "error": null,
+   "duration_sec": 198.05,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 4,
+   "artifacts": [
+    "battery_one_research.md",
+    "battery_two_research.md",
+    "team_discussion_summary.md"
+   ],
+   "structural": 0.75,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 5"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['battery_one_research.md', 'battery_two_research.md', 'team_discussion_summary.md']"
+    },
+    {
+     "check": "requires_meeting",
+     "ok": true,
+     "detail": "1 meeting step(s)"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": false,
+     "detail": "3/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "198.1s of 240s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "The report reflects both technologies, not only one",
+     "verdict": "pass",
+     "reason": "The artifacts cover both Lithium Iron Phosphate and Solid-State Batteries in the research and discussion."
+    },
+    {
+     "n": 2,
+     "criterion": "A recorded decision exists and names what the team agreed",
+     "verdict": "pass",
+     "reason": "A team discussion summary explicitly records agreement on comparison metrics and the maturity gap."
+    },
+    {
+     "n": 3,
+     "criterion": "The final report is consistent with the decision that was recorded",
+     "verdict": "pass",
+     "reason": "The comparison metrics and themes from the team discussion align directly with the research provided."
+    }
+   ],
+   "spans": 89,
+   "cassette_hits": 0,
+   "cassette_misses": 29,
+   "cassettes_recorded": 27
+  },
+  {
+   "task_id": "code_cache_bug",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Implement and test a fast Python fibonacci cache, and verify it with a real run.",
+   "tags": [
+    "code",
+    "analysis",
+    "smoke"
+   ],
+   "error": null,
+   "duration_sec": 24.89,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 1,
+   "artifacts": [
+    "fibonacci_cache.md",
+    "fibonacci_cache.py",
+    "test_fibonacci_cache.py"
+   ],
+   "structural": 0.75,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": false,
+     "detail": "1 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "1 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['fibonacci_cache.md', 'fibonacci_cache.py', 'test_fibonacci_cache.py']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "1/1 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "24.9s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 0.667,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Contains runnable Python implementing a cache",
+     "verdict": "pass",
+     "reason": "The files contain runnable Python code using functools.lru_cache for a Fibonacci implementation."
+    },
+    {
+     "n": 2,
+     "criterion": "Shows evidence the code was executed or analysed, not just written",
+     "verdict": "fail",
+     "reason": "There is no execution output, logs, or command-line run evidence included in the artifacts."
+    },
+    {
+     "n": 3,
+     "criterion": "Explains why the cached version is faster",
+     "verdict": "pass",
+     "reason": "The documentation explains the use of memoized recursion, LRU caching, and alternative complexities like O(log n)."
+    }
+   ],
+   "spans": 32,
+   "cassette_hits": 0,
+   "cassette_misses": 12,
+   "cassettes_recorded": 12
+  },
+  {
+   "task_id": "code_review_fix",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Analyse this function for bugs and propose a fix: def average(xs): return sum(xs) / len(xs)",
+   "tags": [
+    "code",
+    "analysis"
+   ],
+   "error": null,
+   "duration_sec": 31.62,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 1,
+   "artifacts": [
+    "bug_analysis.md",
+    "test_snippet.py"
+   ],
+   "structural": 0.875,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "1 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "1 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['test_snippet.py', 'bug_analysis.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "1/1 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "31.6s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Identifies the division-by-zero on an empty input",
+     "verdict": "pass",
+     "reason": "The analysis correctly identifies that an empty sequence causes a ZeroDivisionError."
+    },
+    {
+     "n": 2,
+     "criterion": "Proposes a concrete corrected implementation",
+     "verdict": "pass",
+     "reason": "A robust corrected implementation is provided in the bug analysis artifact."
+    },
+    {
+     "n": 3,
+     "criterion": "Does not invent bugs that are not present in the function",
+     "verdict": "pass",
+     "reason": "The identified bugs (ZeroDivisionError on empty input, TypeError on non-numeric or non-iterable inputs) are accurate for the given function."
+    }
+   ],
+   "spans": 32,
+   "cassette_hits": 0,
+   "cassette_misses": 11,
    "cassettes_recorded": 9
+  },
+  {
+   "task_id": "ev_charging_standards",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Research the competing EV charging connector standards, then write a one-page comparison for a fleet buyer.",
+   "tags": [
+    "research",
+    "synthesis",
+    "handoff"
+   ],
+   "error": null,
+   "duration_sec": 44.8,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "ev_standards_research.md",
+    "fleet_ev_connector_comparison.md"
+   ],
+   "structural": 0.875,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "2 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['ev_standards_research.md', 'fleet_ev_connector_comparison.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "44.8s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Names at least two connector standards and what they are used for",
+     "verdict": "pass",
+     "reason": "The artifacts name four standards (NACS, CCS1, CCS2, CHAdeMO) and describe their regional uses and specifications."
+    },
+    {
+     "n": 2,
+     "criterion": "Gives a concrete recommendation for a fleet buyer",
+     "verdict": "pass",
+     "reason": "The artifacts give concrete recommendations like 'Specify NACS-native vehicles for near-term and future North American fleet acquisitions'."
+    },
+    {
+     "n": 3,
+     "criterion": "Mentions a regional difference or a transition timeline",
+     "verdict": "pass",
+     "reason": "The artifacts mention regional differences (North America vs. Europe vs. Japan) and transition timelines ('transitioning / phasing out' for CCS1 in North America)."
+    }
+   ],
+   "spans": 40,
+   "cassette_hits": 0,
+   "cassette_misses": 15,
+   "cassettes_recorded": 15
+  },
+  {
+   "task_id": "grid_storage_tradeoffs",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Compare grid-scale storage options on cost and duration, then produce an executive briefing with a recommendation.",
+   "tags": [
+    "research",
+    "synthesis",
+    "handoff",
+    "fan_in"
+   ],
+   "error": null,
+   "duration_sec": 107.4,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "executive_briefing.md",
+    "storage_research.md"
+   ],
+   "structural": 0.75,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": false,
+     "detail": "2 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['storage_research.md', 'executive_briefing.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "107.4s of 200s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Compares at least three storage technologies",
+     "verdict": "pass",
+     "reason": "The executive briefing and research report compare four storage technologies: Lithium-Ion, Flow Batteries, Pumped Hydro, and Compressed Air."
+    },
+    {
+     "n": 2,
+     "criterion": "Quantifies cost or duration for each rather than describing them qualitatively",
+     "verdict": "pass",
+     "reason": "Both artifacts provide explicit quantitative ranges for discharge duration, capital costs, and levelized cost of storage (LCOS) for each technology."
+    },
+    {
+     "n": 3,
+     "criterion": "Ends with a single clear recommendation",
+     "verdict": "pass",
+     "reason": "The executive briefing concludes with a structured, clear set of strategic recommendations including a hybrid portfolio approach and specific technology deployments."
+    }
+   ],
+   "spans": 47,
+   "cassette_hits": 0,
+   "cassette_misses": 17,
+   "cassettes_recorded": 17
+  },
+  {
+   "task_id": "heat_pump_handoff",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Research air-source heat pumps for UK homes, then have a writer turn the findings into a homeowner-facing explainer.",
+   "tags": [
+    "research",
+    "synthesis",
+    "handoff"
+   ],
+   "error": null,
+   "duration_sec": 104.38,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "heat_pump_research.md",
+    "homeowner_heat_pump_guide.md"
+   ],
+   "structural": 0.875,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "2 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['heat_pump_research.md', 'homeowner_heat_pump_guide.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "104.4s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "The explainer contains specific figures (COP, running cost, or grant amounts)",
+     "verdict": "pass",
+     "reason": "The explainer explicitly includes specific figures such as COP 2.5 to 3.5, installation costs of £8,000 to £15,000, and grant amounts like £7,500."
+    },
+    {
+     "n": 2,
+     "criterion": "The explainer is written for a homeowner, not for an engineer",
+     "verdict": "pass",
+     "reason": "The tone is accessible, encouraging, and directly addresses the homeowner (\"If you are wondering how they work...\")."
+    },
+    {
+     "n": 3,
+     "criterion": "The final artifact builds on the research rather than restating the goal",
+     "verdict": "pass",
+     "reason": "The homeowner guide structures and translates the research findings into practical, actionable steps for a consumer rather than just restating the prompt."
+    }
+   ],
+   "spans": 60,
+   "cassette_hits": 5,
+   "cassette_misses": 17,
+   "cassettes_recorded": 16
+  },
+  {
+   "task_id": "india_news_brief",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Tell me what happened today in Indian news and write it up as a short brief.",
+   "tags": [
+    "research",
+    "synthesis",
+    "time_sensitive"
+   ],
+   "error": null,
+   "duration_sec": 22.73,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "indian_news_brief.md",
+    "indian_news_today.md"
+   ],
+   "structural": 0.875,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "2 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['indian_news_today.md', 'indian_news_brief.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": false,
+     "detail": "cost unmeasurable: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "22.7s of 200s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Reports at least three distinct news items",
+     "verdict": "pass",
+     "reason": "The artifacts report several distinct news items across legal, crime, economic, and cultural domains."
+    },
+    {
+     "n": 2,
+     "criterion": "Does not present undated or clearly old material as today's news",
+     "verdict": "pass",
+     "reason": "The news items are dated for the current simulation date (September 6, 2026) without presenting overtly old material as current."
+    },
+    {
+     "n": 3,
+     "criterion": "Is written as a brief a reader could skim, not as raw search output",
+     "verdict": "pass",
+     "reason": "The text is formatted into structured, categorized bullet points that are easily skimmed."
+    }
+   ],
+   "spans": 28,
+   "cassette_hits": 0,
+   "cassette_misses": 11,
+   "cassettes_recorded": 11
+  },
+  {
+   "task_id": "solar_efficiency",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Research the current state of solar panel efficiency and summarise where the ceiling is.",
+   "tags": [
+    "research",
+    "pure_research"
+   ],
+   "error": "RateLimitError: litellm.RateLimitError: litellm.RateLimitError: geminiException - {\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 592.054804ms.\",\n    \"status\": \"RESOURCE_EXHAUSTED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Learn more about Gemini API quotas\",\n            \"url\": \"https://ai.google.dev/gemini-api/docs/rate-limits\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.QuotaFailure\",\n        \"violations\": [\n          {\n            \"quotaMetric\": \"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\n            \"quotaId\": \"GenerateRequestsPerMinutePerProjectPerModel-FreeTier\",\n            \"quotaDimensions\": {\n              \"location\": \"global\",\n              \"model\": \"gemini-3.5-flash-lite\"\n            },\n            \"quotaValue\": \"15\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.RetryInfo\",\n        \"retryDelay\": \"0s\"\n      }\n    ]\n  }\n}\n",
+   "duration_sec": 14.2,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 0,
+   "artifacts": [],
+   "structural": 0.5,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": false,
+     "detail": "0 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "0 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": false,
+     "detail": "missing ['researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": false,
+     "detail": "no artifact matched ['*.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": false,
+     "detail": "0/0 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.20"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "14.2s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 0,
+   "cassette_hits": 0,
+   "cassette_misses": 1,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "solid_state_batteries",
+   "run": 1,
+   "mode": "record",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Research where solid-state batteries stand commercially and what is still blocking mass production.",
+   "tags": [
+    "research",
+    "pure_research"
+   ],
+   "error": "RateLimitError: litellm.RateLimitError: litellm.RateLimitError: geminiException - {\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-3.5-flash-lite\\nPlease retry in 135.7878ms.\",\n    \"status\": \"RESOURCE_EXHAUSTED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.Help\",\n        \"links\": [\n          {\n            \"description\": \"Learn more about Gemini API quotas\",\n            \"url\": \"https://ai.google.dev/gemini-api/docs/rate-limits\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.QuotaFailure\",\n        \"violations\": [\n          {\n            \"quotaMetric\": \"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\n            \"quotaId\": \"GenerateRequestsPerMinutePerProjectPerModel-FreeTier\",\n            \"quotaDimensions\": {\n              \"location\": \"global\",\n              \"model\": \"gemini-3.5-flash-lite\"\n            },\n            \"quotaValue\": \"15\"\n          }\n        ]\n      },\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.RetryInfo\",\n        \"retryDelay\": \"0s\"\n      }\n    ]\n  }\n}\n",
+   "duration_sec": 0.44,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 0,
+   "artifacts": [],
+   "structural": 0.5,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": false,
+     "detail": "0 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "0 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": false,
+     "detail": "missing ['researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": false,
+     "detail": "no artifact matched ['*.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": false,
+     "detail": "0/0 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.20"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "0.4s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 0,
+   "cassette_hits": 0,
+   "cassette_misses": 1,
+   "cassettes_recorded": 0
   }
  ],
  "summary": [
   {
    "model": "gemini/gemini-3.5-flash-lite",
-   "tasks": 1,
-   "runs": 1,
-   "errors": 0,
-   "structural": 1.0,
-   "quality": 0.5,
+   "tasks": 14,
+   "runs": 14,
+   "errors": 2,
+   "structural": 0.783,
+   "quality": 0.972,
    "cost_usd": 0.0,
-   "p50_latency": 17.91
+   "p50_latency": 38.21
   }
  ]
 }

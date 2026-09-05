@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 255,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1685,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "Air-source heat pumps offer UK homeowners an efficient, low-carbon heating alternative, operating with a Coefficient of Performance (COP) of 2.5 to 3.5 and an annual Seasonal COP (SCOP) of 3.0 or higher, as detailed in `heat_pump_research.md` and `homeowner_heat_pump_guide.md`. Gross installation costs range from **£8,000 to £15,000**, but financial support is available via the Boiler Upgrade Scheme (BUS), which provides a **£7,500** standard grant for air-to-water systems, a **£9,000** uplift for off-grid properties, and **£2,500** for air-to-air heat pumps. \n\nHowever, both the research report and the homeowner guide truncate before fully outlining all installation considerations, leaving the final sections on practical property requirements unaddressed. Additionally, while the research report notes that eligibility for the BUS requires an EPC with no outstanding loft and cavity wall insulation recommendations, readers looking for the complete step-by-step installation checklist mentioned at the end of the guide's draft will find that information missing due to the truncation.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 255,
+   "prompt_tokens": 1685
+  }
+ }
+}

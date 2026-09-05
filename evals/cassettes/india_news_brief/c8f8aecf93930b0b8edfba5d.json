@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 80,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 745,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"verdict\": \"accept\",\n  \"score\": 0.9,\n  \"reasons\": [\n    \"The artifact provides a well-structured short brief of major news headlines and summaries from India.\",\n    \"It covers multiple categories including legal, crime, accidents, and economic highlights as requested.\"\n  ],\n  \"guidance\": \"\"\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 80,
+   "prompt_tokens": 745
+  }
+ }
+}

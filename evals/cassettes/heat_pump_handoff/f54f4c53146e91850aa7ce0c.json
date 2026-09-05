@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 69,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 3336,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I have successfully gathered the required research on air-source heat pumps for UK homes, including efficiency metrics, costs, government grants (such as the Boiler Upgrade Scheme with 2026 updates), and installation considerations. All sources and URLs have been fully cited. The complete report has been written to `heat_pump_research.md`.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 69,
+   "prompt_tokens": 3336
+  }
+ }
+}
