@@ -137,7 +137,7 @@ async def _one_turn(
                 text=_simulated_position(agent, step_description),
                 round_index=round_index, simulated=True,
             )
-            span.set(simulated=True)
+            span.set(simulated=True, position=position.text)
             return position
 
         try:
@@ -159,8 +159,12 @@ async def _one_turn(
             span.set(status_note="empty")
             return None
 
+        # The objection itself goes in the span, clipped by `trace_max_attr_chars`
+        # like every other attribute. Without it a replayed meeting can show
+        # that people spoke but not what they said, which is the only
+        # interesting thing about a meeting.
         span.set(model=result.model, total_tokens=result.total_tokens,
-                 cost_usd=result.cost_usd)
+                 cost_usd=result.cost_usd, position=text)
         await _charge(agent, result, task_id)
         return Position(
             agent_id=agent.id, agent_name=agent.name, role=agent.role,

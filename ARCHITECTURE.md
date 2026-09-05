@@ -401,9 +401,45 @@ Points worth knowing:
 ### `hud.js` — the sidebar
 
 `RetroHUD` builds the agent dock from manifests, appends colour-coded terminal
-lines, drives the 20-segment token gauge, renders the task queue, and reveals the
-executive memo (Markdown via `marked`). It reads agent portraits out of the same
-atlas the canvas uses.
+lines, drives the 20-segment token gauge, and reveals the mission output
+(Markdown via `marked`). It reads agent portraits out of the same atlas the
+canvas uses. Four panels beyond the dock:
+
+* **Execution plan** — `renderPlan` / `layoutDag` / `drawDag` turn a
+  `plan.created` or `dag.update` payload into SVG: nodes ranked by *longest* path
+  from a root (a shortest-path rank would point an edge upwards and read as a
+  cycle), the owning agent's manifest colour as the fill, status as the ring and
+  glyph, and what the step cost written beneath it. Per-step badges — a reroute
+  and a review verdict — arrive on their own events and are kept in
+  `hud.stepBadges` rather than painted onto the SVG, because every status change
+  redraws the whole graph.
+* **Mission cost** — `updateCost` folds each `dag.update` into a per-mission
+  meter: cost, tokens, wall clock, a latency bar per step and tokens by agent.
+  It reads the graph rather than keeping a second ledger that could disagree
+  with it, and marks any figure the simulator produced.
+* **Trace replay** — the controls for `replay.js`.
+* **Mission output** — the goal, the briefing and the artifacts, with the card
+  *moved* into the full-screen overlay rather than copied, so the open file, the
+  selected tab and the scroll position survive the trip.
+
+### `replay.js` — the time-travel debugger
+
+`TraceReplay` loads a past mission's plan (`GET /api/missions/{id}`) and spans
+(`GET /api/missions/{id}/trace`), compiles the spans back into the events the
+WebSocket would have sent, and feeds them to the same `handleEvent` in `app.js`
+that the live socket feeds — so the office replays through the live renderer
+rather than a second one that would drift. Play, pause, scrub and 1×–8×.
+
+A step span becomes the assignment that opened it and the completion that closed
+it; a tool span becomes a walk (the tool's station is looked up in
+`/api/office`, since the trace holds no coordinates) and the two tool events
+around it; a turn becomes the tokens it burned; a debate span becomes the
+objection it recorded. Nothing the trace does not hold is synthesised — a
+replayed mission has no briefing to show, and says so.
+
+Seeking backwards replays from zero, because the office is a state machine and
+there is no inverse for "the agent walked to the library". Catch-up events are
+flagged `silent`, which is what stops a scrub animating twenty seconds of walking.
 
 ---
 

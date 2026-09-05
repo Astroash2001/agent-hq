@@ -276,9 +276,46 @@ untrusted.
 
 ### `hud.js` handles events `app.js` never sends
 
-`updateActiveDagNode` and `setQueue` exist but nothing calls them — the `dag.update`
-event is emitted by the backend and broadcast, but `app.js`'s switch has no case for
-it. The DAG is computed and sent but never visualised.
+**Done.** `app.js` has cases for `plan.created` and `dag.update`, and `hud.js`
+draws the graph as SVG: ranked by dependency depth, real edges, the owning
+agent's manifest colour as the node fill, status as its ring and glyph, a pulse
+on the running one, and what each finished step cost written under it. A `⇄`
+badge marks a step memory took off the planner's pick and a scored badge marks a
+reviewer's verdict -- red when it was rejected with no repair budget left, which
+otherwise reads exactly like a pass. Both badges live outside the SVG in
+`hud.stepBadges`, because `dag.update` redraws the whole graph on every status
+change.
+
+`updateActiveDagNode` survives as a one-line shim that lights the dock card;
+`setQueue` is gone.
+
+### There was no cost panel and no way to replay a run
+
+**Done.** `dag.update` now carries each finished step's cost, latency and tokens
+plus the mission totals (see [[PROTOCOL]]), so the MISSION COST card shows live
+spend, wall clock, a per-step latency strip and tokens by agent -- every figure
+per-mission, and marked `~est` when it came from the simulator.
+
+`frontend/js/replay.js` drives the office from a past mission's `trace.jsonl`
+instead of the live socket: play, pause, scrub, 1x-8x. Recorded spans are turned
+back into the same events the WebSocket sends and handed to the same
+`handleEvent`, so the renderer is not forked and nothing in `canvas.js` was
+touched. Walks are reconstructed by looking each `tool` span's tool up in
+`/api/office`.
+
+Still open: the trace holds no artifact bodies, so a replayed mission shows the
+work happening but cannot show the briefing -- it says so rather than inventing
+one. And a replay is all-or-nothing: seeking backwards replays from zero rather
+than stepping back, because the office is a state machine with no inverse for
+"the agent walked to the library".
+
+### No hero image
+
+`Preview.png` in the repo root is a third-party asset pack's contact sheet, not a
+screenshot of this project, and nothing references it. The README opens with a
+Mermaid diagram and the scorecard instead. A recording of a mission -- planning,
+fanning out, the DAG lighting up, the cost ticking, the memo landing -- is the
+one thing the README still cannot show, and it needs a browser to capture.
 
 ### Standalone simulation names are hardcoded
 
@@ -319,15 +356,22 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-11 tests pass in `backend/tests/` (`test_phase1..4.py`), covering health, agent
-listing, WebSocket handshake and event flow.
+**270 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+across 21 files: the original phase tests plus telemetry, contracts, the critic,
+the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
+harness and the `dag.update` payload. CI runs the same suite on 3.10 and 3.12,
+with `ruff check` and the eval smoke suite against its cassettes.
 
 **Not covered:**
 
-- Any frontend code — no JS test runner is configured
+- Any frontend code — no JS test runner is configured, and adding one would be
+  the project's first node build step. The DAG panel, the cost panel and the
+  replay driver are verified by hand and by `node --check`, and
+  `tools/check_replay.js` compiles a real `trace.jsonl` through the actual
+  `replay.js` and checks the result against the mission manifest beside it —
+  a hand-run validator in the same spirit as `check_layout.py`.
 - The asset pipeline — `check_layout.py` is a validator run by hand, not a test
-- `_decompose_task` routing branches
-- Tool execution paths beyond the registry surface
+- Tool execution paths beyond the registry surface and the sandbox refusals
 
 ---
 

@@ -238,10 +238,18 @@ All additive — old readers keep working.
 |---|---|
 | `agent.status` | `station_id`, `station_label` on `tool_calling` |
 | `task.assigned` | `step_id`, `produces`, `consumes`, `rationale`, `routed_from`, `attempt` (1 on the original dispatch, higher on a repair) |
-| `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0` |
+| `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0`. Each node that has **run** also carries `cost_usd`, `duration_sec`, `total_tokens`, `model`, `attempts`, `estimated`; the event carries mission totals `cost_usd`, `mission_tokens`, `tokens_estimated` |
 | `task.progress` | `wave` (which parallel wave just finished), `failed` |
 | `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated` |
 | `token.update` | `estimated` (the counts are the simulator's, not a provider's), `model` (which model answered) |
+
+**Reading `dag.update`:** a node with no `cost_usd` has not run yet. That is
+deliberately different from `cost_usd: 0.0`, which means it ran and cost nothing
+measurable -- the simulator path, or a model with no row in the pricing table. A
+panel that draws the first as $0.0000 is telling the viewer a step was free when
+it has not started. The mission totals are **this mission's**: the agents' own
+counters are lifetime totals that climb across every mission the process has
+served.
 
 **Reading `token.update`:** `estimated: true` means no model was called and the
 counts are the built-in simulator's invention. A gauge that renders those the same

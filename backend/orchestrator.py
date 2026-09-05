@@ -587,12 +587,53 @@ class Orchestrator:
         }
 
     async def _emit_dag(self, task_id: str, source: str = ""):
+        """
+        Restate the graph, with what each finished step actually cost.
+
+        The node used to carry status and nothing else, so the HUD could draw
+        the shape of a mission but not its price: cost and latency existed only
+        in `mission.json`, written once at the end. Merging the telemetry rows
+        in here means the panel reads the same numbers the manifest will, while
+        the mission is still running -- and it costs no new event type, because
+        this one already fires on every status change.
+
+        A step that has not run yet contributes no row and carries no numbers.
+        `null` rather than 0.0 for those, so "not started" cannot be drawn as
+        "free".
+        """
+        rows = self._step_telemetry.get(task_id, {})
+        nodes = []
+        for node in self.current_dag:
+            payload = node.model_dump()
+            row = rows.get(node.id)
+            if row:
+                payload.update({
+                    "cost_usd": row.get("cost_usd", 0.0),
+                    "duration_sec": row.get("duration_sec", 0.0),
+                    "total_tokens": (int(row.get("prompt_tokens", 0) or 0)
+                                     + int(row.get("completion_tokens", 0) or 0)),
+                    "model": row.get("model", ""),
+                    "attempts": row.get("attempts", 0),
+                    "estimated": bool(row.get("estimated")),
+                })
+            nodes.append(payload)
+
         await event_bus.emit(Event(
             type=EventType.DAG_UPDATE,
             task_id=task_id,
             data={
-                "dag": [node.model_dump() for node in self.current_dag],
-                "source": source
+                "dag": nodes,
+                "source": source,
+                # Mission totals, so the cost panel never has to sum the roster's
+                # lifetime counters -- which climb across every mission the
+                # process has served and would report this run as the sum of all
+                # of them.
+                "cost_usd": round(sum(float(r.get("cost_usd", 0.0) or 0.0)
+                                      for r in rows.values()), 6),
+                "mission_tokens": sum(int(r.get("prompt_tokens", 0) or 0)
+                                      + int(r.get("completion_tokens", 0) or 0)
+                                      for r in rows.values()),
+                "tokens_estimated": any(r.get("estimated") for r in rows.values()),
             }
         ))
 

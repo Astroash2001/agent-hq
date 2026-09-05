@@ -705,3 +705,75 @@ find out whether the API this code was written against is the one that shipped.
 It was not: `mcp` 2.x replaced the low-level `Server` decorators with
 `MCPServer.add_tool` and renamed the HTTP transport, and that test is what
 caught it.
+
+---
+
+## The panels, and replay (WP8)
+
+### The node's fill is who, its ring is how far
+
+A DAG drawn only by status is five identical amber dots in a parallel wave, with
+nothing to say that three different specialists are working. The fill is now the
+owning agent's manifest colour -- the same colour its dock card and its name
+plate already use, so a node and a desk read as the same person -- and the status
+lives in the ring, the glyph and the pulse.
+
+A pending step keeps the muted status colour rather than its owner's. Nobody has
+started it, and painting it in an agent's colour makes a plan look further along
+than it is.
+
+### Badges live outside the SVG
+
+`dag.update` fires on every status change and redraws the entire graph, so a
+badge painted onto a node would survive exactly until the next step finished.
+`route.changed` and `step.critiqued` arrive on their own events and are kept in
+`hud.stepBadges`, keyed by step id, and re-applied on every draw.
+
+The one visual decision worth defending: a `revise` verdict with no repair budget
+left is drawn in the same red as a failure. That step *completed*, and drawing it
+like an accept is how a mission that shipped work its reviewer rejected comes to
+look like a clean run.
+
+### The cost panel reads the graph rather than keeping a ledger
+
+Everything the panel shows already exists in `_step_telemetry`, so `dag.update`
+carries it and the panel reads it. The alternative -- a second event, or the HUD
+accumulating its own totals from `token.update` -- gives you two numbers for one
+mission that can disagree, and the one on screen is the one nobody can check.
+
+`token.update` in particular cannot be that source: it carries an agent's
+*lifetime* usage, which climbs across every mission the process has served.
+
+A step that has not run carries no cost field at all rather than `0.0`. "Not
+started" and "cost nothing" are different states, and only one of them is
+information.
+
+### Replay synthesises events; it does not fork the renderer
+
+The office is already an event-driven state machine. Replay compiles recorded
+spans back into the same events the WebSocket sends and hands them to the same
+`handleEvent`, so every panel, every animation and every log line comes out of
+the code path that runs live. A second renderer fed from spans would have been
+easier to write and would have drifted from the real one within a week.
+
+The corollary is that replay can only show what the trace holds. It does not
+invent a briefing, because the briefing lives in the mission directory and a
+record that fills in blanks is a story. Walks are the one thing reconstructed
+rather than replayed -- the trace has no coordinates -- and even that is a
+lookup, not a guess: the `tool` span names the tool, and `/api/office` says which
+station that tool is bound to.
+
+### Seeking backwards replays from zero
+
+There is no inverse for "the agent walked to the library". Rather than keeping
+snapshots of the whole office at every event, a backward seek resets the floor
+and re-fires events up to the target with the walk animations suppressed. It is
+simpler, it is exactly correct, and it is fast because the catch-up does not wait
+for anything.
+
+### The trace records what an attendee said
+
+`debate.py` writes the objection itself into its span, clipped by
+`trace_max_attr_chars` like every other attribute. Without it a replayed meeting
+can show that people spoke but not what they said, which is the only interesting
+thing about a meeting.
