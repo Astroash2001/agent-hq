@@ -17,6 +17,8 @@ import pytest
 
 import pricing
 import tracing
+import logging
+
 from config import settings
 from event_bus import event_bus
 from schemas import Event, EventType, Plan, PlanStep
@@ -376,3 +378,54 @@ async def test_the_model_that_answered_is_the_one_that_is_priced(monkeypatch):
     assert got.fell_back is True
     # The lite rate (0.10 / 0.40), not gpt-4o's (2.50 / 10.00).
     assert got.cost_usd == pytest.approx((1000 * 0.10 + 1000 * 0.40) / 1_000_000)
+
+
+# ------------------------------------------------- unpriced models are visible
+
+def test_a_configured_model_with_no_price_row_is_warned_about(monkeypatch, caplog):
+    """
+    The failure this exists to catch: `default_model` moved to
+    `gemini/gemini-3.5-flash` while the table still stopped at 2.5, so every
+    mission, every cost panel and every eval budget check read $0.0000. A
+    harness whose pitch is that you can price a run reported every run as free,
+    and said nothing.
+    """
+    import pricing
+
+    monkeypatch.setattr(settings, "default_model", "gemini/not-a-real-model")
+    monkeypatch.setattr(settings, "fallback_model", "gemini/gemini-2.5-flash-lite")
+    monkeypatch.setattr(settings, "critic_model", "")
+    monkeypatch.setattr(settings, "synthesis_model", "")
+    monkeypatch.setattr(settings, "judge_model", "")
+
+    with caplog.at_level(logging.WARNING, logger="AgentHQ.Pricing"):
+        unpriced = pricing.warn_if_configured_models_are_unpriced()
+
+    assert unpriced == ["gemini/not-a-real-model"]
+    assert "$0.0000" in caplog.text
+    assert "backend/pricing.py" in caplog.text
+
+
+def test_a_fully_priced_configuration_warns_about_nothing(monkeypatch):
+    import pricing
+
+    monkeypatch.setattr(settings, "default_model", "gemini/gemini-2.5-flash")
+    monkeypatch.setattr(settings, "fallback_model", "gemini/gemini-2.5-flash-lite")
+    monkeypatch.setattr(settings, "critic_model", "")
+    monkeypatch.setattr(settings, "synthesis_model", "")
+    monkeypatch.setattr(settings, "judge_model", "")
+
+    assert pricing.warn_if_configured_models_are_unpriced() == []
+
+
+def test_an_explicitly_set_helper_model_is_checked_too(monkeypatch):
+    """The critic, the conclusion and the judge all spend money of their own."""
+    import pricing
+
+    monkeypatch.setattr(settings, "default_model", "gemini/gemini-2.5-flash")
+    monkeypatch.setattr(settings, "fallback_model", "gemini/gemini-2.5-flash-lite")
+    monkeypatch.setattr(settings, "critic_model", "")
+    monkeypatch.setattr(settings, "synthesis_model", "some/unpriced-model")
+    monkeypatch.setattr(settings, "judge_model", "")
+
+    assert pricing.warn_if_configured_models_are_unpriced() == ["some/unpriced-model"]

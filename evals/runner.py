@@ -222,8 +222,21 @@ def budget_checks(task: Dict[str, Any], manifest: Dict[str, Any],
     checks = []
     if "max_cost_usd" in budget:
         cost = manifest.get("cost_usd", 0.0)
-        checks.append({"check": "max_cost_usd", "ok": cost <= budget["max_cost_usd"],
-                       "detail": f"${cost:.4f} of ${budget['max_cost_usd']:.2f}"})
+        # A cost budget checked against an unpriced model is not a pass, it is a
+        # non-measurement. `pricing.py` deliberately reports 0.0 for a model it
+        # has never heard of rather than guessing -- which means a run on an
+        # unpriced model reports "$0.0000 of $0.05, ok" and the suite claims to
+        # have verified a budget it could not read. Failing it is what makes the
+        # missing pricing row visible instead of flattering.
+        unpriced = manifest.get("unpriced_models") or []
+        if unpriced:
+            checks.append({
+                "check": "max_cost_usd", "ok": False,
+                "detail": f"cost unmeasurable: no price for {', '.join(unpriced)}. "
+                          f"Add a row to backend/pricing.py."})
+        else:
+            checks.append({"check": "max_cost_usd", "ok": cost <= budget["max_cost_usd"],
+                           "detail": f"${cost:.4f} of ${budget['max_cost_usd']:.2f}"})
     if "max_duration_sec" in budget:
         checks.append({"check": "max_duration_sec",
                        "ok": duration <= budget["max_duration_sec"],

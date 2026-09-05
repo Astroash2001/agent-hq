@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 127,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 786,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"steps\": [\n    {\n      \"id\": \"s1\",\n      \"agent_id\": \"orchestrator\",\n      \"description\": \"Analyze the user goal 'Make it better' which is currently too vague. Request clarification or define a concrete improvement target for the project.\",\n      \"dependencies\": [],\n      \"produces\": \"clarification_plan.md\",\n      \"consumes\": [],\n      \"rationale\": \"The orchestrator must define the vague goal before delegating work.\",\n      \"needs_tools\": []\n    }\n  ]\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 127,
+   "prompt_tokens": 786
+  }
+ }
+}

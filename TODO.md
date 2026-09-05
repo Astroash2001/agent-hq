@@ -445,11 +445,14 @@ than stepping back, because the office is a state machine with no inverse for
 
 ### No hero image
 
-`Preview.png` in the repo root is a third-party asset pack's contact sheet, not a
-screenshot of this project, and nothing references it. The README opens with a
-Mermaid diagram and the scorecard instead. A recording of a mission -- planning,
-fanning out, the DAG lighting up, the cost ticking, the memo landing -- is the
-one thing the README still cannot show, and it needs a browser to capture.
+`Preview.png` has been deleted — it was a third-party asset pack's contact
+sheet, not a screenshot of this project, and nothing referenced it. The README
+opens with a Mermaid diagram and the scorecard instead.
+
+Still open, and now the only thing on this list that cannot be done from a
+terminal: a recording of a mission — planning, fanning out, the DAG lighting up,
+the cost ticking, the memo landing. It needs a browser driving the running app,
+and it is the one claim in the README the README cannot itself show.
 
 ### Standalone simulation names are hardcoded
 
@@ -603,8 +606,12 @@ Verified by booting both ways on a runtime-only venv: development logs
 
 ## Housekeeping
 
-- `backend/.pytest_cache/` is committed alongside the source
-- `Preview.png` in the project root is unreferenced
+- **Done.** `Preview.png` deleted — a third-party asset pack's contact sheet
+  that nothing referenced. It is in git history if it is ever wanted back.
+- **This entry was stale:** `backend/.pytest_cache/` is *not* committed.
+  `.gitignore:59` covers it and `git ls-files` returns nothing for it; the
+  directory exists locally because pytest writes it, which is not the same
+  thing.
 
 ---
 

@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 34,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 768,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I have analyzed the vague request \"Make it better\" and established a comprehensive clarification strategy. The detailed plan has been successfully written to `clarification_plan.md`.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 34,
+   "prompt_tokens": 768
+  }
+ }
+}

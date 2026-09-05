@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import api_missions
+import pricing
 from config import settings
 from event_bus import event_bus
 from memory import memory
@@ -80,6 +81,11 @@ async def lifespan(app: FastAPI):
     `connect_all` logs and moves on, and this guard catches anything it did not.
     """
     logger.info("AgentHQ Backend Server starting up...")
+    # Before anything runs, say whether the models this office is configured to
+    # use can be priced at all. An unpriced model reports $0.0000 everywhere --
+    # cost panel, mission.json, eval budgets -- and a harness that sells "you
+    # can price a run" reporting every run as free is the worst kind of quiet.
+    pricing.warn_if_configured_models_are_unpriced()
     if settings.mcp_enabled:
         import mcp_client
         try:

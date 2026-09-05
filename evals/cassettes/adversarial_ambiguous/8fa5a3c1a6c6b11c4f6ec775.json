@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 83,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 778,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"verdict\": \"accept\",\n  \"score\": 1.0,\n  \"reasons\": [\n    \"The artifact successfully analyzes the vague goal 'Make it better'.\",\n    \"It provides a clear breakdown of ambiguity across key dimensions.\",\n    \"It outlines structured clarification questions and an actionable next step.\"\n  ],\n  \"guidance\": \"\"\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 83,
+   "prompt_tokens": 778
+  }
+ }
+}

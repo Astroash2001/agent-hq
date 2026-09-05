@@ -17,7 +17,7 @@ public pricing pages in February 2026. Re-check them before quoting a
 scorecard figure at anyone.
 """
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger("AgentHQ.Pricing")
 
@@ -142,3 +142,36 @@ def price(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     # 6dp: a single cheap turn costs a few hundred-thousandths of a dollar,
     # and rounding to 5 would floor most of them to zero.
     return round(cost, 6)
+
+
+def warn_if_configured_models_are_unpriced() -> List[str]:
+    """
+    Say so at boot when the models this office is actually going to use have no
+    row in the table.
+
+    `is_priced()` has always been able to answer this, but nothing asked it
+    until a mission was already over and the answer was buried in
+    `mission.json`. The failure mode that motivated this: `default_model` moved
+    to `gemini/gemini-3.5-flash` while the table still stopped at 2.5, so every
+    mission, every cost panel and every eval budget check read $0.0000 -- a
+    harness whose whole pitch is that you can price a run, silently reporting
+    that every run was free.
+
+    Returns the unpriced names so a caller can show them; logs a warning either
+    way. Deliberately does not invent a rate to make the warning go away.
+    """
+    from config import settings
+
+    configured = [settings.default_model, settings.fallback_model]
+    for extra in (settings.critic_model, settings.synthesis_model,
+                  settings.judge_model):
+        if (extra or "").strip():
+            configured.append(extra)
+
+    unpriced = sorted({m for m in configured if m and not is_priced(m)})
+    if unpriced:
+        logger.warning(
+            "No price for %s -- every cost this office reports will be $0.0000. "
+            "Add a row to backend/pricing.py once you have checked the "
+            "provider's published rate.", ", ".join(unpriced))
+    return unpriced
