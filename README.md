@@ -103,6 +103,45 @@ Adding an agent is a new JSON file in `backend/agents/` plus a desk in
 
 ---
 
+## MCP
+
+The office speaks Model Context Protocol in both directions.
+
+**Other people's tools, in here.** Copy `backend/mcp_servers.example.json` to
+`backend/mcp_servers.json`, and set `MCP_ENABLED=true`:
+
+```json
+{ "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./backend/data/missions"],
+      "grant_to": ["coder", "data_analyst"]
+    },
+    "docs": { "url": "https://example.com/mcp", "grant_to": ["researcher"] }
+} }
+```
+
+Every tool a server lists is registered as `mcp__<server>__<tool>` and is then
+an ordinary tool: same `tool.called` / `tool.result` events, same timing, and
+the agent walks to the **Integrations Bench** station to use it. `grant_to`
+picks who may call it; omit it and every specialist gets it. A server that will
+not connect is a logged warning — the office still opens.
+
+**This office, out there.** `python -m mcp_server` (from `backend/`) serves
+`run_mission`, `get_mission` and `list_agents` over stdio, so Claude Code or any
+MCP client can drive the harness:
+
+```json
+{ "mcpServers": {
+    "agenthq": { "command": "python", "args": ["-m", "mcp_server"], "cwd": "backend" }
+} }
+```
+
+Both need `pip install -r requirements-dev.txt` (the `mcp` package is imported
+lazily and is not required to run the app).
+
+---
+
 ## Current status
 
 **Working end to end.** Prompt → planned DAG → parallel specialist execution over a

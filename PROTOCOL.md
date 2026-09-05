@@ -28,6 +28,7 @@ exactly as it did — it just stops seeing most of what is happening.
 | Workspace | `artifact.created`, `artifact.delivered` |
 | Spatial runtime | `agent.move`, `agent.arrived`, `station.queued`, `station.acquired`, `station.released` |
 | Memory | `memory.recalled` |
+| Meetings | `agent.argued` |
 
 ---
 
@@ -197,6 +198,38 @@ would look like a measurement while being nothing of the kind.
 
 ---
 
+## Meetings
+
+### `agent.argued`
+
+One attendee's turn at the conference table, before the chair sums up. Fires
+once per attendee per debate round — so a three-person meeting with the default
+`debate_rounds: 1` sends three, in whatever order the concurrent turns finish.
+
+```json
+{ "agent_name": "Charlie", "role": "Data & Metrics Analyst",
+  "position": "Table 2 gives a 40% figure with no source; I would cut it or cite it.",
+  "round": 1, "step_id": "s3", "simulated": false,
+  "model": "gemini/gemini-2.5-flash-lite", "total_tokens": 240, "cost_usd": 0.0002 }
+```
+
+| Field | Means |
+|---|---|
+| `position` | the objection, three sentences at most |
+| `round` | 1-based; only above 1 when `debate_rounds` is raised |
+| `simulated` | **true** when no credential is configured and the turn is the deterministic offline stand-in, not a model's opinion |
+| `total_tokens` / `cost_usd` | what this turn cost, already added to that agent's `token.update` |
+
+Render it as speech: the argument going round the table is the most legible
+multi-agent moment in the product, and it is the one thing a viewer can watch
+that a single-agent system could not produce. `app.js` reuses the existing
+speech bubble rather than introducing a second way of showing an agent talking.
+
+A meeting with no `agent.argued` events had `debate_enabled` off, or no
+attendees.
+
+---
+
 ## Existing events that gained fields
 
 All additive — old readers keep working.
@@ -284,6 +317,8 @@ bug is yours or mine.
 | `otel_enabled` | (default **off**) no OTLP export; needs a collector and the dev-only opentelemetry packages |
 | `contracts_enabled` | artifacts are filed unchecked, as before |
 | `critic_enabled` | no model judges any artifact; contracts still run |
+| `debate_enabled` | attendees sit silent through a meeting and only the chair thinks, as before |
+| `mcp_enabled` | (default **off**) no MCP servers are connected and no `mcp__*` tools exist |
 
 `max_repair_attempts` (1) is the extra dispatches a rejected step may have.
 Setting it to 0 leaves the checks running and the verdicts emitting, and

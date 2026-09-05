@@ -43,6 +43,8 @@ class EventType(str, Enum):
     MEMORY_RECALLED = "memory.recalled"
     # Artifact quality (WP2)
     STEP_CRITIQUED = "step.critiqued"
+    # Meetings that argue (WP6)
+    AGENT_ARGUED = "agent.argued"
 
 
 class DeskPosition(BaseModel):

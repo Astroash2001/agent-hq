@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Set
 
 import contracts
 import critic
+import debate
 import llm
 import pricing
 import runstore
@@ -863,22 +864,24 @@ class Orchestrator:
         task_id: str
     ) -> str:
         """
-        Run a step as a meeting: gather the attendees, let the chair work with
-        the room's own tools, then send everyone back.
+        Run a step as a meeting: gather the attendees, hear their objections,
+        let the chair work with the room's own tools, then send everyone back.
 
         The attendees are held at the table for the whole call, so the office
-        shows a group sitting together rather than one agent at a desk. They do
-        not each run a ReAct loop -- one conversation with everyone's artifacts
-        on the table is the point, and N loops would multiply cost for no more
-        information. What makes it a meeting rather than a solo read is that
-        review_artifacts and record_decision exist only here, and every
-        attendee's work is on the table whether or not the step declared it in
-        `consumes`.
+        shows a group sitting together rather than one agent at a desk. They
+        still do not each run a ReAct loop -- N loops would multiply cost for
+        no more information, which is true of *reading*. It is not true of
+        disagreeing, so each attendee gets exactly one bounded turn to object
+        before the chair sums up (see `debate.py`). What makes it a meeting
+        rather than a solo read is that review_artifacts and record_decision
+        exist only here, that every attendee's work is on the table whether or
+        not the step declared it in `consumes`, and that the room answers back.
         """
         from tools import meeting as meeting_tools
 
-        attendees = [(a, ag.name) for a in step.attendees
-                     if (ag := self._agent_by_id(a)) is not None]
+        attendee_agents = [ag for a in step.attendees
+                           if (ag := self._agent_by_id(a)) is not None]
+        attendees = [(ag.id, ag.name) for ag in attendee_agents]
 
         # Everything filed so far, minus what was already delivered as context.
         on_the_table = [n for n in workspace.names() if n not in (step.consumes or [])]
@@ -905,9 +908,23 @@ class Orchestrator:
             async with office.hold_meeting(
                 "conference_table", attendees, task_id=task_id
             ):
+                # The room speaks first. Inside the `hold_meeting` block, so
+                # every objection is stated by someone who is actually sitting
+                # at the table rather than shouting from their desk.
+                positions = await debate.hold(
+                    attendee_agents,
+                    goal=goal,
+                    step_description=step.description,
+                    room_context=room_context,
+                    task_id=task_id,
+                    step_id=step.id,
+                )
+                floor = debate.render(positions)
+                chair_context = "\n\n".join(
+                    part for part in (brief, room_context, floor) if part)
                 return await chair.run(
                     subtask,
-                    context=f"{brief}\n\n{room_context}" if room_context else brief,
+                    context=chair_context,
                     hints=hints,
                     goal=goal,
                     extra_tools=["review_artifacts", "record_decision"],

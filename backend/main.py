@@ -72,9 +72,25 @@ event_bus.subscribe_all(on_bus_event)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager for startup and shutdown."""
+    """
+    Lifecycle manager for startup and shutdown.
+
+    MCP servers are connected here rather than at import, because connecting is
+    async and because a server that is down must not stop the office opening --
+    `connect_all` logs and moves on, and this guard catches anything it did not.
+    """
     logger.info("AgentHQ Backend Server starting up...")
+    if settings.mcp_enabled:
+        import mcp_client
+        try:
+            await mcp_client.connect_all(orchestrator.agents)
+        except Exception as e:
+            logger.warning(f"MCP startup failed ({type(e).__name__}: {e}); "
+                           f"continuing without integrations")
     yield
+    if settings.mcp_enabled:
+        import mcp_client
+        await mcp_client.shutdown()
     logger.info("AgentHQ Backend Server shutting down...")
 
 

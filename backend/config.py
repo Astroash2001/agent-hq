@@ -118,6 +118,19 @@ class Settings(BaseSettings):
     # it cannot invite more people than the room holds.
     meeting_capacity: int = 4
     planner_temperature: float = 0.1
+
+    # --- debate (WP6) --------------------------------------------------------
+    # Attendees used to sit at the table while only the chair thought. Each one
+    # now gets exactly one turn to object before the chair sums up: one call,
+    # no tools, no ReAct loop, run concurrently because the turns are
+    # independent. Off restores the silent-attendee meeting exactly.
+    debate_enabled: bool = True
+    debate_rounds: int = 1
+    # A per-turn output ceiling, and the reason the round is affordable. An
+    # objection is three sentences; the meeting-wide cost is this times the
+    # number of seats times the number of rounds, which is the arithmetic the
+    # default keeps small.
+    debate_max_tokens: int = 350
     # The planner makes one call and it gates the whole mission, so it gets the
     # same headroom as an agent step. At 20s a thinking model falls back to the
     # keyword buckets before it has finished answering -- which looks exactly
@@ -204,6 +217,18 @@ class Settings(BaseSettings):
     # mission budget on one step. Shared across contract and critic failures,
     # so a step cannot be repaired twice by taking one from each.
     max_repair_attempts: int = 1
+
+    # --- MCP (WP6) -----------------------------------------------------------
+    # Off by default: it needs servers that are not in this repo, and the `mcp`
+    # package is in requirements-dev.txt only and imported lazily, so nothing
+    # about the default install changes. A server that will not connect is a
+    # logged warning, never a failed startup.
+    mcp_enabled: bool = os.getenv("MCP_ENABLED", "false").lower() in ("1", "true", "yes")
+    mcp_config_path: str = os.path.join(os.path.dirname(__file__), "mcp_servers.json")
+    # One MCP tool call. Shorter than llm_timeout on purpose: a tool that has
+    # not answered in half a minute is a tool the agent should route around
+    # while it still has step budget left.
+    mcp_tool_timeout: float = 30.0
 
     # Memory (P6)
     memory_enabled: bool = True

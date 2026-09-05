@@ -626,3 +626,82 @@ an agent that has regressed should not coast on an old record. A window ("last
 episode as fresh; a half-life weights continuously and never discards evidence
 outright. 30 days by default, and an unparseable timestamp weighs 1.0 rather
 than 0 -- an episode with a broken clock is still evidence.
+
+---
+
+## Meetings that argue, and MCP (WP6)
+
+### One turn each, not N ReAct loops
+
+The old `_run_meeting` docstring defended attendees staying silent: N loops
+multiply cost for no more information. That is true of *reading* -- five agents
+reading the same artifacts write five copies of one summary -- and false of
+*disagreeing*. An analyst and a writer looking at the same draft object to
+different things, and neither objection is in the chair's head.
+
+So the round is one bounded call per attendee: no tools, no loop, capped at
+`debate_max_tokens` (350), over a truncated view of the table, at most
+`debate_rounds` (1) times, for at most `meeting_capacity - 1` people. The turns
+are independent by construction, so they run under one `asyncio.gather` and a
+four-person meeting costs one call's wall clock rather than four.
+
+Each turn is its own trace span and is billed to the attendee's own
+`token_usage`, which means the price of the argument lands in the same gauge
+and the same mission budget as the work. A debate that costs more than the step
+it improved should be visible as exactly that, not hidden in an unattributed
+total.
+
+### The debate does not skip without a credential, though the critic does
+
+`critic.py` abstains offline on purpose: a verdict invented by the same
+simulator that wrote the artifact would look like a measurement. An objection is
+not a measurement. It is the most legible thing the office does -- five agents
+at a table taking turns -- and the demo everyone runs first has no key.
+
+So offline turns still happen, are deterministic and derived from the
+attendee's own role, and are tagged `simulated: true` on `agent.argued` and in
+the text handed to the chair. The rule the repo already follows holds: the
+simulator may stand in, but it must never be mistaken for a reading.
+
+### MCP tools are registered, not special-cased
+
+A discovered MCP tool goes into the same `tool_registry` under
+`mcp__<server>__<tool>` and is called through `tool_registry.execute` like any
+other. That is what makes it emit `tool.called` / `tool.result`, be timed, be
+priced, and make the agent walk to a station first. A parallel execution path
+for "remote" tools would have had to reimplement all four, and would have
+drifted from the local one the first time either changed.
+
+The namespace is not decoration: an MCP server offering `read_file` would
+otherwise silently replace this repo's, which is jailed to the workspace.
+
+### The `integrations` station takes a fallback coordinate
+
+Every other station's position comes from `office_layout.json`, exported from
+`office_map.js`, because a second copy of the geometry drifts. This one is not
+in the map: adding it there means editing the tilemap, which this work package
+does not touch. `_station_xy` already falls back to a literal, so the bench sits
+in the open aisle on the east of the bullpen until the map names it -- at which
+point the export takes over with no code change.
+
+Its tool list is also empty at import, because which MCP tools exist is not
+known until the servers answer. `OfficeFloor.bind_tool` fills it in at startup
+and is idempotent, so a reconnect moves a tool rather than duplicating it.
+
+### `mcp` is dev-optional and imported lazily
+
+MCP needs servers that are not in this repo, so `mcp_enabled` defaults to False
+and the package is pinned in `requirements-dev.txt` only, imported inside the
+connect and serve functions. An install without it works; a server that cannot
+be reached, or a package that is not there, is one logged warning and an office
+that opens anyway.
+
+The tests follow the same line. The registration half runs against an
+in-process stub, because a subprocess would be testing the SDK rather than this
+repo. Two tests do use the real package and are skipped without it: one holds
+the declared tool schemas against the ones the SDK derives, and one drives this
+repo's own `mcp_server` over a real stdio subprocess -- which is the only way to
+find out whether the API this code was written against is the one that shipped.
+It was not: `mcp` 2.x replaced the low-level `Server` decorators with
+`MCPServer.add_tool` and renamed the HTTP transport, and that test is what
+caught it.

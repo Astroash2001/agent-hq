@@ -87,6 +87,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 hud.addTerminalLog(`${payload.agent_name || agentId}: "${payload.speech}"`, 'INFO');
                 break;
 
+            // One attendee's turn at the conference table. Reuses the speech
+            // bubble rather than inventing a second way of showing an agent
+            // saying something — the argument going round the table IS the
+            // multi-agent moment, and it should look like talking.
+            case 'agent.argued':
+                {
+                    const said = payload.position || '';
+                    canvas.showSpeech(agentId, said.slice(0, 90));
+                    const tag = payload.simulated ? ' [simulated]' : '';
+                    hud.addTerminalLog(
+                        `${payload.agent_name || agentId} objects${tag}: "${said}"`, 'ANALYSIS');
+                }
+                break;
+
             case 'tool.called':
                 hud.addTerminalLog(`Executing ${payload.tool}(${JSON.stringify(payload.arguments)})`, 'ANALYSIS');
                 break;

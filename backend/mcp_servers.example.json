@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Copy to backend/mcp_servers.json and set MCP_ENABLED=true (or mcp_enabled",
+    "in .env) to load these at startup. Every tool a server lists is registered",
+    "as mcp__<server>__<tool>, bound to the Integrations Bench station, and",
+    "called through the same tool_registry as the built-in tools.",
+    "",
+    "grant_to names the agents allowed to call that server's tools. Omit it and",
+    "every specialist gets them; the boss never does, because it plans rather",
+    "than executes."
+  ],
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "./backend/data/missions"],
+      "grant_to": ["coder", "data_analyst"]
+    },
+    "docs": {
+      "url": "https://example.com/mcp",
+      "headers": {"Authorization": "Bearer ${YOUR_TOKEN}"},
+      "grant_to": ["researcher"]
+    }
+  }
+}

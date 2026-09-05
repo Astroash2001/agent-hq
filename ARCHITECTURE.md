@@ -180,6 +180,41 @@ two lines. The trace endpoint returns raw NDJSON rather than parsed JSON: the
 file is line-delimited precisely so a partially written one is still readable,
 and parsing it server-side would discard that property at the moment it matters.
 
+### `debate.py` — the meeting argues back
+
+Attendees used to sit at the conference table while only the chair thought.
+Each one now takes exactly one turn before the chair sums up: one bounded call,
+no tools, no ReAct loop, asked for the single strongest objection from its own
+specialism. The turns are independent, so they run under one `asyncio.gather`,
+and each is its own trace span charged to that agent's own token usage — the
+price of the argument lands in the same gauge and the same mission budget as
+the work. Every position is emitted as `agent.argued` and rendered as speech.
+
+Bounded by construction: `debate_rounds` (1) × `meeting_capacity - 1` seats ×
+`debate_max_tokens` (350). Without a credential the turns are deterministic
+stand-ins tagged `simulated`, so the offline demo still shows the room arguing.
+
+### `mcp_client.py` — other people's tools
+
+Reads `backend/mcp_servers.json` in the standard `mcpServers` shape (stdio or
+HTTP), lists each server's tools at startup and registers them into the same
+`tool_registry` as `mcp__<server>__<tool>`, bound to the `integrations` station.
+From there they are indistinguishable from built-in tools: same
+`tool.called` / `tool.result` events, same timing, same walk across the office.
+`grant_to` in the config names which agents may call them.
+
+Off by default (`mcp_enabled`), `mcp` imported lazily, and a server that will
+not connect is a logged warning — the office opening matters more than any one
+integration.
+
+### `mcp_server.py` — this office as a tool
+
+The other direction: `run_mission`, `get_mission` and `list_agents` served over
+MCP stdio (`python -m mcp_server`), so Claude Code or any MCP client can drive
+the harness. The three capabilities are plain async functions with the protocol
+wiring built around them, which is what lets the tests call exactly what a
+client would.
+
 ### `contracts.py` — is this artifact usable
 
 Pure functions, no model and no I/O. `infer_spec` derives a bar from the promised

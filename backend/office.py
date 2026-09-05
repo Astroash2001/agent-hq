@@ -104,6 +104,21 @@ STATIONS: List[Station] = [
         description="Where the boss decomposes a goal before dispatching it."
     ),
     Station(
+        id="integrations",
+        # The map does not name this one, so it takes the fallback: the open
+        # aisle on the east side of the bullpen, clear of the desk ranks at
+        # y 9.4 and 13.8 and of the ops console below it. `export_layout.py`
+        # will pick up a real position the moment office_map.js declares one.
+        label="Integrations Bench",
+        x=_station_xy("integrations", (21.0, 16.5))[0],
+        y=_station_xy("integrations", (21.0, 16.5))[1],
+        # Empty at import: which tools live here is not known until the MCP
+        # servers answer, and `bind_tool` fills it in at startup.
+        tools=[],
+        kind="tool",
+        description="Where tools from other people's MCP servers are reached."
+    ),
+    Station(
         id="conference_table",
         label="Conference Room",
         x=_station_xy("conference_table", (11.0, 19.6))[0], y=_station_xy("conference_table", (11.0, 19.6))[1],
@@ -149,6 +164,31 @@ class OfficeFloor:
 
     def position_of(self, agent_id: str) -> Tuple[float, float]:
         return self._positions.get(agent_id, self.seat_of(agent_id))
+
+    def bind_tool(self, tool_name: str, station_id: str) -> bool:
+        """
+        Gate a tool on a station after import.
+
+        Every built-in tool is named in `STATIONS` because they all exist at
+        import time. MCP tools do not: which ones exist is whatever the servers
+        answer with at startup, so they are bound here instead. Re-binding a
+        tool moves it rather than duplicating it, so a reconnect is idempotent.
+        """
+        station = self._stations.get(station_id)
+        if station is None:
+            logger.warning(f"Cannot bind '{tool_name}': no station '{station_id}'")
+            return False
+
+        previous = self._tool_index.get(tool_name)
+        if previous and previous != station_id:
+            old = self._stations.get(previous)
+            if old and tool_name in old.tools:
+                old.tools.remove(tool_name)
+
+        if tool_name not in station.tools:
+            station.tools.append(tool_name)
+        self._tool_index[tool_name] = station_id
+        return True
 
     def station_for_tool(self, tool_name: str) -> Optional[Station]:
         station_id = self._tool_index.get(tool_name)

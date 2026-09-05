@@ -45,6 +45,11 @@ tools/_slices/
 # and its directory when missing, so there is nothing to seed.
 backend/data/
 
+# MCP server definitions. Local configuration -- it names binaries on YOUR
+# machine and can carry an auth header for a remote server. The committed
+# mcp_servers.example.json is the one to copy.
+backend/mcp_servers.json
+
 # =============================================================================
 # Python
 # =============================================================================

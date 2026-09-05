@@ -215,6 +215,45 @@ Two things it measured immediately, both left visible rather than tuned away:
 The quality column is empty until cassettes are recorded, which needs a real key
 and real spend. The scorecard says so in prose rather than printing a number.
 
+### Meetings were a monologue
+
+**Done.** `debate.py` gives every attendee exactly one turn before the chair
+sums up -- one bounded call, no tools, no ReAct loop, run concurrently under a
+single `asyncio.gather` because the turns are independent. Positions are
+emitted as `agent.argued` (see [[PROTOCOL]]), rendered as speech in the office,
+and each turn is its own trace span billed to that attendee's own token usage,
+so the price of the argument sits in the same gauge as the work.
+
+Bounded by `debate_rounds` (1) x `meeting_capacity - 1` seats x
+`debate_max_tokens` (350). `debate_enabled=False` restores the silent-attendee
+meeting exactly, which `test_debate.py` asserts against the chair's context
+string.
+
+Still open: a round is stateless -- attendees see each other's positions only
+from the round before, so with the default of one round nobody replies to
+anybody. Raising `debate_rounds` gets a reply round at a linear cost, and the
+chair still owns the decision either way.
+
+### No MCP
+
+**Done, both directions.** `mcp_client.py` reads `backend/mcp_servers.json`
+(stdio or HTTP), lists each server's tools at startup, and registers them into
+the existing `tool_registry` as `mcp__<server>__<tool>`, bound to a new
+`integrations` station -- so they emit the same events, are timed the same way,
+and the agent walks to the bench to use them. `mcp_server.py` serves this
+office's own `run_mission` / `get_mission` / `list_agents` over stdio, so Claude
+Code or any MCP client can drive the harness. `mcp_servers.example.json` and a
+README section show the config.
+
+Off by default (`mcp_enabled`), `mcp` pinned in `requirements-dev.txt` only and
+imported lazily, and an unreachable server is a logged warning that does not
+block startup.
+
+Still open: `grant_to` is per server, not per tool, so an agent granted a
+server gets everything that server offers. And nothing re-lists tools after
+startup -- a server that gains a tool while the office is running is not seen
+until a restart.
+
 ### Synthesis is string assembly
 
 `_synthesize_results` concatenates Markdown. The "Final Orchestrator Verdict" is a
