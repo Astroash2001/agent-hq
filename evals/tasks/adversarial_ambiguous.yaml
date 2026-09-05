@@ -1,0 +1,20 @@
+# ADVERSARIAL 1 -- an ambiguous goal.
+#
+# There is no correct interpretation of "make it better". What is being measured
+# is that the harness degrades gracefully: it plans something small, completes
+# it, and does not spend five steps and a budget guessing.
+id: adversarial_ambiguous
+goal: "Make it better."
+tags: [adversarial, ambiguous]
+expect:
+  min_steps: 1
+  max_steps: 3
+  artifacts: ["*.md"]
+  rubric:
+    - "The output acknowledges the goal is underspecified rather than inventing a subject"
+    - "It does not fabricate detailed findings about a topic that was never named"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.10
+  max_duration_sec: 120

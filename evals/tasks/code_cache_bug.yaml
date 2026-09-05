@@ -1,0 +1,17 @@
+id: code_cache_bug
+goal: "Implement and test a fast Python fibonacci cache, and verify it with a real run."
+tags: [code, analysis, smoke]
+expect:
+  min_steps: 2
+  max_steps: 5
+  agents_involved: [coder]
+  artifacts: ["*.md"]
+  rubric:
+    - "Contains runnable Python implementing a cache"
+    - "Shows evidence the code was executed or analysed, not just written"
+    - "Explains why the cached version is faster"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.25
+  max_duration_sec: 180

@@ -66,8 +66,36 @@ lacks the tool for it. `validate_plan` does not check that.
 `asyncio.gather` wave, capped by `max_parallel_agents` (3). One agent still runs
 one subtask at a time, held by a per-agent lock.
 
-Still open: the cap is a slice of the ready set, not a semaphore, so a wave of
-five runs 3 then 2 rather than starting the fourth the moment a slot frees.
+**Also done.** The cap is now `asyncio.Semaphore(max_parallel_agents)` held
+around each `_run_step`, and the whole ready set is dispatched rather than a
+slice of it, so the fourth step starts the instant a slot frees. The scheduler
+re-evaluates on every completion (`asyncio.wait(..., FIRST_COMPLETED)`) instead
+of draining a whole wave, so a step also starts the moment its dependencies land
+rather than at the next wave boundary. `orchestrator._peak_active_steps` records
+the high-water mark, which is the only way to assert the cap actually caps -- a
+counter read at rest reads zero however broken the scheduler is.
+
+Steps also gained a deadline (`step_timeout_sec`, 300s) and a retry budget
+(`step_max_attempts`, 2) for transient failures only, classified by
+`llm.is_transient` so there is one classifier rather than two that drift.
+
+### A killed process loses the mission
+
+**Done.** `runstore.py` writes every mission and step transition to a SQLite file
+(stdlib, no service) *before* the matching event is emitted, so there is no
+window in which the UI has been shown a step the store never heard of.
+`POST /api/missions/{id}/resume` picks a killed mission back up: completed steps
+are skipped, their artifacts are read back off disk into the workspace, and
+everything else -- including anything left `running` when the process died --
+runs again.
+
+Verified by killing a real process mid-mission: the store held
+`s1=completed, s2=running, s3=running`, and a fresh process resumed it, skipped
+`s1`, ran `s2`/`s3`/`s4` and finished.
+
+Only `completed` is resumable. A step recorded `running` was in flight when the
+process died -- its outcome is unknown and its artifact may be half written, so
+re-running it is the only safe reading of that state.
 
 ### Subtask results are not fed forward
 
@@ -93,20 +121,138 @@ upstream artifact loses its tail rather than being condensed.
 
 ### Memory is lexical, not semantic
 
-`memory.py` scores similarity by IDF-weighted token overlap. It has no
-dependency and no key, which is why it was chosen, but it cannot tell that
-"speed up the cache" and "optimise memoisation" are the same task. Swapping in
-embeddings means replacing `_similarity` and nothing else.
+**Done.** `embeddings.py` provides `embed()` with two providers -- a
+deterministic hashed bag of words and character trigrams (the default: no key,
+no network, no package, identical across processes) and `litellm` for a real
+embedding model. `memory._similarity` is now a cosine over those vectors, with
+the old IDF-weighted overlap kept as `_lexical_similarity` for when embeddings
+are unavailable. The prediction in the old version of this entry held: nothing
+outside `_similarity` had to change.
 
-Also open: nothing ever marks an episode a failure except an emergency stop, so
-`success_rate` is 1.0 for every agent and rerouting will not fire in practice
-until agent runs can actually fail.
+Measured on the repo's own episodes: "Optimise the caching layer" against
+"Cache optimisation for the checkout service" scores **0.000** lexically -- no
+shared token -- and **0.176** semantically, which is enough to recall the
+episode and fire a `route.changed`. `test_semantic_memory.py` asserts exactly
+that pair, both ways.
+
+Routing is also quality-weighted and time-decayed: `competence` blends the
+success rate with mean critic `quality` (`memory_quality_weight`, 0.4) over the
+episodes something actually scored, and weights each episode by
+`0.5 ** (age_days / memory_half_life_days)`.
+
+**Also done, in WP4:** failures reach memory. `_handle_step_failure` records an
+episode with `outcome="failure"`, so `success_rate` is no longer 1.0 for
+everyone and rerouting has something to fire on.
+
+Still open: hashed n-grams measure *surface* similarity. "Speed up the cache"
+and "optimise memoisation" share no letters and still score 0.0 -- true
+synonymy needs `embedding_provider="litellm"`, which costs a call per uncached
+text. And `competence` scores the step description alone against episodes
+indexed on goal *and* subtask, so the two sides are diluted unevenly; the floor
+was measured with that asymmetry in place rather than corrected for.
 
 ### Token telemetry is estimated on the simulator path
 
-`_simulate_specialist_action` returns hardcoded counts (90–180 prompt, 40–95
-completion). The gauge is honest only when a real LLM is answering. Also
-`max_tokens_budget_per_task` (150000) is defined and broadcast but never enforced.
+**Done.** `llm.acompletion` now returns an `LLMResult` carrying the provider's own
+token counts, the model that actually answered, the attempt count and whether it
+fell back; `pricing.py` costs it at that model's rate instead of two hardcoded
+Gemini-flash constants. `_simulate_specialist_action` still estimates — it has to,
+nothing was called — but every simulated turn is tagged `estimated: true` on
+`token.update` and the mission is tagged `tokens_estimated` on `task.completed`, so
+the gauge can say it is guessing rather than presenting a guess as a reading.
+`max_tokens_budget_per_task` is enforced between waves in `_execute_plan`.
+
+Every mission now also leaves a `trace.jsonl` beside its artifacts and a `per_step`
+cost breakdown in `mission.json`. See `tracing.py` and [[PROTOCOL]].
+
+### `_tokens_spent()` is a lifetime total, not a mission total
+
+`BaseAgent.token_usage` accumulates across every mission the process has served and
+is never reset, so `_tokens_spent()` — which sums it across the roster — climbs
+monotonically. Two consequences, both real:
+
+- `total_tokens` in `mission.json` is the process's running total, not the run's.
+  `mission_tokens` (added with the per-step breakdown) is the correct per-mission
+  figure; `total_tokens` is left alone because the budget gate reads it.
+- The budget gate in `_execute_plan` therefore tightens as a process serves more
+  missions, and a long-lived server will eventually refuse a mission on a budget
+  that a fresh process would pass.
+
+Fix is to scope the counter to the mission rather than the agent, which changes
+what the budget means — deliberately out of scope for the telemetry work that
+found it.
+
+### Steps returned free text that nothing checked
+
+**Done.** `contracts.py` measures every artifact against a spec inferred from its
+promised filename and step description -- empty, the known stub, far under length,
+missing structure or promised sections -- and `critic.py` asks a small model
+whether the work answers its brief. A failure re-dispatches the same step to the
+same agent with the complaint appended, at most `max_repair_attempts` (1) extra
+times, shared across both checkers. A step that exhausts the budget completes
+with `repairing: false` on its `step.critiqued` event rather than failing and
+stranding the DAG behind it.
+
+`_best_artifact` and the "Deliverable:" instruction both remain -- they make a
+good artifact likelier, which is still worth having now that something checks.
+
+### No eval suite
+
+**Done.** `evals/` holds 14 golden tasks across four shapes, a cassette
+record/replay transport that makes a scored run reproducible, an LLM judge that
+scores each rubric line against the artifact files, and a committed
+`scorecard.md` with a regression delta. `python -m evals.runner --suite all
+--replay` runs offline with no key, and `--compare` proves two runs agree:
+verified 14/14 identical.
+
+Two things it measured immediately, both left visible rather than tuned away:
+
+- `heuristic_plan` has no notion of a trivial goal. "What does SSD stand for?"
+  fans out to its full 4-step bucket, so `adversarial_trivial` fails `max_steps`.
+- `adversarial_missing_tool` targets the planner-tool-grants gap below. It is
+  expected to be the weakest row; it is there to be measured, not to pass.
+
+The quality column is empty until cassettes are recorded, which needs a real key
+and real spend. The scorecard says so in prose rather than printing a number.
+
+### Meetings were a monologue
+
+**Done.** `debate.py` gives every attendee exactly one turn before the chair
+sums up -- one bounded call, no tools, no ReAct loop, run concurrently under a
+single `asyncio.gather` because the turns are independent. Positions are
+emitted as `agent.argued` (see [[PROTOCOL]]), rendered as speech in the office,
+and each turn is its own trace span billed to that attendee's own token usage,
+so the price of the argument sits in the same gauge as the work.
+
+Bounded by `debate_rounds` (1) x `meeting_capacity - 1` seats x
+`debate_max_tokens` (350). `debate_enabled=False` restores the silent-attendee
+meeting exactly, which `test_debate.py` asserts against the chair's context
+string.
+
+Still open: a round is stateless -- attendees see each other's positions only
+from the round before, so with the default of one round nobody replies to
+anybody. Raising `debate_rounds` gets a reply round at a linear cost, and the
+chair still owns the decision either way.
+
+### No MCP
+
+**Done, both directions.** `mcp_client.py` reads `backend/mcp_servers.json`
+(stdio or HTTP), lists each server's tools at startup, and registers them into
+the existing `tool_registry` as `mcp__<server>__<tool>`, bound to a new
+`integrations` station -- so they emit the same events, are timed the same way,
+and the agent walks to the bench to use them. `mcp_server.py` serves this
+office's own `run_mission` / `get_mission` / `list_agents` over stdio, so Claude
+Code or any MCP client can drive the harness. `mcp_servers.example.json` and a
+README section show the config.
+
+Off by default (`mcp_enabled`), `mcp` pinned in `requirements-dev.txt` only and
+imported lazily, and an unreachable server is a logged warning that does not
+block startup.
+
+Still open: `grant_to` is per server, not per tool, so an agent granted a
+server gets everything that server offers. And nothing re-lists tools after
+startup -- a server that gains a tool while the office is running is not seen
+until a restart.
 
 ### Synthesis is string assembly
 
@@ -130,9 +276,46 @@ untrusted.
 
 ### `hud.js` handles events `app.js` never sends
 
-`updateActiveDagNode` and `setQueue` exist but nothing calls them — the `dag.update`
-event is emitted by the backend and broadcast, but `app.js`'s switch has no case for
-it. The DAG is computed and sent but never visualised.
+**Done.** `app.js` has cases for `plan.created` and `dag.update`, and `hud.js`
+draws the graph as SVG: ranked by dependency depth, real edges, the owning
+agent's manifest colour as the node fill, status as its ring and glyph, a pulse
+on the running one, and what each finished step cost written under it. A `⇄`
+badge marks a step memory took off the planner's pick and a scored badge marks a
+reviewer's verdict -- red when it was rejected with no repair budget left, which
+otherwise reads exactly like a pass. Both badges live outside the SVG in
+`hud.stepBadges`, because `dag.update` redraws the whole graph on every status
+change.
+
+`updateActiveDagNode` survives as a one-line shim that lights the dock card;
+`setQueue` is gone.
+
+### There was no cost panel and no way to replay a run
+
+**Done.** `dag.update` now carries each finished step's cost, latency and tokens
+plus the mission totals (see [[PROTOCOL]]), so the MISSION COST card shows live
+spend, wall clock, a per-step latency strip and tokens by agent -- every figure
+per-mission, and marked `~est` when it came from the simulator.
+
+`frontend/js/replay.js` drives the office from a past mission's `trace.jsonl`
+instead of the live socket: play, pause, scrub, 1x-8x. Recorded spans are turned
+back into the same events the WebSocket sends and handed to the same
+`handleEvent`, so the renderer is not forked and nothing in `canvas.js` was
+touched. Walks are reconstructed by looking each `tool` span's tool up in
+`/api/office`.
+
+Still open: the trace holds no artifact bodies, so a replayed mission shows the
+work happening but cannot show the briefing -- it says so rather than inventing
+one. And a replay is all-or-nothing: seeking backwards replays from zero rather
+than stepping back, because the office is a state machine with no inverse for
+"the agent walked to the library".
+
+### No hero image
+
+`Preview.png` in the repo root is a third-party asset pack's contact sheet, not a
+screenshot of this project, and nothing references it. The README opens with a
+Mermaid diagram and the scorecard instead. A recording of a mission -- planning,
+fanning out, the DAG lighting up, the cost ticking, the memo landing -- is the
+one thing the README still cannot show, and it needs a browser to capture.
 
 ### Standalone simulation names are hardcoded
 
@@ -173,24 +356,111 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-11 tests pass in `backend/tests/` (`test_phase1..4.py`), covering health, agent
-listing, WebSocket handshake and event flow.
+**270 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+across 21 files: the original phase tests plus telemetry, contracts, the critic,
+the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
+harness and the `dag.update` payload. CI runs the same suite on 3.10 and 3.12,
+with `ruff check` and the eval smoke suite against its cassettes.
 
 **Not covered:**
 
-- Any frontend code — no JS test runner is configured
+- Any frontend code — no JS test runner is configured, and adding one would be
+  the project's first node build step. The DAG panel, the cost panel and the
+  replay driver are verified by hand and by `node --check`, and
+  `tools/check_replay.js` compiles a real `trace.jsonl` through the actual
+  `replay.js` and checks the result against the mission manifest beside it —
+  a hand-run validator in the same spirit as `check_layout.py`.
 - The asset pipeline — `check_layout.py` is a validator run by hand, not a test
-- `_decompose_task` routing branches
-- Tool execution paths beyond the registry surface
+- Tool execution paths beyond the registry surface and the sandbox refusals
 
 ---
 
+### The eval harness could never record a cassette
+
+**Done -- four separate faults, each fatal on its own.** The quality column was
+empty because nothing had ever recorded; nothing had ever recorded because:
+
+1. `run_task` installed the replay dummy key in `record` mode as well, so every
+   recording authenticated as `replay-not-a-real-key` and died on a 400.
+2. `Settings.model_config` used `env_file=".env"`, resolved against the process
+   working directory. `python -m evals.runner` is documented to run from the
+   repo root, where there is no `.env` -- so the harness saw no credential at
+   all, every task fell to the simulator and the judge reported "no model
+   configured". Both env files are now absolute and anchored to `config.py`,
+   `backend/.env` last so a run started from `backend/` is unchanged. The same
+   bug silently affected `python -m mcp_server` from anywhere but `backend/`.
+3. The judgement was taken *outside* the cassette transport, though
+   `judge.py`'s own docstring says it goes through it. A replayed run therefore
+   re-graded live -- money on every replay, and no grade at all in CI.
+4. `memory.render_hints` writes ", took 41.2s" into the hints block, and that
+   number is wall clock, so a step recorded at 41.2s and replayed at 0.9s
+   missed its own cassette. Normalised out of the cassette key, exactly as the
+   date already was; `test_evals.py` pins it.
+
+Fixing (2) had a consequence worth naming: with credentials now visible from
+the repo root, `--replay` began making real calls for tasks that have no
+cassette. The offline promise had been resting on the working directory rather
+than on the code, so `credentials_for` now clears credentials outright in
+simulate mode. Verified: `--suite all --replay` returns all 14 verdicts
+unchanged, offline, in three minutes.
+
+Still open: **the cassettes themselves.** Recording is now possible and was
+proven on `code_cache_bug` (structural 100%, quality 100%, $0.0258, 14
+cassettes), but the account's Gemini quota ran out partway through --
+`gemini-2.5-flash` now silently answers via the `3.5-flash-lite` fallback, and
+a later recording of the same task produced a run where both steps failed. The
+suite is one `--record` sweep away from a filled quality column once quota
+allows; nothing in the code blocks it now.
+
+### The container ran uvicorn's reloader
+
+**Done.** `backend/main.py` passed `reload=True` unconditionally, so the image
+started a reloader over source that cannot change -- and because `watchfiles` is
+deliberately a dev dependency, uvicorn fell back to `StatReload`, stat-polling
+every file in the image. The extra process also makes a crashed app look like a
+restarting one. Reload is now on unless `ENVIRONMENT=production`, which
+`docker-compose.yml` sets; a local `python main.py` is unchanged.
+
+Verified by booting both ways on a runtime-only venv: development logs
+`Started reloader process ... using StatReload`, production logs only
+`Started server process`.
+
 ## Housekeeping
 
-- `frontend/assets/modern_interiors/` still holds the **non-commercial** free pack.
-  Confirm no free-pack sprite survives in the atlas before any commercial use —
-  licence detail in [[STACK]]
-- `furniture/new/` is a byte-identical duplicate of the free pack; safe to delete
-- `tools/_slices/` holds 614 one-off debug crops from earlier sessions
 - `backend/.pytest_cache/` is committed alongside the source
 - `Preview.png` in the project root is unreferenced
+
+---
+
+## Hardening and Sandboxing (WP7)
+
+### Terminal tool allowlist and sandboxing
+
+**Done.** `backend/tools/terminal.py` enforces `settings.terminal_allowed_commands`,
+rejects shell metacharacters before execution, runs with `asyncio.create_subprocess_exec`
+(`shell=False`), jails `cwd` to `settings.jail_root`, scrubs secrets from child
+environments (preserving only `PATH` and `SYSTEMROOT`), caps output at
+`settings.terminal_max_output_chars`, and hard-kills and reaps timed-out children.
+Refusals return structured dictionary payloads with `refused: true`.
+
+### File ops path containment
+
+**Done.** `backend/tools/file_ops.py` (`read_file`, `write_file`, `list_files`)
+enforces containment within `settings.jail_root` (the repository root) or the active
+mission workspace directory. Traversal attacks ('..') and absolute escapes are rejected.
+Unbound writes are jailed to designated data/missions paths.
+
+### API authentication and network hardening
+
+**Done.** `backend/main.py` enforces explicit CORS origin configuration with
+`allow_credentials` disabled when origins is wildcard `["*"]`. Optional shared
+secret token `settings.api_token` gates `POST /api/emergency-stop` and `WS /ws`.
+Per-connection rate limiting throttles rapid `submit_task` WebSocket requests.
+
+### Project shipping artifacts
+
+**Done.** Added `pyproject.toml` (packaging metadata, pytest asyncio mode, ruff),
+`Dockerfile` (non-root `agenthq` user, healthcheck on `/api/health`, minimal runtime),
+`docker-compose.yml`, `.dockerignore`, `LICENSE` (MIT), and GitHub Actions CI workflow
+matrixing Python 3.10 and 3.12 with linting and tests.
+

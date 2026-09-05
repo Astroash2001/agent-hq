@@ -6,7 +6,7 @@
 -r requirements.txt
 
 # --- Tests ------------------------------------------------------------------
-# 32 tests in backend/tests/. httpx is not imported directly -- it is what
+# 227 tests in backend/tests/. httpx is not imported directly -- it is what
 # fastapi.testclient.TestClient is built on, so the suite will not collect
 # without it.
 pytest==9.1.1
@@ -29,3 +29,27 @@ httpx==0.28.1
 pillow==12.1.1
 numpy==1.26.4
 scipy==1.15.3
+
+# --- Optional telemetry export ------------------------------------------------
+# Only needed with OTEL_ENABLED and an OTLP collector to point at. tracing.py
+# imports these lazily, inside the export function, so neither the app nor the
+# test suite needs them installed -- a missing package logs a warning and
+# disables export rather than breaking startup.
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-http==1.29.0
+
+# --- Eval harness -------------------------------------------------------------
+# evals/ reads its task files as YAML. Already present transitively via litellm;
+# pinned here because the eval suite imports it directly.
+PyYAML==6.0.3
+# --- Linting ------------------------------------------------------------------
+# Fast Python linter used in CI.
+ruff==0.9.9
+
+# --- MCP ----------------------------------------------------------------------
+# Only needed with MCP_ENABLED and servers configured in backend/mcp_servers.json,
+# or to run `python -m mcp_server` and let an MCP client drive the harness.
+# mcp_client.py and mcp_server.py import it inside the connect/serve functions,
+# so a missing package is a logged warning and the app starts without it -- the
+# test suite covers both halves against an in-process stub instead.
+mcp==2.1.1

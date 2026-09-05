@@ -22,11 +22,40 @@ import asyncio
 import logging
 import random
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
+import pricing
+import tracing
 from config import settings, llm_route
 
 logger = logging.getLogger(__name__)
+
+
+class LLMResult(NamedTuple):
+    """
+    What one call cost, alongside what it returned.
+
+    This used to return the provider's response and nothing else, so
+    everything the retry loop knew was thrown away at the door: which model in
+    the fallback chain actually answered, how many attempts it took, and what
+    the tokens were worth. The caller then guessed -- `base_agent` defaulted to
+    100/50 tokens when the response had no usage, and priced every model in the
+    roster at Gemini flash rates.
+
+    `response` is the untouched provider object, so a caller that only wants
+    `.choices[0]` reads it exactly as it did before.
+    """
+    response: Any
+    model: str                  # the model that answered, not the one asked for
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+    attempts: int               # 1 when it answered first time
+    fell_back: bool             # True when the primary was exhausted
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
 
 # Retry these: the provider is busy, throttling, or briefly broken.
 _TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
@@ -122,6 +151,23 @@ def retry_after_seconds(exc: Exception) -> Optional[float]:
     return None
 
 
+def _usage_of(response: Any) -> Tuple[int, int]:
+    """
+    Prompt and completion tokens off a provider response, or zeros.
+
+    Every layer here is optional in practice: a response may carry no `usage`
+    at all, carry it as None, or report either count as None. Guessing a number
+    when the provider did not send one is what produced the fiction this module
+    is meant to end, so an unknown count is 0 and says so by being 0.
+    """
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return 0, 0
+    prompt = getattr(usage, "prompt_tokens", None)
+    completion = getattr(usage, "completion_tokens", None)
+    return int(prompt or 0), int(completion or 0)
+
+
 def _backoff(attempt: int) -> float:
     """Exponential with jitter. Jitter matters when a wave of agents is
     rate-limited together -- without it they all come back at the same instant
@@ -139,7 +185,7 @@ async def acompletion(
     max_tokens: Optional[int] = None,
     timeout: Optional[float] = None,
     on_retry=None,
-) -> Any:
+) -> LLMResult:
     """
     Call the model, retrying transient failures and falling back once.
 
@@ -147,8 +193,10 @@ async def acompletion(
     happening -- a mission that pauses 28 seconds for a rate limit should say
     so, not look hung.
 
-    Raises the last exception if every attempt fails, so `llm_strict` still
-    surfaces a genuine misconfiguration instead of it being swallowed here.
+    Returns an `LLMResult`: the provider response on `.response`, plus what the
+    call actually cost. Raises the last exception if every attempt fails, so
+    `llm_strict` still surfaces a genuine misconfiguration instead of it being
+    swallowed here.
     """
     import litellm
     litellm.drop_params = True
@@ -178,7 +226,29 @@ async def acompletion(
                 if tools:
                     kwargs["tools"] = tools
                     kwargs["tool_choice"] = "auto"
-                return await litellm.acompletion(**kwargs)
+
+                async with tracing.span(
+                    "llm", current, attempt=attempt, fell_back=model_index > 0
+                ) as node:
+                    response = await litellm.acompletion(**kwargs)
+                    prompt_tokens, completion_tokens = _usage_of(response)
+                    cost = pricing.price(current, prompt_tokens, completion_tokens)
+                    node.set(
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        total_tokens=prompt_tokens + completion_tokens,
+                        cost_usd=cost,
+                        priced=pricing.is_priced(current),
+                    )
+                    return LLMResult(
+                        response=response,
+                        model=current,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        cost_usd=cost,
+                        attempts=attempt,
+                        fell_back=model_index > 0,
+                    )
 
             except asyncio.CancelledError:
                 # An emergency stop, not a provider failure. Never retry it and

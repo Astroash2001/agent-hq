@@ -22,6 +22,9 @@ Pixel Life - Desk Essentials/
 *.rar
 *.exe
 
+# Staged removal folder
+remove/
+
 # Atlas build inputs. Nothing in frontend/js fetches these -- they are raw
 # material for build_atlas.py. modern_interiors/ here is the NON-COMMERCIAL
 # free pack, whose licence forbids commercial use.
@@ -41,6 +44,11 @@ tools/_slices/
 # Episodic memory, rewritten on every mission. memory.py recreates the file
 # and its directory when missing, so there is nothing to seed.
 backend/data/
+
+# MCP server definitions. Local configuration -- it names binaries on YOUR
+# machine and can carry an auth header for a remote server. The committed
+# mcp_servers.example.json is the one to copy.
+backend/mcp_servers.json
 
 # =============================================================================
 # Python
@@ -77,3 +85,10 @@ desktop.ini
 # The mission directory under backend/data/ is where output belongs.
 backend/*.md
 !backend/README.md
+
+# Eval results are regenerated on every run. The committed baseline
+# (evals/results/baseline_simulator.json) and previous.json are the delta
+# reference and are kept deliberately; ad-hoc runs are not.
+evals/results/*.json
+!evals/results/baseline_simulator.json
+!evals/results/previous.json

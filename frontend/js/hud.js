@@ -48,6 +48,21 @@ class RetroHUD {
         this.agents = new Map();
         this.selectedAgentId = null;
 
+        // Per-step marks that arrive on their own events rather than in the
+        // DAG payload: a reroute (route.changed) and a review verdict
+        // (step.critiqued). Kept here because dag.update redraws the whole
+        // graph from scratch, so a badge painted onto the SVG would be wiped
+        // by the next status change.
+        this.stepBadges = new Map();    // step_id -> { routed, critique }
+
+        // Live mission telemetry, rebuilt from every dag.update.
+        this.cost = {
+            startedAt: 0, costUsd: 0, tokens: 0, estimated: false,
+            steps: [], byAgent: new Map(), running: false,
+        };
+        this.costCard    = document.getElementById('costCard');
+        this._costTimer  = null;
+
         this.atlas = null;              // { size, frames, characters }
 
         this.buildGauge();
@@ -267,7 +282,11 @@ class RetroHUD {
             return;
         }
         this.planCard.style.display = '';
-        if (this.planSource) this.planSource.textContent = source || 'planner';
+        // Remembered as well as displayed: a badge redraw has no `source` of
+        // its own, and re-rendering would otherwise reset the label to
+        // "planner" on a plan the model actually wrote.
+        if (source) this.planSourceValue = source;
+        if (this.planSource) this.planSource.textContent = this.planSourceValue || 'planner';
         this.planNodes = nodes;
 
         this.drawDag(document.getElementById('dagSvg'), nodes, 300);
@@ -367,11 +386,22 @@ class RetroHUD {
         for (const nd of list) {
             const n = nd.raw;
             const st = statusOf(n);
-            const colour = STATUS[st] || STATUS.pending;
+            const statusColour = STATUS[st] || STATUS.pending;
             const meeting = n.kind === 'meeting';
             const who = n.agent_id || n.agent || '';
             const agent = this.agents.get(who);
             const name = agent ? agent.name : who;
+            // Fill says WHO, ring says WHERE IT GOT TO. Status alone left five
+            // identical amber dots in a wave and no way to see that three
+            // different specialists were working; the manifest colour is the
+            // same one the dock card and the name plate already use, so a node
+            // and its desk read as the same agent.
+            //
+            // A step nobody has started yet has no owner worth colouring in,
+            // and drawing it in the agent's colour makes a plan look further
+            // along than it is -- pending stays muted.
+            const colour = (st === 'pending' || !agent || !agent.color)
+                ? statusColour : agent.color;
             const guests = (n.attendees || []).map(g => (this.agents.get(g) || {}).name || g);
             const label = meeting ? 'Meeting' : (nd.id);
             const sub = meeting
@@ -381,13 +411,52 @@ class RetroHUD {
                 : ({ completed: '✔', running: '▶', active: '▶',
                      failed: '✖' }[st] || '·');
 
+            const badge = this.stepBadges.get(nd.id) || {};
+            const spent = [
+                Number.isFinite(n.duration_sec) ? `${n.duration_sec}s` : '',
+                Number.isFinite(n.cost_usd) && n.cost_usd > 0
+                    ? `$${n.cost_usd.toFixed(4)}${n.estimated ? ' ~est' : ''}` : '',
+                Number.isFinite(n.total_tokens) && n.total_tokens
+                    ? `${n.total_tokens} tok` : '',
+            ].filter(Boolean).join(' · ');
+
             const tip = [
                 `${nd.id}${meeting ? ' (meeting)' : ''} — ${sub}`,
                 n.description || '',
                 n.produces ? `produces: ${n.produces}` : '',
                 (n.consumes && n.consumes.length) ? `consumes: ${[].concat(n.consumes).join(', ')}` : '',
                 nd.deps.length ? `after: ${nd.deps.join(', ')}` : '',
+                spent,
+                badge.routed ? `rerouted: ${badge.routed.from} → ${badge.routed.to}` : '',
+                badge.critique ? `reviewed: ${badge.critique.verdict}` +
+                    (badge.critique.score === null ? '' : ` (${Math.round(badge.critique.score * 100)}%)`) +
+                    (badge.critique.reason ? ` — ${badge.critique.reason}` : '') : '',
             ].filter(Boolean).join('\n');
+
+            // Badges ride on the node's shoulders: reroute on the left,
+            // review verdict on the right, so the two never collide and the
+            // eye can find "this step changed hands" without reading a tooltip.
+            let badges = '';
+            if (badge.routed) {
+                badges += `
+                <g class="dag-badge dag-badge-route">
+                  <circle cx="${nd.x - R - 2}" cy="${nd.y - R - 2}" r="7" />
+                  <text x="${nd.x - R - 2}" y="${nd.y - R - 2}"
+                        text-anchor="middle" dominant-baseline="central">⇄</text>
+                </g>`;
+            }
+            if (badge.critique) {
+                const ok = badge.critique.verdict === 'accept';
+                const pct = badge.critique.score === null || badge.critique.score === undefined
+                    ? '?' : String(Math.round(badge.critique.score * 100));
+                badges += `
+                <g class="dag-badge dag-badge-critique" data-verdict="${ok ? 'accept' : 'revise'}"
+                   data-repairing="${badge.critique.repairing ? 'true' : 'false'}">
+                  <circle cx="${nd.x + R + 2}" cy="${nd.y - R - 2}" r="8" />
+                  <text x="${nd.x + R + 2}" y="${nd.y - R - 2}"
+                        text-anchor="middle" dominant-baseline="central">${pct}</text>
+                </g>`;
+            }
 
             dots += `
               <g class="dag-node" data-id="${nd.id}" data-status="${st}"${meeting ? ' data-kind="meeting"' : ''}>
@@ -395,13 +464,16 @@ class RetroHUD {
                 ${meeting ? `<circle class="dag-ring" cx="${nd.x}" cy="${nd.y}" r="${R + 5}"
                      fill="none" stroke="${colour}" />` : ''}
                 <circle class="dag-dot" cx="${nd.x}" cy="${nd.y}" r="${R}"
-                        fill="${colour}" />
+                        fill="${colour}" stroke="${statusColour}" />
                 <text class="dag-glyph" x="${nd.x}" y="${nd.y}"
                       text-anchor="middle" dominant-baseline="central">${glyph}</text>
+                ${badges}
                 <text class="dag-label" x="${nd.x}" y="${nd.y + R + 15}"
                       text-anchor="middle">${this.escapeHtml(label)}</text>
                 <text class="dag-sub" x="${nd.x}" y="${nd.y + R + 27}"
                       text-anchor="middle">${this.escapeHtml(this.clip(sub, 18))}</text>
+                ${spent ? `<text class="dag-spent" x="${nd.x}" y="${nd.y + R + 38}"
+                      text-anchor="middle">${this.escapeHtml(spent)}</text>` : ''}
               </g>`;
         }
 
@@ -453,6 +525,151 @@ class RetroHUD {
     clip(s, n) {
         s = String(s || '');
         return s.length > n ? s.slice(0, n - 1) + '…' : s;
+    }
+
+    /* --- per-step badges -------------------------------------------------- */
+
+    /**
+     * Remember a mark against a step and redraw.
+     *
+     * `dag.update` restates the whole graph on every status change, so these
+     * have to live outside the SVG or the next redraw erases them.
+     */
+    markStep(stepId, patch) {
+        if (!stepId) return;
+        const current = this.stepBadges.get(stepId) || {};
+        this.stepBadges.set(stepId, Object.assign(current, patch));
+        if (this.planNodes && this.planNodes.length) {
+            this.renderPlan(this.planNodes, this.planSourceValue);
+        }
+    }
+
+    /* --- cost and telemetry ----------------------------------------------- */
+
+    /**
+     * Start a mission's meter.
+     *
+     * Called on plan.created. Everything is per-mission: the agents' own token
+     * counters are lifetime totals that never reset, so a panel built on those
+     * would report this run as the sum of every run the process has served.
+     */
+    startMissionMeter() {
+        this.stepBadges.clear();
+        this.cost = {
+            startedAt: Date.now(), costUsd: 0, tokens: 0, estimated: false,
+            steps: [], byAgent: new Map(), running: true,
+        };
+        if (this.costCard) this.costCard.style.display = '';
+        if (this._costTimer) clearInterval(this._costTimer);
+        // Only the clock ticks on its own; everything else is event-driven.
+        this._costTimer = setInterval(() => this.renderElapsed(), 1000);
+        this.renderCost();
+    }
+
+    stopMissionMeter() {
+        this.cost.running = false;
+        if (this._costTimer) { clearInterval(this._costTimer); this._costTimer = null; }
+        this.renderCost();
+    }
+
+    /** Fold one dag.update into the meter. */
+    updateCost(payload = {}) {
+        const nodes = payload.dag || [];
+        if (!this.cost.startedAt) this.startMissionMeter();
+
+        this.cost.costUsd = Number(payload.cost_usd || 0);
+        this.cost.tokens = Number(payload.mission_tokens || 0);
+        this.cost.estimated = Boolean(payload.tokens_estimated);
+
+        this.cost.steps = nodes.map(n => ({
+            id: n.id,
+            agent: n.agent_id || '',
+            status: (n.status || 'pending').toLowerCase(),
+            seconds: Number(n.duration_sec || 0),
+            cost: Number(n.cost_usd || 0),
+            tokens: Number(n.total_tokens || 0),
+        }));
+
+        const byAgent = new Map();
+        for (const step of this.cost.steps) {
+            if (!step.tokens && !step.cost) continue;
+            const prior = byAgent.get(step.agent) || { tokens: 0, cost: 0 };
+            prior.tokens += step.tokens;
+            prior.cost += step.cost;
+            byAgent.set(step.agent, prior);
+        }
+        this.cost.byAgent = byAgent;
+        this.renderCost();
+    }
+
+    renderElapsed() {
+        const el = document.getElementById('costElapsed');
+        if (!el || !this.cost.startedAt) return;
+        const secs = Math.max(0, Math.round((Date.now() - this.cost.startedAt) / 1000));
+        el.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    }
+
+    renderCost() {
+        if (!this.costCard) return;
+        const { costUsd, tokens, estimated, steps, byAgent } = this.cost;
+
+        const total = document.getElementById('costTotal');
+        if (total) {
+            // The tilde is not decoration. On the no-key path the numbers come
+            // from the simulator, and a gauge that prints a guess in the same
+            // type as a reading is worse than one that prints nothing.
+            total.textContent = `$${costUsd.toFixed(4)}${estimated ? ' ~est' : ''}`;
+            total.dataset.estimated = String(estimated);
+        }
+        const tok = document.getElementById('costTokens');
+        if (tok) tok.textContent = `${tokens.toLocaleString()}${estimated ? ' ~' : ''}`;
+
+        const done = steps.filter(s => s.status === 'completed').length;
+        const failed = steps.filter(s => s.status === 'failed').length;
+        const stepsEl = document.getElementById('costSteps');
+        if (stepsEl) {
+            stepsEl.textContent = `${done}/${steps.length}` + (failed ? ` (${failed} failed)` : '');
+            stepsEl.dataset.failed = String(Boolean(failed));
+        }
+        this.renderElapsed();
+
+        // Latency strip: one bar per step, height proportional to the slowest.
+        const strip = document.getElementById('costLatency');
+        if (strip) {
+            const slowest = Math.max(0.001, ...steps.map(s => s.seconds));
+            strip.innerHTML = steps.map(s => {
+                const pct = Math.round((s.seconds / slowest) * 100);
+                const agent = this.agents.get(s.agent);
+                const colour = (s.status === 'pending' || !agent || !agent.color)
+                    ? 'var(--frame-dim)' : agent.color;
+                const tip = `${s.id} — ${agent ? agent.name : s.agent}: ` +
+                            `${s.seconds ? s.seconds + 's' : 'not started'}` +
+                            (s.cost ? `, $${s.cost.toFixed(4)}` : '');
+                return `<span class="cost-bar" data-status="${s.status}"
+                              title="${this.escapeHtml(tip)}"
+                              style="height:${Math.max(4, pct)}%;background:${colour}"></span>`;
+            }).join('');
+        }
+
+        // Tokens by agent, widest first -- who actually spent the mission.
+        const rows = document.getElementById('costAgents');
+        if (rows) {
+            const entries = [...byAgent.entries()].sort((a, b) => b[1].tokens - a[1].tokens);
+            const most = Math.max(1, ...entries.map(([, v]) => v.tokens));
+            rows.innerHTML = entries.map(([id, v]) => {
+                const agent = this.agents.get(id);
+                const colour = (agent && agent.color) || 'var(--amber)';
+                return `
+                  <div class="cost-agent">
+                    <span class="cost-agent-name">${this.escapeHtml(agent ? agent.name : id)}</span>
+                    <span class="cost-agent-track">
+                      <span class="cost-agent-fill"
+                            style="width:${Math.round((v.tokens / most) * 100)}%;background:${colour}"></span>
+                    </span>
+                    <span class="cost-agent-num">${v.tokens.toLocaleString()}</span>
+                  </div>`;
+            }).join('') || '<div class="cost-empty">No step has reported yet.</div>';
+        }
     }
 
     /** Kept for app.js compatibility -- highlights the dock card. */

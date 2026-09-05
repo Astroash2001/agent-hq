@@ -118,6 +118,19 @@ class Settings(BaseSettings):
     # it cannot invite more people than the room holds.
     meeting_capacity: int = 4
     planner_temperature: float = 0.1
+
+    # --- debate (WP6) --------------------------------------------------------
+    # Attendees used to sit at the table while only the chair thought. Each one
+    # now gets exactly one turn to object before the chair sums up: one call,
+    # no tools, no ReAct loop, run concurrently because the turns are
+    # independent. Off restores the silent-attendee meeting exactly.
+    debate_enabled: bool = True
+    debate_rounds: int = 1
+    # A per-turn output ceiling, and the reason the round is affordable. An
+    # objection is three sentences; the meeting-wide cost is this times the
+    # number of seats times the number of rounds, which is the arithmetic the
+    # default keeps small.
+    debate_max_tokens: int = 350
     # The planner makes one call and it gates the whole mission, so it gets the
     # same headroom as an agent step. At 20s a thinking model falls back to the
     # keyword buckets before it has finished answering -- which looks exactly
@@ -146,6 +159,77 @@ class Settings(BaseSettings):
     persist_missions: bool = True
     missions_path: str = os.path.join(os.path.dirname(__file__), "data", "missions")
 
+    # --- telemetry -----------------------------------------------------------
+    # Every mission also leaves a trace.jsonl beside its artifacts: one span per
+    # mission, step, turn, tool call and model call. On by default because it
+    # needs no credential, no service and no extra package -- and because the
+    # numbers it carries (real tokens, real cost, real latency) are the ones the
+    # HUD was previously inventing.
+    tracing_enabled: bool = True
+    # Span attributes are written on every span. Without a ceiling an agent's
+    # reply or a whole search result ends up in the trace, which then costs more
+    # to read than the artifacts it describes.
+    trace_max_attr_chars: int = 400
+    # Optional mirror to an OTLP collector. Off by default: it needs a collector
+    # running somewhere and the opentelemetry packages, which are in
+    # requirements-dev.txt only and imported lazily, so neither is needed to run.
+    otel_enabled: bool = False
+    otel_endpoint: str = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+
+    # --- durable execution (WP4) ---------------------------------------------
+    # Every mission and every step transition is written to a SQLite file before
+    # the matching event is emitted, so a process killed mid-mission leaves a
+    # record of exactly how far it got and can be resumed instead of re-run.
+    # stdlib sqlite3, so this adds no dependency and no service.
+    runstore_enabled: bool = True
+    runstore_path: str = os.path.join(os.path.dirname(__file__), "data", "runs.db")
+    # Ceiling on one step, enforced with asyncio.wait_for. A model that will not
+    # stop, or a station that never frees, used to hang the whole graph behind
+    # it with nothing in the UI to say why. A timeout is recorded as a step
+    # failure -- which matters, because failure recording is what makes the
+    # competence rerouting in memory.py real.
+    step_timeout_sec: float = 300.0
+    # Total attempts at a step whose failure looks transient (llm.is_transient
+    # decides, so there is one classifier rather than two that drift apart). A
+    # step that failed because the agent produced garbage is contracts.py and
+    # critic.py's problem, not a retry candidate, and a step that exhausted
+    # step_timeout_sec has already spent the time budget -- neither is retried.
+    step_max_attempts: int = 2
+
+    # --- artifact quality (WP2) ----------------------------------------------
+    # Steps used to return free text that nothing ever checked, which is why
+    # `_best_artifact` and the "Deliverable:" instruction in _run_step exist --
+    # both make a good artifact likelier, neither verifies one. Contracts are
+    # regex-cheap and always on; the critic costs a model call and is skipped
+    # when no credential is configured.
+    contracts_enabled: bool = True
+    critic_enabled: bool = True
+    # Empty means settings.fallback_model -- the small, cheap one. Criticism
+    # that costs more than the work is not worth having.
+    critic_model: str = ""
+    # The eval suite's rubric grader (evals/judge.py). Fixed and separate from
+    # the models under test: grading a model with itself measures its
+    # self-consistency, not the quality of its output. Empty means
+    # settings.fallback_model.
+    judge_model: str = ""
+    # EXTRA dispatches of a failed step, beyond the first. The cap is the
+    # feature: an unbounded repair loop is how an agent system spends a whole
+    # mission budget on one step. Shared across contract and critic failures,
+    # so a step cannot be repaired twice by taking one from each.
+    max_repair_attempts: int = 1
+
+    # --- MCP (WP6) -----------------------------------------------------------
+    # Off by default: it needs servers that are not in this repo, and the `mcp`
+    # package is in requirements-dev.txt only and imported lazily, so nothing
+    # about the default install changes. A server that will not connect is a
+    # logged warning, never a failed startup.
+    mcp_enabled: bool = os.getenv("MCP_ENABLED", "false").lower() in ("1", "true", "yes")
+    mcp_config_path: str = os.path.join(os.path.dirname(__file__), "mcp_servers.json")
+    # One MCP tool call. Shorter than llm_timeout on purpose: a tool that has
+    # not answered in half a minute is a tool the agent should route around
+    # while it still has step budget left.
+    mcp_tool_timeout: float = 30.0
+
     # Memory (P6)
     memory_enabled: bool = True
     memory_path: str = os.path.join(os.path.dirname(__file__), "data", "memory.json")
@@ -158,12 +242,103 @@ class Settings(BaseSettings):
     # Similarity weight at which a competence score is fully trusted.
     memory_confidence_weight: float = 2.0
 
+    # --- semantic memory (WP5) -----------------------------------------------
+    # "hash" is a deterministic hashed bag of words and character trigrams: no
+    # key, no network, no dependency, identical across processes. "litellm"
+    # uses a real embedding model over the credentials already configured, and
+    # is the only one of the two that understands synonymy. "none" keeps the
+    # old IDF-weighted token overlap. The default is the one that needs
+    # nothing, so a fresh clone behaves the same as it always did.
+    embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "hash")
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "gemini/text-embedding-004")
+    # Buckets in the hashed vector. 256 keeps collisions rare enough at the
+    # 500-episode store cap while staying cheap to cosine over.
+    embedding_dim: int = 256
+    # A whole word is worth more than one of its trigrams, or a long word
+    # would outweigh an exact match on a short one purely by having more
+    # substrings. 1.0 / 0.5 was picked by measuring paraphrase separation
+    # against unrelated text on the episodes already in data/memory.json.
+    embedding_word_weight: float = 1.0
+    embedding_ngram_weight: float = 0.5
+    # Vectors are cached in memory for every provider and written to this file
+    # only for the ones that cost a call -- a hashed vector is 0.17ms of
+    # arithmetic, and persisting 2000 of them is six megabytes of derived JSON
+    # rewritten every time a new episode lands.
+    embedding_cache_path: str = os.path.join(os.path.dirname(__file__), "data", "embeddings.json")
+    embedding_cache_max: int = 2000
+
+    # Similarity below this is not recall, it is noise. The lexical scorer
+    # returned a hard 0.0 for anything with no shared token, so its 0.05
+    # threshold meant "any overlap at all"; a cosine over hashed n-grams always
+    # returns something, so the floor has to be measured rather than assumed.
+    # On this repo's own episodes: unrelated pairs land at 0.00-0.08, a
+    # paraphrase sharing no token at all lands at 0.18, and one sharing a word
+    # or two at 0.38-0.61. 0.15 sits in the gap.
+    memory_similarity_floor: float = 0.15
+    # How much of a competence score is *how well* the work was done rather
+    # than whether it ran. 0 reproduces the old success-rate-only behaviour;
+    # only episodes the critic actually scored contribute, so a store with no
+    # quality data scores exactly as it did before whatever this is set to.
+    memory_quality_weight: float = 0.4
+    # An episode's weight halves every this many days, so an agent that has
+    # improved is not judged forever on its first week. Set very high to
+    # disable decay.
+    memory_half_life_days: float = 30.0
+
     # Paths
     agents_dir: str = os.path.join(os.path.dirname(__file__), "agents")
     workspace_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+    # --- Sandboxing and hardening (WP7) --------------------------------------
+    # The jail root is the repository root (one level up from backend/).
+    # settings.workspace_root resolves to the parent of the repo (agentic AI/),
+    # which would leak sibling projects to any path check. jail_root restricts
+    # path traversal, subprocess cwd, and file operations to this repository.
+    jail_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    # Terminal tool allowlist and execution caps.
+    # Empty list means "refuse everything" rather than "allow everything".
+    # Multi-word commands match on binary + subcommands (e.g., "git status").
+    terminal_sandbox_enabled: bool = True
+    terminal_allowed_commands: list[str] = [
+        "python",
+        "pytest",
+        "git status",
+        "git diff",
+        "git log",
+        "ls",
+        "dir",
+    ]
+    terminal_max_output_chars: int = 5000
+
+    # File ops path containment kill switch.
+    file_ops_sandbox_enabled: bool = True
+
+    # API authentication and network hardening.
+    # When api_token is empty, all endpoints remain open (local dev / no-key demo).
+    # When set, require it on /ws connect and on POST /api/emergency-stop.
+    api_token: str = os.getenv("AGENTHQ_API_TOKEN", "")
+    cors_origins: list[str] = ["http://localhost:8080"]
+
+    # Rate limiting on WebSocket task submissions (seconds between submissions).
+    # 0 or negative disables rate limiting.
+    ws_submit_rate_limit: float = 1.0
+
+    # Both files are absolute and anchored to this module, because a relative
+    # ".env" is resolved against the process's working directory -- and only
+    # `python main.py`, run from backend/, happens to have the right one. Run
+    # the documented way from the repo root, `python -m evals.runner` loaded no
+    # credential at all: every task fell to the simulator, the judge reported
+    # "no model configured", and no cassette could ever be recorded. The same
+    # was true of `python -m mcp_server` from anywhere but backend/.
+    #
+    # backend/.env is listed last because the later file wins, which keeps the
+    # behaviour of a run started from backend/ exactly as it was.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            os.path.join(os.path.dirname(__file__), "..", ".env"),
+            os.path.join(os.path.dirname(__file__), ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore"
     )

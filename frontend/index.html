@@ -84,6 +84,81 @@
                 <div class="dag-legend" id="dagLegend"></div>
             </section>
 
+            <!-- 4. COST & TELEMETRY -- what the mission is actually spending,
+                 while it spends it. Every figure is per-mission: the agents'
+                 own counters are lifetime totals. Hidden until a plan lands. -->
+            <section class="hud-card cost-card" id="costCard" style="display: none;"
+                     aria-label="Mission cost and telemetry">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">💰</span> MISSION COST
+                    </div>
+                    <div class="metric" id="costTotal" data-estimated="false">$0.0000</div>
+                </div>
+
+                <div class="cost-figures">
+                    <div class="cost-figure">
+                        <span class="cost-key">ELAPSED</span>
+                        <span class="cost-val" id="costElapsed">0:00</span>
+                    </div>
+                    <div class="cost-figure">
+                        <span class="cost-key">TOKENS</span>
+                        <span class="cost-val" id="costTokens">0</span>
+                    </div>
+                    <div class="cost-figure">
+                        <span class="cost-key">STEPS</span>
+                        <span class="cost-val" id="costSteps" data-failed="false">0/0</span>
+                    </div>
+                </div>
+
+                <!-- One bar per step, height by wall-clock. The tall one is
+                     where the mission actually went. -->
+                <div class="cost-latency" id="costLatency"
+                     aria-label="Per-step latency"></div>
+                <div class="cost-agents" id="costAgents"></div>
+            </section>
+
+            <!-- 5. TRACE REPLAY -- drive the office from a past mission's
+                 trace.jsonl instead of the live socket. -->
+            <section class="hud-card replay-card" id="replayCard"
+                     aria-label="Trace replay">
+                <div class="hud-card-header">
+                    <div class="card-title-neon">
+                        <span class="header-icon" aria-hidden="true">⏮</span> TRACE REPLAY
+                    </div>
+                    <div class="metric" id="replayClock">—</div>
+                </div>
+
+                <div class="replay-row">
+                    <select id="replayMission" class="replay-select"
+                            aria-label="Mission to replay">
+                        <option value="">Loading missions…</option>
+                    </select>
+                    <button class="hud-icon-btn" id="replayRefreshBtn"
+                            title="Refresh mission list" aria-label="Refresh mission list">⟳</button>
+                </div>
+
+                <div class="replay-row">
+                    <button class="replay-btn" id="replayPlayBtn" disabled>▶ PLAY</button>
+                    <select id="replaySpeed" class="replay-select replay-speed"
+                            aria-label="Replay speed">
+                        <option value="1">1×</option>
+                        <option value="2" selected>2×</option>
+                        <option value="4">4×</option>
+                        <option value="8">8×</option>
+                    </select>
+                    <button class="replay-btn replay-exit" id="replayExitBtn"
+                            style="display:none;">LIVE</button>
+                </div>
+
+                <input type="range" id="replayScrub" class="replay-scrub"
+                       min="0" max="1000" value="0" step="1" disabled
+                       aria-label="Scrub through the trace">
+                <div class="replay-status" id="replayStatus">
+                    Pick a past mission to replay it through the office.
+                </div>
+            </section>
+
             <!-- MISSION OUTPUT -- what the user actually asked for. The goal,
                  the finished report, and every artifact with its real body.
                  Hidden until a mission completes. -->
@@ -141,6 +216,8 @@
     <script src="js/office_map.js"></script>
     <script src="js/canvas.js"></script>
     <script src="js/hud.js"></script>
+    <!-- Before app.js: app.js constructs the replay driver on load. -->
+    <script src="js/replay.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

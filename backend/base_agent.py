@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import llm
+import tracing
 from config import date_context, settings, llm_configured
 from event_bus import event_bus
 from memory import memory
@@ -102,6 +103,14 @@ class BaseAgent:
         start_time = time.time()
         tokens_at_start = self.token_usage.total_tokens
         tools_used: List[str] = []
+
+        # This run's own telemetry, kept separately from the agent's lifetime
+        # totals. `token_usage` accumulates across every mission the process
+        # has served, so it cannot answer "what did this step cost".
+        run = {
+            "prompt_tokens": 0, "completion_tokens": 0, "cost_usd": 0.0,
+            "retries": 0, "fell_back": False, "estimated": False, "model": "",
+        }
         logger.info(f"[{self.name}] Received task: {task.description}")
 
         # 1. Announce starting work
@@ -148,7 +157,8 @@ class BaseAgent:
                     "tokens": self.token_usage.total_tokens - tokens_at_start,
                     "tools_used": tools_used,
                     "steps": step,
-                    "outcome": "failure"
+                    "outcome": "failure",
+                    **run,
                 }
                 return "Task halted by emergency stop."
 
@@ -157,7 +167,17 @@ class BaseAgent:
 
             # Call LLM or fallback simulator
             try:
-                response_data = await self._call_llm(messages, tool_schemas, task)
+                async with tracing.span(
+                    "turn", f"{self.id} turn {step}", agent_id=self.id, step=step
+                ) as turn:
+                    response_data = await self._call_llm(messages, tool_schemas, task)
+                    turn.set(
+                        model=response_data.get("model", ""),
+                        prompt_tokens=response_data.get("prompt_tokens", 0),
+                        completion_tokens=response_data.get("completion_tokens", 0),
+                        cost_usd=response_data.get("cost_usd", 0.0),
+                        estimated=bool(response_data.get("estimated")),
+                    )
             except asyncio.CancelledError:
                 # cancel() aborted the request mid-flight. Loop round so the
                 # check at the top produces the halt result, rather than having
@@ -166,20 +186,50 @@ class BaseAgent:
                     continue
                 raise
 
-            # Update token usage telemetry
-            self.token_usage.prompt_tokens += response_data.get("prompt_tokens", 120)
-            self.token_usage.completion_tokens += response_data.get("completion_tokens", 80)
-            self.token_usage.total_tokens = self.token_usage.prompt_tokens + self.token_usage.completion_tokens
+            # Update token usage telemetry.
+            #
+            # The counts are whatever the provider reported, and 0 when it
+            # reported nothing -- the old defaults of 120/80 meant a response
+            # with no usage block was indistinguishable from a real one. The
+            # simulator still estimates, because it has to, but says so.
+            prompt_tokens = int(response_data.get("prompt_tokens", 0) or 0)
+            completion_tokens = int(response_data.get("completion_tokens", 0) or 0)
+            turn_cost = float(response_data.get("cost_usd", 0.0) or 0.0)
+            estimated = bool(response_data.get("estimated"))
+
+            self.token_usage.prompt_tokens += prompt_tokens
+            self.token_usage.completion_tokens += completion_tokens
+            self.token_usage.total_tokens = (self.token_usage.prompt_tokens
+                                             + self.token_usage.completion_tokens)
+            # Priced by the model that actually answered. This was two hardcoded
+            # Gemini-flash constants applied to the running total, so a mission
+            # on Claude or GPT reported a Gemini bill -- and re-pricing the
+            # lifetime total every turn meant a roster that changed models
+            # mid-run silently re-costed its own history.
             self.token_usage.estimated_cost_usd = round(
-                (self.token_usage.prompt_tokens * 0.00000015) + (self.token_usage.completion_tokens * 0.0000006), 5
-            )
+                self.token_usage.estimated_cost_usd + turn_cost, 6)
+
+            run["prompt_tokens"] += prompt_tokens
+            run["completion_tokens"] += completion_tokens
+            run["cost_usd"] = round(run["cost_usd"] + turn_cost, 6)
+            run["retries"] += max(int(response_data.get("attempts", 1) or 1) - 1, 0)
+            run["fell_back"] = run["fell_back"] or bool(response_data.get("fell_back"))
+            run["estimated"] = run["estimated"] or estimated
+            if response_data.get("model"):
+                run["model"] = response_data["model"]
 
             # Broadcast Token Update
+            payload = self.token_usage.model_dump()
+            # The gauge showed invented numbers on the no-key path and had no
+            # way to say so. `estimated` is what lets the HUD mark the figure
+            # as unmeasured instead of quietly presenting a guess as a reading.
+            payload["estimated"] = estimated
+            payload["model"] = run["model"]
             await event_bus.emit(Event(
                 type=EventType.TOKEN_UPDATE,
                 agent_id=self.id,
                 task_id=task.id,
-                data=self.token_usage.model_dump()
+                data=payload
             ))
 
             content_now = (response_data.get("content") or "").strip()
@@ -251,7 +301,13 @@ class BaseAgent:
                         logger.info("[%s] search cap hit (%d)", self.name, settings.search_max_calls)
                         continue
 
-                async with office.use_tool_station(
+                # The span wraps the walk as well as the call: an agent queued
+                # behind a busy station is waiting, and a trace that started
+                # timing only at tool_registry.execute would report the wait as
+                # zero and the office as faster than it is.
+                async with tracing.span(
+                    "tool", tool_name, agent_id=self.id
+                ) as tool_span, office.use_tool_station(
                     self.id, tool_name, agent_name=self.name, task_id=task.id
                 ) as station:
                     await self.update_status(AgentStatus.TOOL_CALLING, {
@@ -269,6 +325,11 @@ class BaseAgent:
                         arguments=tool_args,
                         agent_id=self.id,
                         task_id=task.id
+                    )
+                    tool_span.set(
+                        station_id=station.id if station else None,
+                        success=bool(isinstance(tool_result, dict)
+                                     and tool_result.get("success", True)),
                     )
 
                 # Feed observation back to context
@@ -305,12 +366,17 @@ class BaseAgent:
             await office.return_to_desk(self.id, agent_name=self.name, task_id=task.id)
 
         duration_sec = time.time() - start_time
+        # `run` carries this call's own tokens, cost, model and retry count.
+        # The orchestrator reads last_run to write the episode and the mission
+        # manifest, so putting the telemetry here is what makes a per-step cost
+        # breakdown possible without a second ledger to keep in step.
         self.last_run = {
             "duration_sec": round(duration_sec, 2),
             "tokens": self.token_usage.total_tokens - tokens_at_start,
             "tools_used": tools_used,
             "steps": step,
-            "outcome": "success"
+            "outcome": "success",
+            **run,
         }
         await self.update_status(AgentStatus.DONE, {"duration_sec": round(duration_sec, 2)})
         await self.speak("Work completed! Delivering output.", task_id=task.id)
@@ -346,11 +412,13 @@ class BaseAgent:
                     )
                 )
                 try:
-                    response = await self._inflight
+                    result = await self._inflight
                 finally:
                     self._inflight = None
 
-                choice = response.choices[0]
+                # `.response` is the untouched provider object; the rest of the
+                # LLMResult is what the call cost and which model answered it.
+                choice = result.response.choices[0]
                 message = choice.message
 
                 tool_calls_extracted = []
@@ -384,8 +452,13 @@ class BaseAgent:
                     "content": content,
                     "thought": content[:60] if content else "Executing tool...",
                     "tool_calls": tool_calls_extracted,
-                    "prompt_tokens": getattr(response.usage, "prompt_tokens", 100),
-                    "completion_tokens": getattr(response.usage, "completion_tokens", 50)
+                    "prompt_tokens": result.prompt_tokens,
+                    "completion_tokens": result.completion_tokens,
+                    "cost_usd": result.cost_usd,
+                    "model": result.model,
+                    "attempts": result.attempts,
+                    "fell_back": result.fell_back,
+                    "estimated": False,
                 }
             except Exception as e:
                 # A credential or routing failure must not masquerade as a
@@ -403,7 +476,15 @@ class BaseAgent:
             t.get("function", {}).get("name")
             for t in (tools or []) if isinstance(t, dict)
         ]
-        return self._simulate_specialist_action(task, messages, [g for g in granted if g])
+        simulated = self._simulate_specialist_action(
+            task, messages, [g for g in granted if g])
+        # Nothing was called, so these counts are invented and the cost is not
+        # zero-because-free but zero-because-unknown. Tagged here rather than in
+        # each branch of the simulator, so every path is flagged including any
+        # added later, and the HUD can mark the gauge as unmeasured.
+        simulated["estimated"] = True
+        simulated["cost_usd"] = 0.0
+        return simulated
 
     def _simulate_specialist_action(
         self,

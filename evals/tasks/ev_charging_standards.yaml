@@ -1,0 +1,20 @@
+# A real handoff: the writing step must consume the research step's artifact,
+# which is what `produces`/`consumes` exists to make real rather than
+# presentational.
+id: ev_charging_standards
+goal: "Research the competing EV charging connector standards, then write a one-page comparison for a fleet buyer."
+tags: [research, synthesis, handoff]
+expect:
+  min_steps: 2
+  max_steps: 5
+  agents_involved: [researcher, creative]
+  artifacts: ["*.md"]
+  rubric:
+    - "Names at least two connector standards and what they are used for"
+    - "Gives a concrete recommendation for a fleet buyer"
+    - "Mentions a regional difference or a transition timeline"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.25
+  max_duration_sec: 180

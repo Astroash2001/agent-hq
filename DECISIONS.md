@@ -229,3 +229,551 @@ seats seven a side and every one of them overlaps the slab.
 `preview_map.py` renders without a browser; Playwright drives real Chromium for the
 full page. Both are scriptable, so a change can be rendered, measured against the
 reference numerically, and compared side by side in one command.
+
+---
+
+## Telemetry
+
+### A pricing table in the repo, not a pricing API
+
+`pricing.py` hardcodes per-1M-token rates. A live pricing endpoint would mean a
+network call on a path that must work with no credentials at all, and a cost
+figure that changes under you between two runs of the same eval — which is the
+opposite of what a scorecard is for. The table is versioned with the code, so a
+number in a committed scorecard can be traced to the rates that produced it.
+
+The cost of that choice is staleness, and it is paid deliberately: a model with no
+row is reported as **unpriced** rather than priced at zero. `price()` returning
+`0.0` is meaningless on its own, so it is always paired with `is_priced()`, and
+`mission.json` names every model it could not price in `unpriced_models`. A total
+that admits what it omitted is worth more than a tidy one that hides it.
+
+### NDJSON appended as spans close, then sorted at the end
+
+`trace.jsonl` is written one line per span, as each span finishes. A single JSON
+document would be unreadable if the process died mid-mission, which is precisely
+the run whose trace you most want. Append order is close order though, and a
+reader wants the run as it happened — so `finalise()` rewrites the file in start
+order once the mission ends. A killed process leaves the file unsorted and fully
+parseable; a finished one leaves it sorted.
+
+Ordering is `(t_start, seq)`, not `t_start` alone. `time.time()` is about 15ms
+granular on Windows, so the steps of a parallel wave are routinely stamped
+identically and a plain sort silently fell back to close order — observed with a
+two-step fan-out written shortest-first. `seq` is a process-monotonic counter
+stamped when the span opens, and it ships in the file so a replay reader can
+reproduce the same order.
+
+### Span parentage in a ContextVar, not in every signature
+
+The alternative was threading a span or trace id through `handle_user_input`,
+`_run_step`, `BaseAgent.run`, `_call_llm`, `tool_registry.execute` and back. A
+`ContextVar` gets the same tree for free, because asyncio copies the context when
+it creates a task: a step span set inside `_run_step` is inherited by every turn
+and tool call that step makes, and the steps `asyncio.gather` runs in one wave get
+independent copies, so they cannot become each other's children.
+
+It also means tracing is genuinely optional. With `tracing_enabled` off, `span()`
+still yields a `Span` object that call sites can set attributes on — it is simply
+never recorded — so not one call site needs an `if`.
+
+### The LLM call returns what it cost, not just what it said
+
+`llm.acompletion` returns an `LLMResult`, with the provider response on
+`.response`. It previously returned the raw response and discarded everything the
+retry loop knew: which model in the fallback chain actually answered, how many
+attempts it took, and what the tokens were worth. The callers then invented the
+missing numbers — `base_agent` defaulted to 100/50 tokens when a response carried
+no usage block, and priced every model in the roster at two hardcoded Gemini flash
+constants, so a mission run on Claude reported a Gemini bill.
+
+An out-parameter (`usage_out={}`) would have avoided changing any call site, and
+was rejected: a future call site can forget to pass it and silently stop being
+counted. A return value cannot be forgotten.
+
+---
+
+## Artifact quality
+
+### Two checkers, not one: a regex layer and a model layer
+
+`contracts.py` is pure and free, so it runs on every artifact and the decision to
+run it is never a decision. It answers "is this the right shape": is it empty, is
+it the known stub, is it far shorter than a deliverable of this kind should be,
+does it have the structure it promised. `critic.py` answers the question regexes
+cannot -- "does this actually do what the step was asked to do" -- and costs a
+model call, so it runs second and only on artifacts that already passed the cheap
+layer. Paying for a judgement on an artifact that is visibly a stub is waste.
+
+The split also means the offline path keeps a real check. Contracts run with no
+credential; the critic does not.
+
+### The critic never judges the simulator
+
+With no key configured there is no judge. The built-in simulator would be grading
+its own output through the same fallback that wrote it, and a verdict produced
+that way looks like a measurement while being nothing of the kind -- which is the
+exact failure the telemetry work was undertaken to stop.
+
+For the same reason a *simulated* step is checked but never re-dispatched. The
+simulator returns the same canned reply to the same input, so a repair spends the
+budget to receive a byte-identical artifact. The verdict is still emitted, so the
+office shows the work was judged and found wanting; only the pointless retry is
+suppressed.
+
+### One shared repair budget, and a rejected step still completes
+
+`max_repair_attempts` (default 1) is the number of EXTRA dispatches a step may
+have, and contract failures and critic revisions draw on the same allowance -- a
+step cannot be repaired twice by taking one from each. An unbounded loop is how
+an agent system spends a whole mission on one step.
+
+When the budget runs out the step **completes** rather than failing. A step that
+failed would strand everything downstream of it in the DAG over what is usually a
+quality problem, not a broken one. The rejection is instead carried in the
+`step.critiqued` event as `repairing: false`, and the UI is told to render that
+case loudly, because a capped repair drawn like an accept is a lie.
+
+### A skipped judgement is never a rejection
+
+Every degenerate path in `critic.py` -- disabled, no key, empty artifact, network
+failure, unparseable reply, a verdict outside the two allowed values -- resolves
+to `accept` with `skipped=True`. The repair loop costs a real dispatch, and
+spending it because a judge misparsed its own JSON is worse than letting ordinary
+work through. `skipped` is kept separate from `verdict` so a caller can tell "was
+judged and passed" from "was never judged".
+
+### Quality is Optional[float], and None means unmeasured
+
+`Episode.quality` defaults to `None`, not to 1.0 or 0.5. Every episode in
+`data/memory.json` predates the field and must still load; and a run with no
+critic genuinely did not measure this. A numeric default would record "perfect"
+for both cases, and the quality-weighted routing that reads this later would be
+weighting invented data.
+
+---
+
+## Evals
+
+### Cassettes over live eval calls
+
+A suite that needs a key cannot run in CI, and one that calls a provider gives a
+different answer every run -- so it measures the provider's mood as much as the
+code. Model exchanges are recorded once and committed, and a scored run replays
+them. `replay.py` monkeypatches the `llm.acompletion` symbol rather than editing
+`llm.py`, because the harness must not know the eval layer exists.
+
+A cassette miss in replay mode is a **hard error naming the key**, never a
+fall-through to the network. A silent fall-through is exactly how a deterministic
+suite turns into a flaky one that nobody trusts and everybody re-runs.
+
+### The cassette key ignores today's date
+
+`config.date_context()` puts `Today's date is <weekday, dd Month yyyy>.` at the
+top of every agent system prompt and the planner's. That is deliberate and
+correct. It also means the request bytes change at every midnight, so a cassette
+recorded yesterday would miss today and the entire suite would go red overnight
+for a change that has nothing to do with the code. The date is normalised out of
+the hash rather than frozen in the harness -- the hash is the eval layer's
+concern, and the harness is not.
+
+### A missing cassette degrades to the simulator, and says so
+
+`--replay` on a fresh clone with no recordings would be a wall of misses. Instead
+the runner falls back to the built-in simulator and labels the row `simulate`,
+with the model column reading `(simulator)` rather than naming a model that was
+never called. Such a row still carries a real structural score -- planning,
+scheduling, the workspace, the spatial runtime and the contract layer all ran --
+but its quality column is `—` and the scorecard states in prose that this is not
+a passing quality score. The alternative, letting an offline run print a number
+in the quality column, would be the same class of lie the telemetry work was
+undertaken to remove.
+
+### Determinism is verdicts, not measurements
+
+`runner.determinism_signature` compares every check's `ok`, the structural score,
+the rubric verdicts, artifacts, steps, cost and span count -- and deliberately
+excludes wall-clock duration and each check's `detail` string. The duration check
+renders the clock into its own text ("10.9s of 120s"), so comparing whole rows
+reported every run as non-deterministic over a number that is supposed to vary.
+A signal that cries wolf on every run is one everybody learns to ignore.
+
+### The judge grades artifacts, never the briefing
+
+`_synthesize_results` is string assembly around a template. Grading its output
+grades the template -- and it would score well on a mission where every
+specialist produced nothing, because the template renders identically either way.
+`judge.py` reads the artifact files and skips `report.md` outright.
+
+Each rubric line is scored independently as pass/partial/fail with a reason,
+rather than as one overall mark. A single "out of ten" is unattributable: you
+cannot tell which requirement it docked points for, so you cannot fix anything
+from it. A criterion the judge omits counts as **fail**, so a truncated reply
+cannot raise its own score by leaving out what it could not satisfy.
+
+---
+
+## Durable execution
+
+### SQLite in the repo, not a service
+
+The run store is one file, written with the stdlib `sqlite3` module. Postgres or
+Redis would add a dependency, a container and a connection string to a project
+whose whole pitch is that it starts with no credentials at all -- to record a
+handful of rows per mission. WAL mode plus one short transaction per write means
+a hard kill leaves a readable database rather than a lock file and a half-written
+page, which matters here far more than throughput ever will.
+
+Every method is failure-tolerant by design: an unwritable store logs once and
+becomes a no-op. Bookkeeping that can take a mission down has turned a durability
+feature into a new way to lose one.
+
+### The database is written before the event is emitted
+
+Not after. If the event goes first, a process killed in the gap has shown the
+user a completed step the store has no record of -- and the resume, reading the
+store, runs that step a second time and overwrites an artifact that was already
+correct. The ordering is the whole contract.
+
+For the same reason only `completed` is resumable. A step recorded `running` was
+in flight when the process died: its outcome is unknown and its artifact may be
+half written, so re-running it is the only safe reading of that state.
+
+### A resume re-uses the stored plan and never re-plans
+
+Re-planning would be a different mission wearing the same id. The artifacts on
+disk were produced against the original graph, and a freshly planned one would
+`consumes` files that no step in it produces. Memory routing is skipped on a
+resume for the same reason -- a step that has already run cannot change hands
+now, and letting the router move a still-pending step mid-mission would silently
+change the graph the completed work was built for.
+
+This is why the plan is written to the store the moment planning finishes rather
+than at the end with everything else.
+
+### The workspace is rehydrated from the artifacts on disk
+
+`MissionWorkspace` is in-memory and dies with the process, but its mirror in
+`data/missions/<id>/` does not. That mirror was built so a finished mission would
+outlive the browser tab; it turns out to be what makes a resume possible at all.
+Without it a resumed step `consumes` an artifact the store has never heard of,
+receives an empty context, and redoes upstream work that is sitting on disk
+beside it. `report.md`, `mission.json` and `trace.jsonl` are skipped -- they are
+records *of* the run, not artifacts *from* it.
+
+### A semaphore, not a slice
+
+`max_parallel_agents` was applied as `ready[:limit]`, which made it a batch size:
+a wave of five ran three, waited for all three to finish, then ran two, leaving
+slots idle whenever one step finished sooner than its neighbours. It is now an
+`asyncio.Semaphore` held around each `_run_step`, with the whole ready set
+dispatched, and the scheduler re-evaluates on every completion rather than
+draining a wave -- so a step starts the moment either a slot frees or its
+dependencies land.
+
+`_peak_active_steps` records the high-water mark, because it is the only honest
+way to assert the cap works. A counter read at rest reads zero however broken the
+scheduler is, and the old slice never exceeded the cap either -- the entire
+difference between the two is *when* the fourth step starts.
+
+### A step deadline is terminal, and is not called a timeout
+
+`step_timeout_sec` (300s) is enforced with `asyncio.wait_for`, and the slot is
+taken *before* the clock starts -- a step queued behind the concurrency cap has
+not begun work, and timing it out for waiting its turn would punish it for the
+scheduler's decision rather than its own.
+
+Exceeding it is **not** retried. The step has already spent the entire time
+budget, and the usual cause -- a model that will not stop -- recurs on the next
+attempt at the same price. The exception is called `StepDeadlineExceeded` rather
+than anything containing "Timeout", because `llm.is_transient` reads that
+substring in a class name as retryable: a name that quietly re-enables the retry
+it was meant to prevent is a trap for whoever edits this next.
+
+Genuine transient failures do get `step_max_attempts` (2), classified by
+`llm.is_transient` rather than a second classifier -- one place decides what
+"worth trying again" means, or the two drift and a 401 starts being retried in
+one of them. A step that failed because the agent produced garbage is
+`contracts.py` and `critic.py`'s problem, not a retry candidate: retrying it just
+buys the same garbage twice.
+
+### Four endpoints in their own router
+
+`api_missions.py` rather than four more handlers in `main.py`. It keeps the
+durable-execution surface in one place, and `main.py` -- which carries every
+other endpoint inline -- takes a two-line include instead of a large hunk in the
+file most likely to be edited by something else at the same time.
+## Sandboxing, hardening, and shipping (WP7)
+
+### `jail_root` rather than `workspace_root` for filesystem containment
+
+`settings.workspace_root` resolved to `os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))` --
+which evaluates to the parent folder of the repository (`agentic AI`), exposing
+every sibling project on disk to any traversal or path check anchored to it.
+
+Rather than quietly redefining `workspace_root` (which might break external expectations),
+we introduced `settings.jail_root`, explicitly set to the repository root
+(`os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))`). All file tools
+(`read_file`, `list_files`), subprocess working directory checks, and symlink
+resolution are jailed strictly to `jail_root` or the active mission directory.
+
+### Basename and subcommand matching for terminal execution
+
+The terminal tool allowlist (`settings.terminal_allowed_commands`) matches on the
+basename of `argv[0]` (with `.exe` stripped and case-folded) plus any defined
+subcommands (e.g. `git status`, `git diff`). Substring matching on the raw command
+string was deliberately rejected: `"rm -rf /"` contains `"git"` in realistic phrasings
+and is trivially circumvented.
+
+Multi-word entries require exact matches on `argv[0]` and `argv[1]`, blocking
+destructive invocations such as `git push --force` while permitting inspection commands
+like `git status`. Shell metacharacters (`;`, `&`, `|`, '`', `$()`, `>`, `<`, newlines)
+are rejected outright before any execution, and processes are spawned directly with
+`asyncio.create_subprocess_exec` (`shell=False`) using a scrubbed environment containing
+only `PATH` and `SYSTEMROOT`. An empty allowlist explicitly refuses all commands.
+
+### Refusals as structured payloads, not raised exceptions
+
+Both `execute_terminal` and `file_ops` return refusals as structured dictionary results
+(`{"success": False, "refused": True, "error": "<reason>"}`) rather than raising
+exceptions. An unhandled exception causes the agent loop to crash or blindly retry
+the same failing call; a structured refusal explaining what was blocked and what is
+allowed lets the LLM agent understand the constraint and route around it.
+
+### Path containment for file operations
+
+`read_file`, `write_file`, and `list_files` enforce strict containment using
+`os.path.realpath` and `os.path.commonpath`. Cross-drive checks on Windows raise
+`ValueError`, which is caught and treated as a refusal. When a mission is active,
+`write_file` is strictly jailed to that mission's workspace directory (`MissionWorkspace.dir`).
+Direct writes without an active mission are restricted to designated data/missions
+scratch directories; arbitrary writes to source trees or system directories are rejected.
+
+### Opt-in API token and CORS hardening
+
+`settings.cors_origins` defaults to `["http://localhost:8080"]`. Setting
+`allow_credentials=True` is restricted to explicit origin lists, avoiding the
+invalid browser configuration of wildcard origin with credentials.
+
+`settings.api_token` provides a single shared secret protecting `POST /api/emergency-stop`
+and `WS /ws`. When unset (empty string), all endpoints remain open to preserve the
+zero-credential local development and demo experience. Additionally, a per-connection
+rate limit (`settings.ws_submit_rate_limit`) throttles rapid `submit_task` WebSocket
+messages.
+
+### MIT license with art pack exclusions
+
+The core harness and server code are licensed under the MIT License. The pixel-art
+source packs and generated tilesets (including Modern Interiors, Modern Office Revamped,
+and LimeZu assets) are commercial/third-party licensed assets and are not covered
+by the MIT license. Source art packs are excluded from version control.
+
+---
+
+## Semantic memory and quality-weighted routing (WP5)
+
+### Hashed embeddings as the default, a real model as an option
+
+The whole backend runs with no credential, and the eval suite replays offline
+from cassettes. An embedding provider that needs a key would have made recall
+the one subsystem that quietly stops working on a fresh clone -- and the
+fallback would have been the lexical scorer it was meant to replace, so the
+feature would be absent exactly where it is hardest to notice.
+
+The default provider is therefore a hashed bag of words and character trigrams.
+The trigrams are the part that earns its place: words alone would only
+reproduce the lexical scorer in vector form, while `^ca cac ach chi hin ing`
+puts `cache`, `caching` and `cache-optimisation` near each other without a
+model. Measured on this repo's own episodes: unrelated pairs 0.00-0.08, a
+paraphrase sharing no token at all 0.18, a paraphrase sharing a word or two
+0.38-0.61. `memory_similarity_floor` (0.15) sits in that gap.
+
+SHA-256 rather than `hash()`, because Python salts string hashing per process:
+a vector built with `hash()` is not comparable to one built in another process,
+which would make a cached vector and a replayed eval both wrong.
+
+The honest limit, stated in the module docstring rather than hidden: hashed
+n-grams measure surface similarity. "Speed up the cache" and "optimise
+memoisation" share no letters and score 0.0. That needs the `litellm` provider,
+which is one setting away and costs a call per uncached text.
+
+### The vector is derived data and is not written to `memory.json`
+
+`Episode.embedding` exists on the model and is filled in lazily, but
+`memory.save()` excludes it. It is reproducible from `tokens`, it already has a
+content-addressed cache, and persisting it would double the size of the store
+to save 0.17ms of arithmetic -- while pinning every episode to whichever
+provider happened to be configured when it was written. For the same reason the
+disk cache in `embeddings.py` is only written for providers that cost a network
+call; a hashed vector is cheaper to recompute than to read back.
+
+### Unscored episodes abstain from the quality term rather than defaulting
+
+`competence` blends a similarity-weighted success rate with mean `quality`, but
+only over episodes the critic actually scored. An unscored episode still counts
+toward the success rate and contributes nothing to the quality average.
+
+The alternative -- treating `quality=None` as some default number -- would mean
+that turning the critic off, or running without a key, silently changes every
+routing decision. As written, a store with no quality data scores exactly as it
+did before the field existed, whatever `memory_quality_weight` is set to.
+
+### Decay by half-life, not by a recency window
+
+An agent that has improved should not be judged forever on its first week, and
+an agent that has regressed should not coast on an old record. A window ("last
+30 days") throws away everything on one side of a line and treats a 29-day-old
+episode as fresh; a half-life weights continuously and never discards evidence
+outright. 30 days by default, and an unparseable timestamp weighs 1.0 rather
+than 0 -- an episode with a broken clock is still evidence.
+
+---
+
+## Meetings that argue, and MCP (WP6)
+
+### One turn each, not N ReAct loops
+
+The old `_run_meeting` docstring defended attendees staying silent: N loops
+multiply cost for no more information. That is true of *reading* -- five agents
+reading the same artifacts write five copies of one summary -- and false of
+*disagreeing*. An analyst and a writer looking at the same draft object to
+different things, and neither objection is in the chair's head.
+
+So the round is one bounded call per attendee: no tools, no loop, capped at
+`debate_max_tokens` (350), over a truncated view of the table, at most
+`debate_rounds` (1) times, for at most `meeting_capacity - 1` people. The turns
+are independent by construction, so they run under one `asyncio.gather` and a
+four-person meeting costs one call's wall clock rather than four.
+
+Each turn is its own trace span and is billed to the attendee's own
+`token_usage`, which means the price of the argument lands in the same gauge
+and the same mission budget as the work. A debate that costs more than the step
+it improved should be visible as exactly that, not hidden in an unattributed
+total.
+
+### The debate does not skip without a credential, though the critic does
+
+`critic.py` abstains offline on purpose: a verdict invented by the same
+simulator that wrote the artifact would look like a measurement. An objection is
+not a measurement. It is the most legible thing the office does -- five agents
+at a table taking turns -- and the demo everyone runs first has no key.
+
+So offline turns still happen, are deterministic and derived from the
+attendee's own role, and are tagged `simulated: true` on `agent.argued` and in
+the text handed to the chair. The rule the repo already follows holds: the
+simulator may stand in, but it must never be mistaken for a reading.
+
+### MCP tools are registered, not special-cased
+
+A discovered MCP tool goes into the same `tool_registry` under
+`mcp__<server>__<tool>` and is called through `tool_registry.execute` like any
+other. That is what makes it emit `tool.called` / `tool.result`, be timed, be
+priced, and make the agent walk to a station first. A parallel execution path
+for "remote" tools would have had to reimplement all four, and would have
+drifted from the local one the first time either changed.
+
+The namespace is not decoration: an MCP server offering `read_file` would
+otherwise silently replace this repo's, which is jailed to the workspace.
+
+### The `integrations` station takes a fallback coordinate
+
+Every other station's position comes from `office_layout.json`, exported from
+`office_map.js`, because a second copy of the geometry drifts. This one is not
+in the map: adding it there means editing the tilemap, which this work package
+does not touch. `_station_xy` already falls back to a literal, so the bench sits
+in the open aisle on the east of the bullpen until the map names it -- at which
+point the export takes over with no code change.
+
+Its tool list is also empty at import, because which MCP tools exist is not
+known until the servers answer. `OfficeFloor.bind_tool` fills it in at startup
+and is idempotent, so a reconnect moves a tool rather than duplicating it.
+
+### `mcp` is dev-optional and imported lazily
+
+MCP needs servers that are not in this repo, so `mcp_enabled` defaults to False
+and the package is pinned in `requirements-dev.txt` only, imported inside the
+connect and serve functions. An install without it works; a server that cannot
+be reached, or a package that is not there, is one logged warning and an office
+that opens anyway.
+
+The tests follow the same line. The registration half runs against an
+in-process stub, because a subprocess would be testing the SDK rather than this
+repo. Two tests do use the real package and are skipped without it: one holds
+the declared tool schemas against the ones the SDK derives, and one drives this
+repo's own `mcp_server` over a real stdio subprocess -- which is the only way to
+find out whether the API this code was written against is the one that shipped.
+It was not: `mcp` 2.x replaced the low-level `Server` decorators with
+`MCPServer.add_tool` and renamed the HTTP transport, and that test is what
+caught it.
+
+---
+
+## The panels, and replay (WP8)
+
+### The node's fill is who, its ring is how far
+
+A DAG drawn only by status is five identical amber dots in a parallel wave, with
+nothing to say that three different specialists are working. The fill is now the
+owning agent's manifest colour -- the same colour its dock card and its name
+plate already use, so a node and a desk read as the same person -- and the status
+lives in the ring, the glyph and the pulse.
+
+A pending step keeps the muted status colour rather than its owner's. Nobody has
+started it, and painting it in an agent's colour makes a plan look further along
+than it is.
+
+### Badges live outside the SVG
+
+`dag.update` fires on every status change and redraws the entire graph, so a
+badge painted onto a node would survive exactly until the next step finished.
+`route.changed` and `step.critiqued` arrive on their own events and are kept in
+`hud.stepBadges`, keyed by step id, and re-applied on every draw.
+
+The one visual decision worth defending: a `revise` verdict with no repair budget
+left is drawn in the same red as a failure. That step *completed*, and drawing it
+like an accept is how a mission that shipped work its reviewer rejected comes to
+look like a clean run.
+
+### The cost panel reads the graph rather than keeping a ledger
+
+Everything the panel shows already exists in `_step_telemetry`, so `dag.update`
+carries it and the panel reads it. The alternative -- a second event, or the HUD
+accumulating its own totals from `token.update` -- gives you two numbers for one
+mission that can disagree, and the one on screen is the one nobody can check.
+
+`token.update` in particular cannot be that source: it carries an agent's
+*lifetime* usage, which climbs across every mission the process has served.
+
+A step that has not run carries no cost field at all rather than `0.0`. "Not
+started" and "cost nothing" are different states, and only one of them is
+information.
+
+### Replay synthesises events; it does not fork the renderer
+
+The office is already an event-driven state machine. Replay compiles recorded
+spans back into the same events the WebSocket sends and hands them to the same
+`handleEvent`, so every panel, every animation and every log line comes out of
+the code path that runs live. A second renderer fed from spans would have been
+easier to write and would have drifted from the real one within a week.
+
+The corollary is that replay can only show what the trace holds. It does not
+invent a briefing, because the briefing lives in the mission directory and a
+record that fills in blanks is a story. Walks are the one thing reconstructed
+rather than replayed -- the trace has no coordinates -- and even that is a
+lookup, not a guess: the `tool` span names the tool, and `/api/office` says which
+station that tool is bound to.
+
+### Seeking backwards replays from zero
+
+There is no inverse for "the agent walked to the library". Rather than keeping
+snapshots of the whole office at every event, a backward seek resets the floor
+and re-fires events up to the target with the walk animations suppressed. It is
+simpler, it is exactly correct, and it is fast because the catch-up does not wait
+for anything.
+
+### The trace records what an attendee said
+
+`debate.py` writes the objection itself into its span, clipped by
+`trace_max_attr_chars` like every other attribute. Without it a replayed meeting
+can show that people spoke but not what they said, which is the only interesting
+thing about a meeting.

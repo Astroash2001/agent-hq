@@ -664,6 +664,156 @@ body { overflow: hidden; }
 .dag-legend span[data-k="running"]   { color: var(--amber-bright); }
 .dag-legend span[data-k="failed"]    { color: #ff7a5c; }
 
+/* Node badges. The fill of a node says who owns it and the ring says how far
+   it got; these two say what HAPPENED to it -- memory took it off the planner's
+   pick (left), and a reviewer scored it (right). Both are drawn from state kept
+   outside the SVG, because dag.update redraws the whole graph on every status
+   change. */
+.dag-badge text {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 700;
+    fill: #14100f;
+    pointer-events: none;
+}
+.dag-badge-route circle { fill: var(--string); stroke: var(--panel); stroke-width: 1.2; }
+.dag-badge-critique circle { stroke: var(--panel); stroke-width: 1.2; }
+.dag-badge-critique[data-verdict="accept"] circle { fill: var(--green-lit); }
+.dag-badge-critique[data-verdict="revise"] circle { fill: #f0a04a; }
+/* Rejected with no repair left: the step completes carrying work its reviewer
+   turned down, which reads as a pass unless it is drawn as a failure. */
+.dag-badge-critique[data-verdict="revise"][data-repairing="false"] circle { fill: #ff7a5c; }
+
+.dag-spent {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    fill: var(--frame);
+    pointer-events: none;
+}
+
+/* --- cost & telemetry -------------------------------------------------- */
+/* Every figure here is per-mission. The agents' own counters are lifetime
+   totals that never reset, so a panel built on those would report this run as
+   the sum of every run the process has served. */
+
+.cost-figures {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.cost-figure {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 6px;
+    background: var(--trough);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+}
+.cost-key {
+    font-family: var(--font-pixel);
+    font-size: 7px;
+    letter-spacing: .5px;
+    color: var(--muted);
+}
+.cost-val {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--amber-bright);
+}
+.cost-val[data-failed="true"] { color: #ff7a5c; }
+/* An estimated total is a guess. It must not be set in the same type as a
+   reading -- the simulator path invents these. */
+.metric[data-estimated="true"] { color: var(--string); font-style: italic; }
+
+.cost-latency {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 42px;
+    padding: 4px 5px;
+    background: var(--trough);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+}
+.cost-bar {
+    flex: 1;
+    min-width: 4px;
+    border-radius: 2px 2px 0 0;
+    opacity: .9;
+    transition: height .25s ease-out;
+}
+.cost-bar[data-status="pending"] { opacity: .35; }
+.cost-bar[data-status="failed"]  { outline: 1px solid #ff7a5c; }
+
+.cost-agents { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.cost-agent {
+    display: grid;
+    grid-template-columns: 56px 1fr 54px;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--cream);
+}
+.cost-agent-name { color: var(--muted); }
+.cost-agent-track {
+    height: 7px;
+    background: var(--trough);
+    border: 1px solid var(--frame-dim);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.cost-agent-fill { display: block; height: 100%; opacity: .85; }
+.cost-agent-num { text-align: right; color: var(--amber); }
+.cost-empty { font-size: 10px; color: var(--muted); padding: 2px; }
+
+/* --- trace replay ------------------------------------------------------ */
+/* The office stops being a live dashboard and becomes a time-travel debugger:
+   the same renderer, driven from a recorded trace.jsonl instead of the socket. */
+
+.replay-card[data-active="true"] { border-color: var(--frame-lit); }
+.replay-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.replay-select {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--cream);
+    background: var(--trough);
+    border: 1px solid var(--frame-dim);
+    border-radius: 4px;
+}
+.replay-speed { flex: 0 0 58px; }
+.replay-btn {
+    padding: 4px 10px;
+    font-family: var(--font-pixel);
+    font-size: 8px;
+    letter-spacing: .5px;
+    color: var(--cream);
+    background: var(--btn-face);
+    border: 1px solid var(--frame);
+    border-radius: 4px;
+    cursor: pointer;
+}
+.replay-btn:hover:not(:disabled) { background: var(--row-selected); color: var(--amber-bright); }
+.replay-btn:disabled { opacity: .4; cursor: default; }
+.replay-exit { color: var(--green-lit); }
+
+.replay-scrub {
+    width: 100%;
+    margin: 2px 0 6px;
+    accent-color: var(--amber);
+}
+.replay-status {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    line-height: 1.35;
+    color: var(--muted);
+}
+
 /* Full-screen graph: the sidebar is too narrow for a wide plan. */
 .dag-overlay {
     position: fixed;

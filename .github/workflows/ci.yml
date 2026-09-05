@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, "wp*" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Lint with ruff
+        run: |
+          ruff check .
+
+      - name: Run tests
+        run: |
+          cd backend && python -m pytest -q
+
+      # The eval suite running here is the whole point of it being real. Replay
+      # mode serves recorded exchanges and never calls a provider, so this needs
+      # no credential and cannot go red because someone's key expired.
+      - name: Run the eval smoke suite
+        run: |
+          python -m evals.runner --suite smoke --replay

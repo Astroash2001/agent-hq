@@ -1,0 +1,19 @@
+# Seeded from task_903fb391. The user asks for a discussion explicitly, so a
+# plan with no meeting step is a planning failure, not a style choice.
+id: approach_standup
+goal: "Research solar panel efficiency, then hold a standup to agree the report's angle before writing it."
+tags: [meeting, synthesis]
+expect:
+  min_steps: 2
+  max_steps: 5
+  requires_meeting: true
+  artifacts: ["*.md"]
+  rubric:
+    - "A meeting artifact records an agreed angle for the report"
+    - "The written report follows the angle that was agreed"
+    - "The research is used rather than restated"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.35
+  max_duration_sec: 240

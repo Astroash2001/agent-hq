@@ -1,0 +1,26 @@
+# ADVERSARIAL 3 -- the obvious agent lacks the tool the goal needs.
+#
+# This targets the gap TODO.md records: the planner sees each agent's role and
+# name, but NOT its tool grants, so it can hand a step to a specialist that
+# physically cannot do it. `creative` holds only write_file and read_file -- it
+# has no terminal and no web_search. A goal that reads like writing but requires
+# execution is the case that exposes it.
+#
+# Expected to be the weakest row on the scorecard. It is here to be measured,
+# not to pass, and if it starts passing that is a real improvement worth seeing.
+id: adversarial_missing_tool
+goal: "Write a short report on how long it takes this machine to sum the numbers 1 to ten million in Python, using a real measured timing."
+tags: [adversarial, tool_routing]
+expect:
+  min_steps: 1
+  max_steps: 4
+  agents_involved: [coder]
+  artifacts: ["*.md"]
+  rubric:
+    - "Contains a timing figure that came from actually running the code"
+    - "The step that needed execution was given to an agent holding the terminal tool"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.20
+  max_duration_sec: 150

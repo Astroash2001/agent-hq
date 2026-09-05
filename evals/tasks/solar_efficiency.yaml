@@ -1,0 +1,18 @@
+# Seeded from a real run: backend/data/missions/task_903fb391.
+id: solar_efficiency
+goal: "Research the current state of solar panel efficiency and summarise where the ceiling is."
+tags: [research, pure_research]
+expect:
+  min_steps: 1
+  max_steps: 4
+  agents_involved: [researcher]
+  artifacts: ["*.md"]
+  rubric:
+    - "Gives a specific efficiency percentage for at least one panel technology"
+    - "Distinguishes laboratory records from commercially available panels"
+    - "Says what limits further improvement"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.20
+  max_duration_sec: 150

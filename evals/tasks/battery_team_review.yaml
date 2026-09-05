@@ -1,0 +1,19 @@
+# Seeded from task_2f4a2b87, which really did produce a meeting step chaired by
+# the orchestrator with s1 and s2 on the table.
+id: battery_team_review
+goal: "Research two competing home battery technologies in parallel, discuss the findings as a team, then write the comparison report."
+tags: [meeting, synthesis, multi_step]
+expect:
+  min_steps: 3
+  max_steps: 5
+  requires_meeting: true
+  artifacts: ["*.md"]
+  rubric:
+    - "The report reflects both technologies, not only one"
+    - "A recorded decision exists and names what the team agreed"
+    - "The final report is consistent with the decision that was recorded"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.35
+  max_duration_sec: 240

@@ -1,0 +1,18 @@
+# Seeded from a real run: backend/data/missions/task_dfa2e629.
+id: solid_state_batteries
+goal: "Research where solid-state batteries stand commercially and what is still blocking mass production."
+tags: [research, pure_research]
+expect:
+  min_steps: 1
+  max_steps: 4
+  agents_involved: [researcher]
+  artifacts: ["*.md"]
+  rubric:
+    - "Names at least one company or consortium working on solid-state cells"
+    - "Identifies a specific technical or manufacturing blocker"
+    - "Distinguishes shipping products from announced roadmaps"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.20
+  max_duration_sec: 150

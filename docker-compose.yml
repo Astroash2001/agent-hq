@@ -1,0 +1,15 @@
+services:
+  agenthq:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/data:/app/backend/data
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      # Turns off uvicorn's reloader, which cannot help inside an image whose
+      # source never changes and which falls back to stat-polling every file in
+      # it -- `watchfiles` is a dev dependency on purpose. See backend/main.py.
+      - ENVIRONMENT=production
+    restart: unless-stopped

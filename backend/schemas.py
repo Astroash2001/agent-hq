@@ -41,6 +41,10 @@ class EventType(str, Enum):
     STATION_RELEASED = "station.released"
     # Memory (P6)
     MEMORY_RECALLED = "memory.recalled"
+    # Artifact quality (WP2)
+    STEP_CRITIQUED = "step.critiqued"
+    # Meetings that argue (WP6)
+    AGENT_ARGUED = "agent.argued"
 
 
 class DeskPosition(BaseModel):
@@ -179,10 +183,26 @@ class Episode(BaseModel):
     goal: str = ""
     subtask: str = ""
     outcome: str = "success"  # success | failure
+    # How good the work was, 0..1, as judged by the critic -- distinct from
+    # `outcome`, which only says whether the step ran. An agent that technically
+    # succeeded badly used to score exactly like one that succeeded well.
+    #
+    # Optional, and None rather than a number, for two reasons: every episode
+    # written before this field existed has no quality signal and must still
+    # load, and a run with no critic (no key, or critic disabled) genuinely did
+    # not measure this. A default of 1.0 would record "perfect" for both.
+    quality: Optional[float] = None
     summary: str = ""
     duration_sec: float = 0.0
     total_tokens: int = 0
     tools_used: List[str] = Field(default_factory=list)
     artifact: str = ""
     tokens: List[str] = Field(default_factory=list, description="Cached lexical index for recall")
+    # Semantic index for recall, filled in lazily by `memory._episode_vector`.
+    # Deliberately not written to data/memory.json: the vector is reproducible
+    # from `tokens` and already lives in the content-addressed embedding cache,
+    # so persisting it here would store the same 256 floats a second time and
+    # pin every episode to whichever provider happened to be configured when it
+    # was recorded. Optional because an episode from an older store has none.
+    embedding: Optional[List[float]] = None
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())

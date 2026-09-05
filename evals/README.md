@@ -1,0 +1,212 @@
+# Evals
+
+A harness without evals is a demo. This is the part that turns "it works" into a
+number you can regress against.
+
+Each task runs through the real `orchestrator.handle_user_input`. Nothing below
+that line is mocked — the planner plans, the DAG schedules, agents walk to
+stations, artifacts move across the workspace, contracts and the critic run. The
+only thing swapped out is the model transport, so what is measured is the harness
+rather than a re-implementation of it.
+
+```bash
+python -m evals.runner --suite all --replay          # the committed scorecard
+python -m evals.runner --suite smoke --replay        # what CI runs
+python -m evals.runner --suite battery_comparison --record   # needs a real key
+python -m evals.runner --suite all --models gemini/gemini-2.5-flash,gpt-4o --repeat 3
+```
+
+`--models` is only meaningful once cassettes exist (or with `--live`). Without
+them every model falls to `simulate` and the sweep compares the simulator with
+itself.
+
+Run from the repo root. `evals/` adds `backend/` to `sys.path` itself, so there is
+nothing to install and no `PYTHONPATH` to set.
+
+---
+
+## What the numbers mean
+
+| Column | What it is | Needs a model? |
+|---|---|---|
+| **structural** | The `expect` block: step count, agents involved, artifacts produced, every step completed, budgets respected, no stub markers in the output | No |
+| **quality** | The `rubric`, scored per criterion by `judge.py` against the **artifact files** | Yes |
+| **cost** | Real USD from `mission.json`, priced by `backend/pricing.py` at the model that actually answered | — |
+| **p50 latency** | Median wall clock across repeats | — |
+| **pass@k** | Runs with no error and no structural failure, over runs attempted | — |
+
+**Structural is the load-bearing number.** It is deterministic, needs no
+credential, and cannot be talked into a good mood. Quality is the more
+interesting one and the less trustworthy one; read them together.
+
+### The judge grades artifacts, never the briefing
+
+`orchestrator._synthesize_results` is string assembly around a template —
+headings, emoji, a per-step table. Grading its output grades the template, and it
+would score well on a mission where every specialist produced nothing, because
+the template renders identically either way. `judge.py` reads the artifact files
+out of the mission directory and skips `report.md` entirely.
+
+Each rubric line is scored independently as `pass` / `partial` / `fail` with a
+one-sentence reason, rather than asking for one overall mark. A single "how good
+was this out of ten" is unattributable — you cannot tell which requirement it
+docked points for, so you cannot fix anything from it. A criterion the judge
+fails to return at all counts as **fail**, so a truncated reply cannot raise a
+score by omitting what it could not satisfy.
+
+---
+
+## The three modes
+
+| Mode | What happens | Deterministic? |
+|---|---|---|
+| `--replay` (default) | Model exchanges served from `cassettes/`. A miss is a hard error naming the key it wanted — **never** a live call | Yes |
+| `--record` | Calls the real provider and writes cassettes. Needs a key and spends money | No |
+| `--live` | Calls the provider without recording. For poking at a change before committing to a recording | No |
+| *(automatic)* `simulate` | No cassettes exist for a task, so the run falls to the harness's built-in simulator | Yes |
+
+### Why `simulate` exists
+
+`--replay` on a task with no recording would be a wall of cassette misses on a
+fresh clone, so the runner falls back to the simulator and **labels the row
+`simulate`**. That run is still a real end-to-end exercise of planning,
+scheduling, the workspace, the spatial runtime and the contract layer — it simply
+cannot be scored on content, so `quality` shows `—` and the scorecard says why.
+
+A `simulate` row is not a passing quality score and must never be read as one.
+To get a real quality column, record cassettes with a key and commit them.
+
+### Why a cassette miss is fatal
+
+A silent fall-through to the network is how a deterministic suite turns into a
+flaky one that nobody trusts and everybody re-runs. The error names the exact
+key and the command that would re-record it.
+
+### Why the date is hashed out
+
+`config.date_context()` prepends `Today's date is <weekday, dd Month yyyy>.` to
+every agent system prompt and to the planner's. That is deliberate and correct —
+a model asked about the news has no idea what day it is — but it means the
+request bytes change at every midnight. `replay.cassette_key` normalises the date
+line out before hashing, so a cassette recorded yesterday still serves today.
+Without it the whole suite would go red overnight for no reason at all.
+
+### Proving it is deterministic
+
+```bash
+python -m evals.runner --suite all --replay --out evals/results/a.json
+python -m evals.runner --suite all --replay --out evals/results/b.json
+python -m evals.runner --compare evals/results/a.json evals/results/b.json
+```
+
+```
+compared 14 task(s): 14 identical, 0 drifted
+DETERMINISTIC
+```
+
+Determinism here means **verdicts, not measurements**. Every check's `ok`, every
+structural score, every rubric verdict, the artifacts, the step count, the cost
+and the span count must be identical. Wall-clock duration is excluded, and so is
+the `detail` text of each check — the duration check renders the clock into its
+own string (`"10.9s of 120s"`), and comparing that reported every single run as
+non-deterministic over a number that is *supposed* to vary. A signal that cries
+wolf on every run is a signal everyone learns to ignore.
+
+---
+
+## The suite must not train what it measures
+
+`memory.record` writes an episode after every step, and `memory.suggest_agent`
+reroutes future steps based on that history. A suite that ran against the real
+store would change the routing it is trying to measure, and the second run of a
+task would not be the first.
+
+`runner.isolated_state` redirects `settings.memory_path` **and** the live
+`memory` singleton (which binds its path at import, so moving the setting alone
+is not enough) to a scratch file, along with `settings.missions_path`, and
+restores both afterwards — including when a task raises.
+
+It also sets `llm_strict=True` for the duration: a failed model call must surface
+as a failed task, not slide quietly onto the simulator and get scored as though a
+model answered.
+
+---
+
+## The tasks
+
+14 files in `tasks/`, across four shapes. Four are seeded from real prior runs in
+`backend/data/missions/`, so the golden set reflects usage rather than
+invention — `battery_comparison` from `task_2f4a2b87`, `solar_efficiency` from
+`task_903fb391`, `solid_state_batteries` from `task_dfa2e629`, `india_news_brief`
+from `task_00ffebf4`.
+
+| Shape | Tasks |
+|---|---|
+| Pure research | `solar_efficiency`, `solid_state_batteries` |
+| Research → synthesis with a real handoff | `heat_pump_handoff`, `ev_charging_standards`, `grid_storage_tradeoffs`, `battery_comparison`, `india_news_brief` |
+| Code analysis and a fix | `code_cache_bug`, `code_review_fix` |
+| Requires a meeting step | `battery_team_review`, `approach_standup` |
+| Deliberately adversarial | `adversarial_ambiguous`, `adversarial_trivial`, `adversarial_missing_tool` |
+
+### The adversarial three are meant to hurt
+
+- **`adversarial_ambiguous`** — "Make it better." There is no correct
+  interpretation. What is measured is graceful degradation: plan something
+  small, finish it, do not spend a budget guessing at a subject nobody named.
+- **`adversarial_trivial`** — "What does SSD stand for?" should be a one-step
+  plan. `max_steps: 2` catches a harness that fans a definition out to four
+  specialists to look busy. **This currently fails on the offline path**:
+  `heuristic_plan` has no notion of a trivial goal and always emits its full
+  bucket, so the row reads 4 steps against a cap of 2. That is a real finding,
+  left visible rather than tuned away.
+- **`adversarial_missing_tool`** — targets the gap `TODO.md` records: the planner
+  is shown each agent's role, name and history, but **not its tool grants**, so
+  it can hand a step to a specialist that physically cannot do it. `creative`
+  holds only `write_file` and `read_file` — no terminal, no search. A goal that
+  reads like writing but requires execution is what exposes it. Expected to be
+  the weakest row on the scorecard; it is here to be measured, not to pass.
+
+### Adding a task
+
+One YAML file in `tasks/`. The id is the filename.
+
+```yaml
+id: battery_comparison
+goal: "Compare sodium-ion and lithium-ion home batteries and recommend one."
+tags: [research, synthesis, multi_step, smoke]   # `smoke` puts it in the CI suite
+expect:
+  min_steps: 3
+  max_steps: 5
+  agents_involved: [researcher, creative]
+  artifacts: ["*report*.md"]        # fnmatch against what the mission produced
+  requires_meeting: false           # optional
+  rubric:
+    - "Names at least two specific battery chemistries with figures"
+    - "States a recommendation with a stated reason"
+  must_not:
+    - "Contains placeholder text or a stub completion message"
+budget:
+  max_cost_usd: 0.25
+  max_duration_sec: 180
+```
+
+`must_not` is checked as a literal scan of the artifacts against
+`contracts.STUB_PATTERNS`, not delegated to the judge. "Contains no placeholder
+text" is a fact about the bytes, and a fact should not be decided by a model call
+that might be having an off day.
+
+---
+
+## Output
+
+- `results/<timestamp>_<model>.json` — every row, every check, every rubric line
+  with the judge's reason. This is the artifact to diff when a score moves.
+- `scorecard.md` — committed, regenerated, human-readable. Carries a delta against
+  the previous run and lists every task that changed verdict.
+- `results/previous.json` — the baseline the next delta is computed against.
+
+Regenerate a scorecard from an existing results file without re-running:
+
+```bash
+python -m evals.report evals/results/run_a.json
+```

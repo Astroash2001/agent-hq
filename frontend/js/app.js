@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let socket = null;
     let reconnectAttempts = 0;
+    // Built after handleEvent is hoisted; the driver feeds recorded events
+    // into exactly the same function the socket does.
+    let replay = null;
 
     const promptForm = document.getElementById('promptForm');
     const promptInput = document.getElementById('promptInput');
@@ -45,10 +48,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 2. Handle Real-Time Events
-    function handleEvent(event) {
+    //
+    // `opts.replay` marks an event synthesised from a recorded trace rather
+    // than received from the socket, and `opts.silent` marks one being caught
+    // up after a scrub — real, but not worth animating a two-second walk for.
+    // Everything else in here is the same path either way, which is the point:
+    // replay drives the office through the live renderer instead of a second
+    // one that would drift.
+    function handleEvent(event, opts = {}) {
         const type = event.type;
         const agentId = event.agent_id;
         const payload = event.data || {};
+
+        // A loaded replay owns the office. Live events would interleave with
+        // recorded ones and the floor would show two missions at once.
+        if (replay && replay.active && !opts.replay) {
+            if (type !== 'system.status') return;
+        }
         // The mission id lives on the ENVELOPE, not in data: task.completed
         // carries only {result, artifacts, duration_seconds, ...}.
         const taskId = event.task_id;
@@ -85,6 +101,20 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'agent.speaking':
                 canvas.showSpeech(agentId, payload.speech);
                 hud.addTerminalLog(`${payload.agent_name || agentId}: "${payload.speech}"`, 'INFO');
+                break;
+
+            // One attendee's turn at the conference table. Reuses the speech
+            // bubble rather than inventing a second way of showing an agent
+            // saying something — the argument going round the table IS the
+            // multi-agent moment, and it should look like talking.
+            case 'agent.argued':
+                {
+                    const said = payload.position || '';
+                    canvas.showSpeech(agentId, said.slice(0, 90));
+                    const tag = payload.simulated ? ' [simulated]' : '';
+                    hud.addTerminalLog(
+                        `${payload.agent_name || agentId} objects${tag}: "${said}"`, 'ANALYSIS');
+                }
                 break;
 
             case 'tool.called':
@@ -126,8 +156,11 @@ document.addEventListener('DOMContentLoaded', () => {
             // tool will run. These two are what make the office show that.
             case 'agent.move':
                 if (payload.to) {
-                    canvas.walkAgentTo(agentId, payload.to.x, payload.to.y,
-                                       payload.label ? `to the ${payload.label}` : null);
+                    // A scrub lands the agent where it ended up; walking it
+                    // there would take seconds the viewer just skipped past.
+                    if (opts.silent) canvas.agentArrived(agentId, payload.to.x, payload.to.y);
+                    else canvas.walkAgentTo(agentId, payload.to.x, payload.to.y,
+                                            payload.label ? `to the ${payload.label}` : null);
                     hud.addTerminalLog(
                         `${payload.agent_name || agentId} → ${payload.label || 'station'}`, 'INFO');
                 }
@@ -159,6 +192,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // just redraw the panel.
             case 'plan.created':
                 hud.setMissionGoal(payload.goal);
+                // A new plan is a new meter: badges, cost and the clock all
+                // belong to one mission and none of them carry over.
+                hud.startMissionMeter();
                 hud.renderPlan(payload.steps || [], payload.source);
                 hud.addTerminalLog(
                     `Plan: ${(payload.steps || []).length} steps (${payload.source || 'planner'})`,
@@ -167,12 +203,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             case 'dag.update':
                 hud.renderPlan(payload.dag || [], payload.source);
+                // The same event now carries what each finished step cost, so
+                // the cost panel reads the graph rather than keeping its own
+                // ledger that could disagree with it.
+                hud.updateCost(payload);
                 break;
 
             case 'route.changed':
                 hud.addTerminalLog(
                     `Rerouted ${payload.step_id || 'step'} → ${payload.to_agent_name || payload.to_agent || '?'}`,
                     'ANALYSIS');
+                // Memory overrode the planner. That is the office learning, and
+                // it is invisible unless the node it happened to says so.
+                hud.markStep(payload.step_id, {
+                    routed: {
+                        from: payload.from_agent_name || payload.from_agent_id || '?',
+                        to: payload.to_agent_name || payload.to_agent_id || '?',
+                    }
+                });
                 break;
 
             // ---- work passed between agents --------------------------------
@@ -199,6 +247,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
 
+            // An artifact was checked before anything downstream read it.
+            // {step_id, verdict, score, reasons[], attempt, source, repairing}
+            case 'step.critiqued':
+                {
+                    const accepted = payload.verdict === 'accept';
+                    const score = (payload.score === null || payload.score === undefined)
+                        ? '' : ` (${Math.round(payload.score * 100)}%)`;
+                    const why = (payload.reasons && payload.reasons.length)
+                        ? ` — ${payload.reasons[0]}` : '';
+                    // A rejected step that is NOT being repaired has spent its
+                    // budget and completes anyway. That reads as an accept
+                    // unless it is called out, so it is logged as an error.
+                    const level = accepted ? 'SUCCESS' : (payload.repairing ? 'ANALYSIS' : 'ERROR');
+                    const verb = accepted
+                        ? 'accepted'
+                        : (payload.repairing ? 'sent back for revision' : 'rejected, no retries left');
+                    hud.addTerminalLog(
+                        `${payload.step_id} ${verb}${score} by ${payload.source}${why}`,
+                        level);
+                    // The verdict rides on the node it judged. A capped repair
+                    // -- rejected, but completing anyway -- is the case worth
+                    // seeing on the graph rather than only in the log.
+                    hud.markStep(payload.step_id, {
+                        critique: {
+                            verdict: payload.verdict,
+                            score: (payload.score === undefined ? null : payload.score),
+                            repairing: Boolean(payload.repairing),
+                            reason: (payload.reasons && payload.reasons[0]) || '',
+                        }
+                    });
+                    canvas.showSpeech(
+                        agentId,
+                        accepted ? `Work accepted${score}` : 'Reviewer wants changes');
+                }
+                break;
+
             case 'task.completed':
                 // A mission reaches this event whatever its steps did. Calling a
                 // run where everything failed a SUCCESS is how a rate-limited
@@ -211,6 +295,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             ? `Task ended in ${payload.duration_seconds}s — ${done} step(s) completed, ${failed} failed`
                             : `Task completed in ${payload.duration_seconds}s`,
                         failed ? 'ERROR' : 'SUCCESS');
+                }
+                hud.stopMissionMeter();
+                // A replayed mission has no report to show: the briefing lives
+                // in the mission directory, not in the trace, and inventing one
+                // is exactly what a record must not do.
+                if (payload.replay) {
+                    hud.addTerminalLog(
+                        'Replay finished. The briefing itself is in the mission directory.',
+                        'INFO');
+                    break;
                 }
                 // The whole payload, not just the text: `artifacts` carries the
                 // produced files and their bodies for the FILES tab.
@@ -291,6 +385,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 `- **Eve (Synthesis)**: Report compiled and verified.\n\n` +
                 `*Status: 100% Operational & Verified.*`);
         }, 6000);
+    }
+
+    // The replay driver. Constructed before the socket so a trace loaded
+    // straight away is already holding the floor when the first live event
+    // arrives.
+    if (window.TraceReplay) {
+        replay = new TraceReplay((event, opts) => handleEvent(event, opts));
+        window.traceReplay = replay;
     }
 
     // Try initial connection
