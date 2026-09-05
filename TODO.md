@@ -121,14 +121,35 @@ upstream artifact loses its tail rather than being condensed.
 
 ### Memory is lexical, not semantic
 
-`memory.py` scores similarity by IDF-weighted token overlap. It has no
-dependency and no key, which is why it was chosen, but it cannot tell that
-"speed up the cache" and "optimise memoisation" are the same task. Swapping in
-embeddings means replacing `_similarity` and nothing else.
+**Done.** `embeddings.py` provides `embed()` with two providers -- a
+deterministic hashed bag of words and character trigrams (the default: no key,
+no network, no package, identical across processes) and `litellm` for a real
+embedding model. `memory._similarity` is now a cosine over those vectors, with
+the old IDF-weighted overlap kept as `_lexical_similarity` for when embeddings
+are unavailable. The prediction in the old version of this entry held: nothing
+outside `_similarity` had to change.
 
-Also open: nothing ever marks an episode a failure except an emergency stop, so
-`success_rate` is 1.0 for every agent and rerouting will not fire in practice
-until agent runs can actually fail.
+Measured on the repo's own episodes: "Optimise the caching layer" against
+"Cache optimisation for the checkout service" scores **0.000** lexically -- no
+shared token -- and **0.176** semantically, which is enough to recall the
+episode and fire a `route.changed`. `test_semantic_memory.py` asserts exactly
+that pair, both ways.
+
+Routing is also quality-weighted and time-decayed: `competence` blends the
+success rate with mean critic `quality` (`memory_quality_weight`, 0.4) over the
+episodes something actually scored, and weights each episode by
+`0.5 ** (age_days / memory_half_life_days)`.
+
+**Also done, in WP4:** failures reach memory. `_handle_step_failure` records an
+episode with `outcome="failure"`, so `success_rate` is no longer 1.0 for
+everyone and rerouting has something to fire on.
+
+Still open: hashed n-grams measure *surface* similarity. "Speed up the cache"
+and "optimise memoisation" share no letters and still score 0.0 -- true
+synonymy needs `embedding_provider="litellm"`, which costs a call per uncached
+text. And `competence` scores the step description alone against episodes
+indexed on goal *and* subtask, so the two sides are diluted unevenly; the floor
+was measured with that asymmetry in place rather than corrected for.
 
 ### Token telemetry is estimated on the simulator path
 

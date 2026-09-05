@@ -13,11 +13,22 @@ record.
    measurably better at this kind of work. Routing stops being a fixed mapping
    and starts being something the office learns.
 
-Similarity is lexical -- token overlap weighted by inverse document frequency.
-That is deliberately unglamorous: it needs no embedding model, no extra
-dependency and no API key, which keeps the "runs with nothing installed"
-property the rest of the backend has. Swapping in embeddings later means
-replacing `_similarity` and nothing else.
+Similarity used to be lexical -- token overlap weighted by inverse document
+frequency -- which could not tell that "optimise the caching layer" and "cache
+optimisation" are the same task: they share no token, so the score was exactly
+0.0. It is now a cosine over embeddings (see `embeddings.py`), with that
+lexical scorer kept as the fallback for when embeddings are unavailable. The
+promise made when the lexical version was written held: `_similarity` was the
+only thing that had to change.
+
+The default embedding provider is the hashed one, so this still needs no
+dependency and no API key.
+
+Routing weighs three things rather than one. Whether a step *ran* (`outcome`)
+was all the record ever held, so an agent that technically succeeded badly
+scored like one that succeeded well; `quality` from the critic now carries the
+difference, and an episode's weight halves every `memory_half_life_days`, so an
+agent that has improved is not judged forever on its first week.
 """
 import json
 import logging
@@ -26,8 +37,10 @@ import os
 import re
 import uuid
 from collections import Counter
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+import embeddings
 from config import settings
 from schemas import Episode
 
@@ -66,14 +79,28 @@ class AgentMemory:
         self.path = path or settings.memory_path
         self.episodes: List[Episode] = []
         self._df: Counter = Counter()   # token -> number of episodes containing it
+        # One recall scores the query against every episode this agent owns, so
+        # the query text would otherwise be embedded a few hundred times per
+        # call. Keyed by the token tuple; bounded because a long-lived server
+        # sees a new query on every step.
+        self._query_vectors: Dict[Tuple[str, ...], List[float]] = {}
         self.load()
 
     # -------------------------------------------------------------- persistence
 
     def load(self):
-        """Read the store. A missing or corrupt file starts an empty memory."""
+        """
+        Read the store. A missing or corrupt file starts an empty memory.
+
+        A store written before `quality` and `embedding` existed has neither
+        field, and must still load: both are optional on `Episode`, so an old
+        episode arrives with `quality=None` (unscored, which is not the same as
+        perfect) and `embedding=None` (backfilled on first use, from the text
+        that is already there). Nothing migrates the file on disk.
+        """
         self.episodes = []
         self._df = Counter()
+        self._query_vectors = {}
         if not os.path.exists(self.path):
             return
         try:
@@ -96,7 +123,13 @@ class AgentMemory:
             tmp = f"{self.path}.tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(
-                    {"episodes": [e.model_dump() for e in self.episodes]},
+                    # `embedding` is excluded on purpose -- see the field's
+                    # comment in schemas.py. It is derived data with its own
+                    # content-addressed cache; writing it here would double the
+                    # size of the store to save arithmetic that takes
+                    # microseconds.
+                    {"episodes": [e.model_dump(exclude={"embedding"})
+                                  for e in self.episodes]},
                     f, ensure_ascii=False, indent=1
                 )
             os.replace(tmp, self.path)
@@ -167,7 +200,7 @@ class AgentMemory:
         """Rare tokens carry the signal; 'code' in every episode carries none."""
         return math.log((len(self.episodes) + 1) / (1 + self._df.get(token, 0))) + 1.0
 
-    def _similarity(self, query_tokens: List[str], episode: Episode) -> float:
+    def _lexical_similarity(self, query_tokens: List[str], episode: Episode) -> float:
         """IDF-weighted overlap, normalised to roughly 0..1."""
         if not query_tokens or not episode.tokens:
             return 0.0
@@ -180,16 +213,87 @@ class AgentMemory:
         denominator = sum(self._idf(t) for t in q) or 1.0
         return min(numerator / denominator, 1.0)
 
+    def _query_vector(self, query_tokens: List[str]) -> Optional[List[float]]:
+        key = tuple(query_tokens)
+        if key in self._query_vectors:
+            return self._query_vectors[key]
+        vector = embeddings.embed_one(" ".join(query_tokens))
+        if vector:
+            # Bounded: a server that runs for a week sees a new query on every
+            # step, and this is a convenience cache, not the real one.
+            if len(self._query_vectors) >= 256:
+                self._query_vectors.clear()
+            self._query_vectors[key] = vector
+        return vector
+
+    def _episode_vector(self, episode: Episode) -> Optional[List[float]]:
+        """
+        The episode's vector, embedded on first use and kept on the episode.
+
+        Embedded from `tokens` rather than the raw text so both sides of the
+        cosine see the same preprocessing -- stopwords are noise on one side or
+        neither, never one side only.
+        """
+        if episode.embedding:
+            return episode.embedding
+        if not episode.tokens:
+            return None
+        vector = embeddings.embed_one(" ".join(episode.tokens))
+        if vector:
+            episode.embedding = vector
+        return vector
+
+    def _warm_vectors(self, episodes: List[Episode]):
+        """
+        Embed everything in `episodes` that has no vector yet, in one call.
+
+        Scoring embeds lazily per episode, which is free for the hash provider
+        and three hundred network round trips for a real one. Batching the
+        backfill before a scan is what keeps a cold store from turning one
+        recall into one call per episode.
+        """
+        if not embeddings.available():
+            return
+        pending = [e for e in episodes if not e.embedding and e.tokens]
+        if not pending:
+            return
+        vectors = embeddings.embed([" ".join(e.tokens) for e in pending])
+        for episode, vector in zip(pending, vectors):
+            if vector:
+                episode.embedding = vector
+
+    def _similarity(self, query_tokens: List[str], episode: Episode) -> float:
+        """
+        How alike these two pieces of work are, 0..1.
+
+        Cosine over embeddings when they are available, and the old lexical
+        overlap when they are not -- a provider that is switched off, or one
+        that failed. The signature is unchanged from the lexical-only version:
+        everything that scores similarity goes through here.
+        """
+        if not query_tokens or not episode.tokens:
+            return 0.0
+
+        query_vector = self._query_vector(query_tokens)
+        episode_vector = self._episode_vector(episode) if query_vector else None
+        if query_vector and episode_vector:
+            # Signed hashing can put a pair very slightly below zero; clamp so
+            # this returns the same 0..1 range the lexical path does, which is
+            # what every threshold in this module is keyed to.
+            return max(0.0, min(1.0, embeddings.cosine(query_vector, episode_vector)))
+
+        return self._lexical_similarity(query_tokens, episode)
+
     def recall(self, agent_id: str, query: str, k: Optional[int] = None) -> List[Episode]:
         """The `k` most similar things this agent has done, best first."""
         k = k or settings.memory_recall_k
         query_tokens = tokenize(query)
+        mine = [e for e in self.episodes if e.agent_id == agent_id]
+        self._warm_vectors(mine)
         scored: List[Tuple[float, Episode]] = []
-        for episode in self.episodes:
-            if episode.agent_id != agent_id:
-                continue
+        for episode in mine:
             score = self._similarity(query_tokens, episode)
-            if score > 0.05:
+            if score >= settings.memory_similarity_floor:
                 scored.append((score, episode))
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [episode for _, episode in scored[:k]]
@@ -227,30 +331,79 @@ class AgentMemory:
             "avg_tokens": int(sum(e.total_tokens for e in mine) / len(mine)),
         }
 
+    def _decay(self, episode: Episode) -> float:
+        """
+        Age weight: 1.0 today, 0.5 one half-life ago, and so on.
+
+        An unparseable or missing timestamp weighs 1.0 rather than 0 -- an
+        episode with a broken clock is still evidence, and quietly discarding
+        it would make the record depend on a field nothing else reads.
+        """
+        half_life = settings.memory_half_life_days
+        if half_life <= 0:
+            return 1.0
+        try:
+            stamp = datetime.fromisoformat(episode.timestamp)
+        except (TypeError, ValueError):
+            return 1.0
+        # Episodes are stamped with `utcnow()`, which is naive. Treat a naive
+        # stamp as UTC rather than local, or every episode ages by the
+        # machine's offset the moment it is written.
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        age_days = (datetime.now(timezone.utc) - stamp).total_seconds() / 86400.0
+        if age_days <= 0:
+            return 1.0
+        return 0.5 ** (age_days / half_life)
+
     def competence(self, agent_id: str, description: str) -> float:
         """
         How well this agent has historically done on work *like this*, 0..1.
 
-        Similarity-weighted success rate, pulled toward 0.5 when the evidence is
-        thin so three lucky runs cannot outrank a specialist's whole record.
+        Three signals, weighted by how similar and how recent each episode is:
+
+          * whether the step ran at all (`outcome`),
+          * how good the critic said the work was (`quality`),
+          * how much relevant evidence there is at all.
+
+        The first two are blended by `memory_quality_weight` -- but only over
+        episodes something actually scored. An unscored episode is not a
+        perfect one, so it contributes to the success rate and abstains from
+        the quality term, which means a store with no critic data (no key, or
+        the critic switched off) scores exactly as it did before quality
+        existed, whatever the weight is set to.
+
+        The result is pulled toward 0.5 when the evidence is thin, so three
+        lucky runs cannot outrank a specialist's whole record.
         """
         query_tokens = tokenize(description)
+        mine = [e for e in self.episodes if e.agent_id == agent_id]
+        self._warm_vectors(mine)
         weighted_success = 0.0
         weight_total = 0.0
-        for episode in self.episodes:
-            if episode.agent_id != agent_id:
-                continue
+        weighted_quality = 0.0
+        quality_weight_total = 0.0
+        for episode in mine:
             similarity = self._similarity(query_tokens, episode)
-            if similarity <= 0.05:
+            if similarity < settings.memory_similarity_floor:
                 continue
-            weight_total += similarity
+            weight = similarity * self._decay(episode)
+            weight_total += weight
             if episode.outcome == "success":
-                weighted_success += similarity
+                weighted_success += weight
+            if episode.quality is not None:
+                quality_weight_total += weight
+                weighted_quality += weight * max(0.0, min(1.0, episode.quality))
 
         if weight_total == 0.0:
             return 0.5
 
         raw = weighted_success / weight_total
+        if quality_weight_total > 0.0:
+            mean_quality = weighted_quality / quality_weight_total
+            blend = settings.memory_quality_weight
+            raw = (1.0 - blend) * raw + blend * mean_quality
+
         confidence = min(weight_total / settings.memory_confidence_weight, 1.0)
         return 0.5 + (raw - 0.5) * confidence
 

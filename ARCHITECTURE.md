@@ -112,10 +112,35 @@ so the frontend does not keep a second copy.
 ### `memory.py` — episodic memory
 
 Every finished subtask is appended to a JSON store. `recall` returns the most
-similar past episodes for an agent (IDF-weighted token overlap), `render_hints`
-turns them into a prompt block, and `suggest_agent` proposes a different
-specialist when one has a materially better record on similar work — gated on a
-minimum episode count and a margin, so a cold store never overrides the planner.
+similar past episodes for an agent, `render_hints` turns them into a prompt
+block, and `suggest_agent` proposes a different specialist when one has a
+materially better record on similar work — gated on a minimum episode count and
+a margin, so a cold store never overrides the planner.
+
+Similarity is a cosine over embeddings, with the original IDF-weighted token
+overlap kept as `_lexical_similarity` and used whenever embeddings are
+unavailable. Episode vectors are backfilled in one batched call before a scan,
+never one call per episode.
+
+`competence` weighs three things rather than one: whether the step ran
+(`outcome`), how good the critic said it was (`quality`, blended in at
+`memory_quality_weight` and only over episodes something actually scored), and
+how recent the evidence is (`memory_half_life_days` halves an episode's weight
+as it ages). The result is still pulled toward 0.5 when the evidence is thin.
+
+### `embeddings.py` — vectors without a dependency
+
+`embed(texts)` with two providers. **hash** (the default) is a deterministic
+hashed bag of words and character trigrams — SHA-256 buckets, signed, L2
+normalised — so it needs no key, no network and no package, and produces the
+same vector in every process on every machine. **litellm** calls a real
+embedding model over the credentials already configured, and is the only one of
+the two that understands synonymy. A provider that fails is logged once, marked
+unavailable for the process, and returns `[]`, which is the signal for
+`memory._similarity` to fall back to the lexical scorer.
+
+Vectors are cached by SHA-256 of `provider|model|dim|text`, in memory always and
+on disk only for providers that cost a call.
 
 ### `evals/` — the scorecard
 

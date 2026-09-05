@@ -217,6 +217,49 @@ class Settings(BaseSettings):
     # Similarity weight at which a competence score is fully trusted.
     memory_confidence_weight: float = 2.0
 
+    # --- semantic memory (WP5) -----------------------------------------------
+    # "hash" is a deterministic hashed bag of words and character trigrams: no
+    # key, no network, no dependency, identical across processes. "litellm"
+    # uses a real embedding model over the credentials already configured, and
+    # is the only one of the two that understands synonymy. "none" keeps the
+    # old IDF-weighted token overlap. The default is the one that needs
+    # nothing, so a fresh clone behaves the same as it always did.
+    embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "hash")
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "gemini/text-embedding-004")
+    # Buckets in the hashed vector. 256 keeps collisions rare enough at the
+    # 500-episode store cap while staying cheap to cosine over.
+    embedding_dim: int = 256
+    # A whole word is worth more than one of its trigrams, or a long word
+    # would outweigh an exact match on a short one purely by having more
+    # substrings. 1.0 / 0.5 was picked by measuring paraphrase separation
+    # against unrelated text on the episodes already in data/memory.json.
+    embedding_word_weight: float = 1.0
+    embedding_ngram_weight: float = 0.5
+    # Vectors are cached in memory for every provider and written to this file
+    # only for the ones that cost a call -- a hashed vector is 0.17ms of
+    # arithmetic, and persisting 2000 of them is six megabytes of derived JSON
+    # rewritten every time a new episode lands.
+    embedding_cache_path: str = os.path.join(os.path.dirname(__file__), "data", "embeddings.json")
+    embedding_cache_max: int = 2000
+
+    # Similarity below this is not recall, it is noise. The lexical scorer
+    # returned a hard 0.0 for anything with no shared token, so its 0.05
+    # threshold meant "any overlap at all"; a cosine over hashed n-grams always
+    # returns something, so the floor has to be measured rather than assumed.
+    # On this repo's own episodes: unrelated pairs land at 0.00-0.08, a
+    # paraphrase sharing no token at all lands at 0.18, and one sharing a word
+    # or two at 0.38-0.61. 0.15 sits in the gap.
+    memory_similarity_floor: float = 0.15
+    # How much of a competence score is *how well* the work was done rather
+    # than whether it ran. 0 reproduces the old success-rate-only behaviour;
+    # only episodes the critic actually scored contribute, so a store with no
+    # quality data scores exactly as it did before whatever this is set to.
+    memory_quality_weight: float = 0.4
+    # An episode's weight halves every this many days, so an agent that has
+    # improved is not judged forever on its first week. Set very high to
+    # disable decay.
+    memory_half_life_days: float = 30.0
+
     # Paths
     agents_dir: str = os.path.join(os.path.dirname(__file__), "agents")
     workspace_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

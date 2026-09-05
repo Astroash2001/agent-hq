@@ -147,7 +147,10 @@ async def get_plan():
 @app.get("/api/memory")
 async def get_memory(limit: int = 25):
     """Recent episodes plus each agent's lifetime record."""
-    episodes = [e.model_dump(exclude={"tokens"}) for e in memory.episodes[-limit:]]
+    # Both index fields are dropped: `tokens` is noise to a reader, and
+    # `embedding` is 256 floats an episode that would dwarf the payload.
+    episodes = [e.model_dump(exclude={"tokens", "embedding"})
+                for e in memory.episodes[-limit:]]
     episodes.reverse()
     agent_ids = [m["id"] for m in orchestrator.get_manifests()]
     return {

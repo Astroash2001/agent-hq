@@ -567,3 +567,62 @@ The core harness and server code are licensed under the MIT License. The pixel-a
 source packs and generated tilesets (including Modern Interiors, Modern Office Revamped,
 and LimeZu assets) are commercial/third-party licensed assets and are not covered
 by the MIT license. Source art packs are excluded from version control.
+
+---
+
+## Semantic memory and quality-weighted routing (WP5)
+
+### Hashed embeddings as the default, a real model as an option
+
+The whole backend runs with no credential, and the eval suite replays offline
+from cassettes. An embedding provider that needs a key would have made recall
+the one subsystem that quietly stops working on a fresh clone -- and the
+fallback would have been the lexical scorer it was meant to replace, so the
+feature would be absent exactly where it is hardest to notice.
+
+The default provider is therefore a hashed bag of words and character trigrams.
+The trigrams are the part that earns its place: words alone would only
+reproduce the lexical scorer in vector form, while `^ca cac ach chi hin ing`
+puts `cache`, `caching` and `cache-optimisation` near each other without a
+model. Measured on this repo's own episodes: unrelated pairs 0.00-0.08, a
+paraphrase sharing no token at all 0.18, a paraphrase sharing a word or two
+0.38-0.61. `memory_similarity_floor` (0.15) sits in that gap.
+
+SHA-256 rather than `hash()`, because Python salts string hashing per process:
+a vector built with `hash()` is not comparable to one built in another process,
+which would make a cached vector and a replayed eval both wrong.
+
+The honest limit, stated in the module docstring rather than hidden: hashed
+n-grams measure surface similarity. "Speed up the cache" and "optimise
+memoisation" share no letters and score 0.0. That needs the `litellm` provider,
+which is one setting away and costs a call per uncached text.
+
+### The vector is derived data and is not written to `memory.json`
+
+`Episode.embedding` exists on the model and is filled in lazily, but
+`memory.save()` excludes it. It is reproducible from `tokens`, it already has a
+content-addressed cache, and persisting it would double the size of the store
+to save 0.17ms of arithmetic -- while pinning every episode to whichever
+provider happened to be configured when it was written. For the same reason the
+disk cache in `embeddings.py` is only written for providers that cost a network
+call; a hashed vector is cheaper to recompute than to read back.
+
+### Unscored episodes abstain from the quality term rather than defaulting
+
+`competence` blends a similarity-weighted success rate with mean `quality`, but
+only over episodes the critic actually scored. An unscored episode still counts
+toward the success rate and contributes nothing to the quality average.
+
+The alternative -- treating `quality=None` as some default number -- would mean
+that turning the critic off, or running without a key, silently changes every
+routing decision. As written, a store with no quality data scores exactly as it
+did before the field existed, whatever `memory_quality_weight` is set to.
+
+### Decay by half-life, not by a recency window
+
+An agent that has improved should not be judged forever on its first week, and
+an agent that has regressed should not coast on an old record. A window ("last
+30 days") throws away everything on one side of a line and treats a 29-day-old
+episode as fresh; a half-life weights continuously and never discards evidence
+outright. 30 days by default, and an unparseable timestamp weighs 1.0 rather
+than 0 -- an episode with a broken clock is still evidence.

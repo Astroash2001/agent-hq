@@ -196,4 +196,11 @@ class Episode(BaseModel):
     tools_used: List[str] = Field(default_factory=list)
     artifact: str = ""
     tokens: List[str] = Field(default_factory=list, description="Cached lexical index for recall")
+    # Semantic index for recall, filled in lazily by `memory._episode_vector`.
+    # Deliberately not written to data/memory.json: the vector is reproducible
+    # from `tokens` and already lives in the content-addressed embedding cache,
+    # so persisting it here would store the same 256 floats a second time and
+    # pin every episode to whichever provider happened to be configured when it
+    # was recorded. Optional because an episode from an older store has none.
+    embedding: Optional[List[float]] = None
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
