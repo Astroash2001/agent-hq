@@ -288,6 +288,83 @@ class Planner:
         return _extract_json(content)
 
 
+# --------------------------------------------------------------- goal shape
+
+# The buckets below decide WHO does the work. These decide HOW MUCH work the
+# goal is worth, which the buckets had no notion of at all: every goal, from
+# "What does SSD stand for?" to a full research brief, fanned out to four
+# specialists. The eval suite is what made that visible and is what these are
+# measured by -- `adversarial_trivial` and `adversarial_ambiguous` exist for
+# exactly this, and `approach_standup` and `battery_team_review` for the
+# meeting case.
+
+# A question that wants a fact back, not a project.
+_TRIVIAL_RE = re.compile(
+    r"\b(stands? for|acronym|abbreviation|initialism|define|definition of|"
+    r"meaning of|what does .{1,40} mean)\b", re.I)
+
+# Anything that turns a question into a piece of work, whatever its length.
+_MULTIPART_RE = re.compile(
+    r"\b(then|compare|contrast|report|brief|briefing|guide|plan|implement|"
+    r"build|test|analyse|analyze|research|write up|recommend|and write)\b", re.I)
+
+# The goal explicitly asks for people in a room, which is the one case the
+# buckets must not answer with a chain of solo desks.
+_MEETING_RE = re.compile(
+    r"\b(standup|stand-up|meeting|huddle|kick-?off|retro(?:spective)?|"
+    r"discuss|debate|as a team|round the table|together before)\b", re.I)
+
+
+def _is_trivial(goal: str) -> bool:
+    """
+    True for a goal one agent can answer in a paragraph.
+
+    Deliberately narrow. A false negative costs money -- a definition fanned out
+    to four specialists -- and that is the failure this was written to fix. A
+    false positive is worse: it answers a real research goal with one shallow
+    step, and nothing downstream can tell it was under-planned. So it needs
+    both a definitional phrase or a bare question AND no sign of a deliverable.
+    """
+    text = goal.strip()
+    if len(text.split()) > 14 or _MULTIPART_RE.search(text):
+        return False
+    if _TRIVIAL_RE.search(text):
+        return True
+    return bool(re.match(r"^(what|who|when|where|which|how many|how much)\b", text, re.I)
+                and text.endswith("?"))
+
+
+def _is_vague(goal: str) -> bool:
+    """
+    True for a goal too thin to plan against -- "Make it better."
+
+    A four-step fan-out on a goal with no subject is four specialists inventing
+    four different subjects. Two steps is enough to establish what was meant and
+    write something back, and the answer says what it assumed.
+    """
+    words = goal.strip().rstrip("?.!").split()
+    return len(words) <= 5 and not _MULTIPART_RE.search(goal)
+
+
+def _deliverable_name(goal: str) -> str:
+    """
+    Name the final artifact after what the user asked for.
+
+    `briefing.md` was hardcoded, so a goal asking for a report produced a
+    briefing and a goal asking for a guide produced a briefing. The name is the
+    first thing anyone reads in the mission directory, and it costs nothing to
+    make it the word they used.
+    """
+    g = goal.lower()
+    if re.search(r"\b(brief|briefing|executive|memo)\b", g):
+        return "briefing.md"
+    if re.search(r"\bguide\b", g):
+        return "guide.md"
+    if re.search(r"\b(summary|summarise|summarize)\b", g):
+        return "summary.md"
+    return "report.md"
+
+
 def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     """
     The original four intent buckets, kept as the no-key / failure fallback.
@@ -295,17 +372,71 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     Unlike the version this replaced, the buckets declare real dependencies, so
     the middle of each plan fans out and the scheduler has something to run in
     parallel. Steps naming an agent that is not loaded are dropped.
+
+    The buckets now sit behind three questions about the goal itself -- is it
+    trivial, is it too vague to plan, does it ask for a meeting -- because a
+    router that only ever answers "four steps" is not a planner, it is a
+    constant.
     """
     g = goal.lower()
 
-    def step(sid, agent, desc, deps=(), produces="", consumes=(), why=""):
+    def step(sid, agent, desc, deps=(), produces="", consumes=(), why="",
+             kind="work", attendees=()):
         return PlanStep(
             id=sid, agent_id=agent, description=desc,
             dependencies=list(deps), produces=produces or f"{agent}_output.md",
-            consumes=list(consumes), rationale=why
+            consumes=list(consumes), rationale=why,
+            kind=kind, attendees=list(attendees)
         )
 
-    if any(w in g for w in ["code", "bug", "python", "fix", "script", "test", "build", "api", "fibonacci"]):
+    deliverable = _deliverable_name(goal)
+
+    if _is_trivial(goal):
+        raw = [
+            step("s1", "creative",
+                 f"Answer this directly and briefly, in your own knowledge: {goal}\n"
+                 f"One short paragraph. Do not pad it into a report, do not add "
+                 f"sections, and do not research it.",
+                 produces="answer.md", why="a definition needs an answer, not a project"),
+        ]
+    elif _is_vague(goal):
+        raw = [
+            step("s1", "researcher",
+                 f"The request is \"{goal}\", which does not say what it refers to. "
+                 f"State the most reasonable reading, name the assumption you are "
+                 f"making, and gather only what that reading needs.",
+                 produces="research_notes.md",
+                 why="a goal with no subject needs one established before anyone works"),
+            step("s2", "creative",
+                 "Write the answer to the reading established above, opening with "
+                 "the assumption it rests on so the reader can correct it.",
+                 deps=["s1"], produces=deliverable, consumes=["research_notes.md"],
+                 why="one write-up against one stated assumption"),
+        ]
+    elif _MEETING_RE.search(g):
+        # The goal asks for people in a room. The buckets never produced a
+        # meeting step, so a harness that supports meetings answered "hold a
+        # standup" with four solo desks.
+        raw = [
+            step("s1", "researcher", f"Research the first side of: {goal}",
+                 produces="research_notes.md", why="one half of the evidence"),
+            step("s2", "data_analyst",
+                 f"Quantify and sanity-check the numbers behind: {goal}",
+                 produces="analysis.md", why="the other half, gathered in parallel"),
+            step("s3", "creative",
+                 "Chair the discussion: read what everyone brought, get the "
+                 "disagreements out, and record what the room agreed.",
+                 deps=["s1", "s2"], produces="decision.md",
+                 consumes=["research_notes.md", "analysis.md"],
+                 kind="meeting", attendees=["researcher", "data_analyst"],
+                 why="the goal asked for this to be settled together"),
+            step("s4", "creative",
+                 "Write the deliverable from the recorded decision and the work "
+                 "behind it, following the angle the room agreed.",
+                 deps=["s3"], produces=deliverable, consumes=["decision.md"],
+                 why="write-up follows the decision, not the other way round"),
+        ]
+    elif any(w in g for w in ["code", "bug", "python", "fix", "script", "test", "build", "api", "fibonacci"]):
         raw = [
             step("s1", "researcher", f"Gather technical specifications and best-practice patterns for: {goal}",
                  produces="research_notes.md", why="needs sources before anyone writes code"),
@@ -316,7 +447,7 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
                  deps=["s1"], produces="analysis.md", consumes=["research_notes.md"],
                  why="can validate in parallel with implementation"),
             step("s4", "creative", "Write the documentation, walkthrough and usage examples from the work so far",
-                 deps=["s2", "s3"], produces="briefing.md",
+                 deps=["s2", "s3"], produces=deliverable,
                  consumes=["implementation.md", "analysis.md"], why="final prose pass"),
         ]
     elif any(w in g for w in ["job", "resume", "interview", "hire", "career", "salary"]):
@@ -337,7 +468,7 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
             step("s2", "researcher", f"Find the documented conventions and pitfalls relevant to: {goal}",
                  produces="research_notes.md", why="context, independent of the data pass"),
             step("s3", "creative", "Format the analytical report with key insights and a recommendation",
-                 deps=["s1", "s2"], produces="briefing.md",
+                 deps=["s1", "s2"], produces=deliverable,
                  consumes=["analysis.md", "research_notes.md"], why="fan-in write-up"),
         ]
     else:
@@ -351,7 +482,7 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
                  deps=["s1"], produces="analysis.md", consumes=["research_notes.md"],
                  why="runs alongside the prototype"),
             step("s4", "creative", "Summarise the findings, action items and next steps into an executive briefing",
-                 deps=["s2", "s3"], produces="briefing.md",
+                 deps=["s2", "s3"], produces=deliverable,
                  consumes=["implementation.md", "analysis.md"], why="final synthesis"),
         ]
 
@@ -359,7 +490,7 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     if not steps:
         # Nothing in the bucket is loaded: give the work to whoever exists.
         fallback = valid_agent_ids[0] if valid_agent_ids else "researcher"
-        return [step("s1", fallback, goal, produces="briefing.md")]
+        return [step("s1", fallback, goal, produces=deliverable)]
 
     # Dropping a step can orphan a dependency; re-point what survived.
     kept = {s.id for s in steps}

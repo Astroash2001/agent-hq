@@ -11,37 +11,35 @@
     "ambiguous"
    ],
    "error": null,
-   "duration_sec": 10.86,
+   "duration_sec": 7.96,
    "cost_usd": 0.0,
    "tokens_estimated": true,
-   "steps": 4,
+   "steps": 2,
    "artifacts": [
-    "analysis.md",
-    "briefing.md",
-    "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
-   "structural": 0.857,
+   "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 1"
+     "detail": "2 steps, wanted >= 1"
     },
     {
      "check": "max_steps",
-     "ok": false,
-     "detail": "4 steps, wanted <= 3"
+     "ok": true,
+     "detail": "2 steps, wanted <= 3"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "2/2 completed"
     },
     {
      "check": "max_cost_usd",
@@ -51,7 +49,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 120s"
+     "detail": "8.0s of 120s"
     },
     {
      "check": "must_not_stub",
@@ -62,7 +60,7 @@
    "quality": null,
    "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
    "rubric": [],
-   "spans": 21,
+   "spans": 11,
    "cassette_hits": 0,
    "cassette_misses": 0,
    "cassettes_recorded": 0
@@ -78,14 +76,14 @@
     "tool_routing"
    ],
    "error": null,
-   "duration_sec": 10.85,
+   "duration_sec": 11.65,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
    "structural": 1.0,
@@ -108,7 +106,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -123,7 +121,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.8s of 150s"
+     "detail": "11.7s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -150,37 +148,34 @@
     "trivial"
    ],
    "error": null,
-   "duration_sec": 10.88,
+   "duration_sec": 5.84,
    "cost_usd": 0.0,
    "tokens_estimated": true,
-   "steps": 4,
+   "steps": 1,
    "artifacts": [
-    "analysis.md",
-    "briefing.md",
-    "implementation.md",
-    "research_notes.md"
+    "answer.md"
    ],
-   "structural": 0.857,
+   "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 1"
+     "detail": "1 steps, wanted >= 1"
     },
     {
      "check": "max_steps",
-     "ok": false,
-     "detail": "4 steps, wanted <= 2"
+     "ok": true,
+     "detail": "1 steps, wanted <= 2"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['answer.md']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "1/1 completed"
     },
     {
      "check": "max_cost_usd",
@@ -190,7 +185,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 90s"
+     "detail": "5.8s of 90s"
     },
     {
      "check": "must_not_stub",
@@ -201,7 +196,7 @@
    "quality": null,
    "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
    "rubric": [],
-   "spans": 21,
+   "spans": 6,
    "cassette_hits": 0,
    "cassette_misses": 0,
    "cassettes_recorded": 0
@@ -217,17 +212,18 @@
     "synthesis"
    ],
    "error": null,
-   "duration_sec": 10.86,
+   "duration_sec": 17.22,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
-    "implementation.md",
+    "decision.md",
+    "meeting_notes.md",
+    "report.md",
     "research_notes.md"
    ],
-   "structural": 0.875,
+   "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
@@ -242,12 +238,12 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'analysis.md', 'meeting_notes.md', 'decision.md', 'report.md']"
     },
     {
      "check": "requires_meeting",
-     "ok": false,
-     "detail": "0 meeting step(s)"
+     "ok": true,
+     "detail": "1 meeting step(s)"
     },
     {
      "check": "all_steps_completed",
@@ -262,7 +258,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 240s"
+     "detail": "17.2s of 240s"
     },
     {
      "check": "must_not_stub",
@@ -273,7 +269,7 @@
    "quality": null,
    "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
    "rubric": [],
-   "spans": 21,
+   "spans": 25,
    "cassette_hits": 0,
    "cassette_misses": 0,
    "cassettes_recorded": 0
@@ -291,17 +287,17 @@
     "smoke"
    ],
    "error": null,
-   "duration_sec": 10.86,
+   "duration_sec": 11.46,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
-   "structural": 0.875,
+   "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
@@ -320,8 +316,8 @@
     },
     {
      "check": "artifacts",
-     "ok": false,
-     "detail": "no artifact matched ['*report*.md']"
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -336,7 +332,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 180s"
+     "detail": "11.5s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -364,17 +360,18 @@
     "multi_step"
    ],
    "error": null,
-   "duration_sec": 10.9,
+   "duration_sec": 17.24,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
-    "implementation.md",
+    "decision.md",
+    "meeting_notes.md",
+    "report.md",
     "research_notes.md"
    ],
-   "structural": 0.875,
+   "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
@@ -389,12 +386,12 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'analysis.md', 'meeting_notes.md', 'decision.md', 'report.md']"
     },
     {
      "check": "requires_meeting",
-     "ok": false,
-     "detail": "0 meeting step(s)"
+     "ok": true,
+     "detail": "1 meeting step(s)"
     },
     {
      "check": "all_steps_completed",
@@ -409,7 +406,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 240s"
+     "detail": "17.2s of 240s"
     },
     {
      "check": "must_not_stub",
@@ -420,7 +417,7 @@
    "quality": null,
    "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
    "rubric": [],
-   "spans": 21,
+   "spans": 25,
    "cassette_hits": 0,
    "cassette_misses": 0,
    "cassettes_recorded": 0
@@ -437,14 +434,14 @@
     "smoke"
    ],
    "error": null,
-   "duration_sec": 10.84,
+   "duration_sec": 11.5,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
    "structural": 1.0,
@@ -467,7 +464,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -482,7 +479,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.8s of 180s"
+     "detail": "11.5s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -509,14 +506,14 @@
     "analysis"
    ],
    "error": null,
-   "duration_sec": 13.13,
+   "duration_sec": 13.11,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
    "structural": 1.0,
@@ -539,7 +536,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -582,14 +579,14 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 10.88,
+   "duration_sec": 12.14,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
    "structural": 1.0,
@@ -612,7 +609,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -627,7 +624,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 180s"
+     "detail": "12.1s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -656,7 +653,7 @@
     "fan_in"
    ],
    "error": null,
-   "duration_sec": 10.89,
+   "duration_sec": 12.22,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -701,7 +698,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 200s"
+     "detail": "12.2s of 200s"
     },
     {
      "check": "must_not_stub",
@@ -729,14 +726,14 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 10.87,
+   "duration_sec": 12.16,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
    "structural": 1.0,
@@ -759,7 +756,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -774,7 +771,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 180s"
+     "detail": "12.2s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -802,7 +799,7 @@
     "time_sensitive"
    ],
    "error": null,
-   "duration_sec": 10.83,
+   "duration_sec": 11.52,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
@@ -847,7 +844,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.8s of 200s"
+     "detail": "11.5s of 200s"
     },
     {
      "check": "must_not_stub",
@@ -874,15 +871,15 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 10.86,
+   "duration_sec": 15.99,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
-    "research_notes.md"
+    "research_notes.md",
+    "summary.md"
    ],
    "structural": 1.0,
    "checks": [
@@ -904,7 +901,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'summary.md']"
     },
     {
      "check": "all_steps_completed",
@@ -919,7 +916,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.9s of 150s"
+     "detail": "16.0s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -946,14 +943,14 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 10.84,
+   "duration_sec": 14.1,
    "cost_usd": 0.0,
    "tokens_estimated": true,
    "steps": 4,
    "artifacts": [
     "analysis.md",
-    "briefing.md",
     "implementation.md",
+    "report.md",
     "research_notes.md"
    ],
    "structural": 1.0,
@@ -976,7 +973,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -991,7 +988,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.8s of 150s"
+     "detail": "14.1s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -1014,10 +1011,10 @@
    "tasks": 14,
    "runs": 14,
    "errors": 0,
-   "structural": 0.953,
+   "structural": 1.0,
    "quality": null,
    "cost_usd": 0.0,
-   "p50_latency": 10.86
+   "p50_latency": 12.15
   }
  ]
 }

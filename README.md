@@ -89,21 +89,21 @@ python -m evals.runner --suite all --replay      # offline, no key, deterministi
 
 | task | mode | structural | quality | cost | p50 latency | pass@k |
 |---|---|---|---|---|---|---|
-| `adversarial_ambiguous` | simulate | 86% | — | $0.0000 | 10.9s | 0/1 |
-| `adversarial_missing_tool` | simulate | 100% | — | $0.0000 | 10.8s | 1/1 |
-| `adversarial_trivial` | simulate | 86% | — | $0.0000 | 10.9s | 0/1 |
-| `approach_standup` | simulate | 88% | — | $0.0000 | 10.9s | 0/1 |
-| `battery_comparison` | simulate | 88% | — | $0.0000 | 10.9s | 0/1 |
-| `battery_team_review` | simulate | 88% | — | $0.0000 | 10.9s | 0/1 |
-| `code_cache_bug` | simulate | 100% | — | $0.0000 | 10.8s | 1/1 |
+| `adversarial_ambiguous` | simulate | 100% | — | $0.0000 | 7.9s | 1/1 |
+| `adversarial_missing_tool` | simulate | 100% | — | $0.0000 | 11.5s | 1/1 |
+| `adversarial_trivial` | simulate | 100% | — | $0.0000 | 5.9s | 1/1 |
+| `approach_standup` | simulate | 100% | — | $0.0000 | 17.2s | 1/1 |
+| `battery_comparison` | simulate | 100% | — | $0.0000 | 11.8s | 1/1 |
+| `battery_team_review` | simulate | 100% | — | $0.0000 | 17.2s | 1/1 |
+| `code_cache_bug` | simulate | 100% | — | $0.0000 | 11.6s | 1/1 |
 | `code_review_fix` | simulate | 100% | — | $0.0000 | 13.1s | 1/1 |
-| `ev_charging_standards` | simulate | 100% | — | $0.0000 | 10.9s | 1/1 |
-| `grid_storage_tradeoffs` | simulate | 100% | — | $0.0000 | 10.9s | 1/1 |
-| `heat_pump_handoff` | simulate | 100% | — | $0.0000 | 10.9s | 1/1 |
-| `india_news_brief` | simulate | 100% | — | $0.0000 | 10.8s | 1/1 |
-| `solar_efficiency` | simulate | 100% | — | $0.0000 | 10.9s | 1/1 |
-| `solid_state_batteries` | simulate | 100% | — | $0.0000 | 10.8s | 1/1 |
-| **aggregate** | **simulate** | **95%** | **—** | **$0.0000** | **10.9s** | **10/14** |
+| `ev_charging_standards` | simulate | 100% | — | $0.0000 | 12.3s | 1/1 |
+| `grid_storage_tradeoffs` | simulate | 100% | — | $0.0000 | 12.3s | 1/1 |
+| `heat_pump_handoff` | simulate | 100% | — | $0.0000 | 12.2s | 1/1 |
+| `india_news_brief` | simulate | 100% | — | $0.0000 | 11.5s | 1/1 |
+| `solar_efficiency` | simulate | 100% | — | $0.0000 | 12.2s | 1/1 |
+| `solid_state_batteries` | simulate | 100% | — | $0.0000 | 12.1s | 1/1 |
+| **aggregate** | **simulate** | **100%** | **—** | **$0.0000** | **12.1s** | **14/14** |
 
 Read those numbers as narrowly as they are meant. **structural** is the `expect`
 block — step count, agents involved, artifacts produced, budgets respected — and
@@ -111,10 +111,18 @@ is deterministic with no model involved. **quality** is empty because no cassett
 have been recorded yet: that column needs a real key and real spend, and an empty
 cell is the honest way to say so rather than a number that came from nowhere.
 
-Two failing rows are deliberate and documented in [[TODO]]: `adversarial_trivial`
-fans a one-line question out to a full four-step plan, and
-`adversarial_missing_tool` targets the planner's blindness to which tools an agent
-actually holds. They are there to be measured, not to pass.
+Those rows were not always green, and the way they went green is the point of
+having them. Five failed on the first scorecard: the fallback planner answered
+"What does SSD stand for?" with a four-step fan-out, never produced a meeting
+step for a goal that asked for a standup, and ended every mission in a file
+called `briefing.md` whatever had been asked for. The suite is what made each
+of those visible, and `evals/scorecard.md` still carries the **fail → pass**
+line for all five.
+
+The honest caveat: those fixes are keyword heuristics in `heuristic_plan`,
+written against tasks the suite already contained. They are defensible on their
+own terms — do not hire four specialists to answer a definition — but a suite
+you fix code against is a suite you can over-fit to, and this one is small.
 
 The live scorecard, with a delta against the previous run, is
 [`evals/scorecard.md`](evals/scorecard.md).

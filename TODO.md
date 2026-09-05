@@ -205,12 +205,14 @@ scores each rubric line against the artifact files, and a committed
 --replay` runs offline with no key, and `--compare` proves two runs agree:
 verified 14/14 identical.
 
-Two things it measured immediately, both left visible rather than tuned away:
+Two things it measured immediately, both left visible rather than tuned away
+at the time -- and both since fixed, which is the point of measuring:
 
-- `heuristic_plan` has no notion of a trivial goal. "What does SSD stand for?"
-  fans out to its full 4-step bucket, so `adversarial_trivial` fails `max_steps`.
-- `adversarial_missing_tool` targets the planner-tool-grants gap below. It is
-  expected to be the weakest row; it is there to be measured, not to pass.
+- `heuristic_plan` had no notion of a trivial goal. "What does SSD stand for?"
+  fanned out to its full 4-step bucket. **Fixed** -- see below.
+- `adversarial_missing_tool` targets the planner-tool-grants gap. Its structural
+  row passes (the code bucket already routes execution to `coder`); what it
+  actually measures is the rubric, which is still unjudged.
 
 The quality column is empty until cassettes are recorded, which needs a real key
 and real spend. The scorecard says so in prose rather than printing a number.
@@ -374,6 +376,40 @@ with `ruff check` and the eval smoke suite against its cassettes.
 - Tool execution paths beyond the registry surface and the sandbox refusals
 
 ---
+
+### The fallback planner answered every goal the same way
+
+**Done.** `heuristic_plan` was four keyword buckets and nothing else, so every
+goal got the same shape of plan. The eval suite measured five separate
+consequences of that, and all five are now green:
+
+- **A trivial goal is one step.** "What does SSD stand for?" hired four
+  specialists; it now gets one, producing `answer.md`.
+- **A goal with no subject gets two.** "Make it better." fanned out to four
+  specialists inventing four different subjects; it now establishes one reading,
+  names the assumption, and answers it.
+- **A goal that asks for a room gets a meeting.** "Hold a standup", "discuss as
+  a team" produced four solo desks in a harness that supports meetings. It now
+  plans research in parallel, a chaired meeting that depends on it, and a
+  write-up that follows the recorded decision.
+- **The deliverable is named after what was asked for.** Every mission ended in
+  `briefing.md`; a goal asking for a report now produces `report.md`, a guide
+  `guide.md`, a summary `summary.md`. `consumes` follows the rename, which
+  `test_heuristic_plan.py` checks -- a step consuming a file nothing produces
+  starts at an empty desk.
+
+Scorecard: 95% aggregate with five failing rows, to **100% across all 14**, and
+`evals/scorecard.md` carries the fail → pass line for each.
+
+**The caveat, stated rather than buried:** these are keyword heuristics written
+against tasks the suite already contained. Each is defensible on its own terms,
+but a suite you fix code against is one you can over-fit to, and 14 tasks is
+small. They also only affect the *fallback* planner -- with a key, the model
+plans and these branches never run.
+
+Still open: `_is_trivial` and `_MEETING_RE` are English-only and match on
+surface words. A goal that asks for a meeting without using any of those words
+still gets solo desks.
 
 ### The eval harness could never record a cassette
 

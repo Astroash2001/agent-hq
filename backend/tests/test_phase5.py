@@ -300,8 +300,11 @@ async def test_mission_runs_independent_steps_in_parallel(temp_memory):
 
     assert result["status"] == "completed"
     assert len(result["subtasks"]) == 4
+    # The final artifact is named after what the goal asked for rather than
+    # always "briefing.md" -- this goal asks for neither a brief nor a guide nor
+    # a summary, so it lands as report.md. See planner._deliverable_name.
     assert {a["name"] for a in result["artifacts"]} == {
-        "research_notes.md", "implementation.md", "analysis.md", "briefing.md"
+        "research_notes.md", "implementation.md", "analysis.md", "report.md"
     }
 
     # s2 and s3 are the fan-out; they must have been dispatched together.
