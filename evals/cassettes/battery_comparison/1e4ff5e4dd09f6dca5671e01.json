@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 28,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1495,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"sodium ion battery safety vs lithium ion thermal runaway CATL BYD\"}",
+        "name": "web_search"
+       },
+       "id": "call_45c8e4c0eee04540973df13f9d31__thought__El4KXAERTTIPvGwzMKfrojEVbn2TaxAGP7bJ9jYqBsLYwEBsvNvK885zgOx7uvDCaD/ZBk4khYAxFa/919bYiKXCZ/xcIhL5c+deYDeSmBckut93ioRFXDKB4xUSQPVP"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 28,
+   "prompt_tokens": 1495
+  }
+ }
+}

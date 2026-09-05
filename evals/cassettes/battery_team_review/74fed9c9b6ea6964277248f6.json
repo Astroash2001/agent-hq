@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 25,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 543,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"Lithium Iron Phosphate home battery market share cost efficiency\"}",
+        "name": "web_search"
+       },
+       "id": "call_9fc91843ec774e5bb4aed5bf3b26__thought__El4KXAERTTIPRJbCJpZI2eZbi0cPsshaxW0qjWarriqbcS3nRuiwxlhVd1P/2D7Ux1icyV64NwuEevHm9F+rHnuVGZmTvnHJLez9tE2nJMjNzQ7mfeXf2kpRYK8f4FPK"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 25,
+   "prompt_tokens": 543
+  }
+ }
+}

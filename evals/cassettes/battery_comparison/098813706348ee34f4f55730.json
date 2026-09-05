@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 37,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 539,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"sodium ion vs lithium ion home battery cost energy density lifecycle safety 2025 2026\"}",
+        "name": "web_search"
+       },
+       "id": "call_e0e6dfaa79ce42869c01617caac1__thought__El4KXAERTTIPvkVL0hwsbg5rOEfVv69VLaCCQ4sswt6fHftFQC41ZcwZD+ytEbq+1A7Wp0lJiszefn6XGt8JTyHG22BTdIE4VpWMFArgcOi/4TDtNRpVHKontiW8/xHo"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 37,
+   "prompt_tokens": 539
+  }
+ }
+}

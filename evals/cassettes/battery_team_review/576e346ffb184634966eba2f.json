@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 10,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1620,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{}",
+        "name": "review_artifacts"
+       },
+       "id": "call_cd1fb2771758459d976b732ed30a__thought__El4KXAERTTIPcM5OJSZm/zTzhwwxLxVWia/GzGJy/s/faqJkMQlQqBvLzHpT2R58XZYbOA346aLe3Xn88b6LpobsQfozhOvEupzwrIBFUACSC/dj4EhcqVC+YRKNX5k4"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 10,
+   "prompt_tokens": 1620
+  }
+ }
+}

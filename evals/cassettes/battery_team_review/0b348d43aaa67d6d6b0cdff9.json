@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 23,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 546,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"solid state home battery market share cost efficiency\"}",
+        "name": "web_search"
+       },
+       "id": "call_5ee78a189cec4b12983c9efb972e__thought__El4KXAERTTIP3jnvOQMuRCD7yNHJwL39ZYVM2Rpnku5G9nXn//DdFRtdBmGGnQ8uBvj5QgbwrhRvnjgtRfOcnJDbxY+SJAKK4njPqe5Ny4NIt4Crs0bCxXN5wjZg5OTp"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 23,
+   "prompt_tokens": 546
+  }
+ }
+}

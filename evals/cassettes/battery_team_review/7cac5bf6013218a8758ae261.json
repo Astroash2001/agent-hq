@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 27,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1184,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"Lithium Iron Phosphate home battery cost per kWh efficiency round trip\"}",
+        "name": "web_search"
+       },
+       "id": "call_47b0370f28694d4c8037db9a3047__thought__El4KXAERTTIPxuo5vU4qGFR1arW77MzlekWCWTK4QRWaZNvJX7hXunmngyxTdwaqPlK3I+W9xb1n7Yf7r2ltYw7KZ/6+eJsu95lFIf6LwqNWHY8Tt+fqrYBMYMslXNAF"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 27,
+   "prompt_tokens": 1184
+  }
+ }
+}

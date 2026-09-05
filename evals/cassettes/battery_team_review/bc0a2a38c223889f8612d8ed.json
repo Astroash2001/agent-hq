@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 24,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 502,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"flow batteries home energy storage market share cost efficiency\"}",
+        "name": "web_search"
+       },
+       "id": "call_77379889fd904ba79af593293614__thought__El4KXAERTTIPKgUZGT/toNTYwgOTWIzY0vFm4aQkd39s1KCb/8xP/m0UQmplXVxDT1FSYX9J+MupVd8kTLrVaMMnmjk86S+oMOEbiVvyt7c5IM1hzBpmWA6IBUTshNoe"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 24,
+   "prompt_tokens": 502
+  }
+ }
+}

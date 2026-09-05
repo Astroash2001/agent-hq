@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1373,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 2186,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"filepath\": \"battery_comparison_research.md\", \"content\": \"# Sodium-Ion vs. Lithium-Ion Home Energy Storage Batteries: Comprehensive Research Report (2026)\\n\\nThis research document compares sodium-ion (Na-ion) and lithium-ion (specifically Lithium Iron Phosphate [LFP] and Nickel Manganese Cobalt [NMC]) home energy storage batteries across key metrics: market data, costs, energy density, lifecycle, and safety profiles.\\n\\n---\\n\\n## 1. Executive Summary & Market Context (2026)\\nLithium-ion batteries—predominantly Lithium Iron Phosphate (LFP) for residential applications due to its superior safety and longevity—remain the dominant market standard for home energy storage. However, sodium-ion batteries have emerged as a viable, rapidly maturing alternative. \\n\\nWhile sodium-ion raw materials are theoretically far more abundant and cheaper than lithium, sodium-ion technology is still scaling up production. Consequently, cell-level and system-level costs for sodium-ion are currently comparable to or slightly higher than LFP in residential applications, though long-term cost projections remain highly favorable.\\n\\n---\\n\\n## 2. Parameter Comparison Table\\n\\n| Parameter | Sodium-Ion (Na-ion) | Lithium Iron Phosphate (LFP) | NMC Lithium-ion |\\n| :--- | :--- | :--- | :--- |\\n| **Cell Energy Density** | 100–175 Wh/kg | 120–200 Wh/kg | 200–250 Wh/kg |\\n| **Cycle Life** | 3,000–6,000 cycles | 4,000–8,000+ cycles | 3,000–5,000 cycles |\\n| **Cell Cost (2025/2026 Est.)** | $80–$120 / kWh | $100–$150 / kWh | $130–$180 / kWh |\\n| **System-Level Cost (Home)** | $500–$600 / kWh | $400–$550 / kWh | $450–$600 / kWh |\\n| **Low-Temperature Performance** | Excellent (>90% retention at -20°C) | Moderate (70–75% retention at -20°C) | Good (>85% retention at -20°C) |\\n| **Thermal Safety & Runaway** | High thermal stability; can discharge to 0V for safe transport | High stability (olivine structure); resists oxygen release | Moderate stability; prone to thermal runaway under abuse |\\n| **Regulatory & Certifications** | Emerging; limited residential UL 9540 listings | Mature; extensive UL 9540 & global safety certifications | Mature; widely certified but less favored for home storage |\\n\\n---\\n\\n## 3. Detailed Metric Breakdown\\n\\n### A. Costs and Market Data\\n* **Sodium-Ion:** Cell production costs sit around $80–$120/kWh. Because manufacturing lines are still ramping up to utility and EV scale, residential system pricing (inverters, BMS, casing) ranges from $500–$600/kWh. Over the next 3–5 years, scaling is expected to reduce sodium-ion cell costs significantly below lithium.\\n* **Lithium-Ion (LFP):** LFP cells cost approximately $100–$150/kWh, with complete residential systems ranging from $400–$550/kWh. LFP benefits from mature, highly optimized global manufacturing supply chains.\\n* **Lithium-Ion (NMC):** More expensive ($130–$180/kWh cell cost), primarily utilized where extreme space constraints dictate high energy density.\\n\\n### B. Energy Density and Physical Footprint\\n* **Sodium-Ion:** Ranges from 100 to 175 Wh/kg. Because sodium ions are larger and heavier than lithium ions, sodium-ion batteries require more physical volume and weight per kilowatt-hour. For home storage—where garage or utility room space is finite—this larger footprint is a minor drawback.\\n* **Lithium-Ion (LFP):** Ranges from 120 to 200 Wh/kg, offering a more compact physical package for equivalent energy storage capacity.\\n\\n### C. Lifecycle and Durability\\n* **Sodium-Ion:** Typically rated for 3,000 to 6,000 manufacturer-claimed cycles. While impressive, it lags slightly behind top-tier residential LFP cells.\\n* **Lithium-Ion (LFP):** Routinely delivers 4,000 to 6,000+ cycles, with premium residential LFP products rated for over 8,000 cycles, easily translating to 10–15+ years of daily cycling.\\n\\n### D. Safety and Environmental Performance\\n* **Sodium-Ion:** Exhibits exceptional inherent safety. It boasts higher thermal runaway initiation temperatures (220–260°C) compared to older lithium chemistries, lower heat release rates, and the unique ability to be safely transported and stored at **0 volts** (fully discharged), drastically reducing transport and installation risks.\\n* **Lithium-Ion (LFP):** The current gold standard for residential safety. LFP features a robust olivine crystal structure that resists oxygen release even at elevated temperatures (>300°C). Crucially, LFP holds mature, mandatory residential safety certifications (such as **UL 9540**), which are essential for building code compliance and insurance.\\n* **Low-Temperature Edge:** Sodium-ion significantly outperforms lithium-ion chemistries in freezing environments, retaining over 90% of its capacity at -20°C compared to 70–75% for LFP.\\n\\n---\\n\\n## 4. Conclusion for Home Energy Storage\\nWhile sodium-ion batteries present an exciting future with superior cold-weather performance, excellent intrinsic safety (including 0V transport), and immense long-term cost potential, **LFP lithium-ion batteries remain the superior practical choice for home energy storage in 2026**. LFP offers higher energy density, proven multi-decade cycle life, and essential regulatory certifications (UL 9540) required for residential installations.\\n\"}",
+        "name": "write_file"
+       },
+       "id": "call_ef2cd7cc7e93455d9b8f135601a5__thought__El4KXAERTTIP9wRNGpbvRY1+a+pIl8CNDMVVE8BGukWtKPkK75TyeidI0o6s+woitBxbbK6VRmdSbrTIhkvVROZWR4EAykogjvarKuEDcJaguCLV5utnfO2RbP4cNnSa"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1373,
+   "prompt_tokens": 2186
+  }
+ }
+}

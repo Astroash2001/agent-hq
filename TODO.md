@@ -25,19 +25,37 @@ the art source packs if you want to rebuild the atlas.
 
 ### Dead sprites in the atlas
 
-Measured: the atlas holds **233** non-character sprites; the map uses **96**.
+**Partly done, and the old numbers here were wrong in both directions.**
+Re-measured: 395 atlas frames, of which 249 are props; the frontend references
+**123**. Not 233 and 96.
 
-- **15 authored sprites unused:** `chair_office`, `conf_table`, `conf_wall_run`,
-  `conf_wall_strip`, `counter_sink_v`, `credenza_lamp`, `desk_l`, `desk_l_wide`,
-  `desk_l_wing`, `desk_pedestal`, `plant_potted`, `printer_small`,
-  `projector_screen`, `tv_boardroom`, `tv_widescreen`
-- **8 orphaned PNGs** sit in `assets/generated/authored/` but are no longer
-  produced by `gen_tiles.py` — `conf_wall_run`, `conf_wall_strip`, `credenza_lamp`,
-  `plant_potted`, `tablet`, `tv_boardroom`, `tv_wall_east`, `whiteboard_arch`.
-  `build_atlas.py` globs that directory, so they are baked in as dead weight.
+The orphan count was wrong too — 16 authored PNGs sit in
+`assets/generated/authored/` that `gen_tiles.py` no longer produces, not 8. But
+**two of those 16 are still used by the map**: `tablet` and `whiteboard_arch`.
+Deleting all the orphans, which is what the old entry told you to do, would have
+taken two live sprites with them.
 
-Fix: delete the orphans, prune the unused `AUTHORED` entries and `PACK_PICKS`, then
-rebuild. Should meaningfully shrink the atlas.
+The other 14 are gone, and the atlas was rebuilt: **512×734 → 512×578, 204,700 →
+140,478 bytes, a 31% reduction.** `check_layout.py` is clean at 194 props, and
+every one of the 123 referenced frames was verified present in the new atlas
+before this was committed.
+
+Two things worth knowing before anyone does the rest of it:
+
+- **`build_atlas.py` is byte-for-byte reproducible.** Running it on an unchanged
+  tree produces an identical `office_atlas.png` and `.json` (same md5). That is
+  what makes pruning safe to attempt at all: the diff is exactly the change.
+- **A literal string scan of `frontend/js` is not a usage check.** Doors are
+  drawn from a computed name — `` `${base}_${frame}` `` at `canvas.js:808` — so a
+  naive scan reports all 25 `door_slide_*` / `door_ext_*` frames as unused and a
+  prune based on it deletes the door animations. Any future pass has to special
+  case the computed families.
+
+Still open: **108 unused frames sourced from the packs** via `PACK_PICKS` in
+`build_atlas.py`, which is where the remaining weight is. Left alone on purpose —
+they are a palette for layout work, and unlike the authored orphans there is no
+second signal (a missing generator) confirming they are dead rather than merely
+unplaced. The method above is proven if you want them gone.
 
 ### `emergency_stop` doesn't reach a running LLM call
 
