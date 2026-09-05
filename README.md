@@ -231,7 +231,7 @@ OpenAI-compatible gateway. See [[DECISIONS]].
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 270 tests, all passing
+cd backend && python -m pytest -q      # 296 tests, all passing
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, plus `ruff check` and the eval
@@ -309,9 +309,8 @@ above. The ones worth knowing up front:
   around the conference room.
 - **Hashed embeddings measure surface similarity**, not synonymy — "speed up the
   cache" and "optimise memoisation" still score 0.
-- **`emergency_stop` cancels the in-flight call but not the mission budget**, and
-  `total_tokens` in `mission.json` is a process-lifetime figure; `mission_tokens`
-  is the per-run one.
+- **The mission's conclusion is assembled, not concluded** — `_synthesize_results`
+  concatenates the step artifacts under a fixed closing sentence.
 - **15 authored sprites and 8 orphaned PNGs** are dead weight in the atlas.
 
 ---

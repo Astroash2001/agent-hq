@@ -41,9 +41,19 @@ rebuild. Should meaningfully shrink the atlas.
 
 ### `emergency_stop` doesn't reach a running LLM call
 
-`cancel()` sets `_is_cancelled`, checked at the top of each ReAct step. A request
-already in flight to `litellm.acompletion` runs to its 12s timeout first. Real
-cancellation needs the LLM call wrapped in a task that can be cancelled.
+**Done, and this entry was stale.** `BaseAgent.cancel()` sets `_is_cancelled`
+*and* cancels `self._inflight`, the task wrapping the request; the ReAct loop
+catches the resulting `CancelledError` and falls through to the halt path at the
+top of the loop rather than keeping a second copy of that bookkeeping
+(`base_agent.py:63`, `:181`). A HALT pressed mid-call no longer waits out the
+timeout.
+
+Still open, and worse than it looks: cancelling the calls does not cancel the
+*mission*. `cancel_all` flags the roster, but `_execute_plan` keeps scheduling,
+and `run()` clears `_is_cancelled` on entry (`base_agent.py:102`) — so the step
+in flight halts, and the very next step the DAG offers resets the flag and runs
+normally. A HALT stops one turn, not the run. Stopping the mission means
+cancelling the scheduler's tasks, not just the agents'.
 
 ---
 
@@ -167,20 +177,33 @@ cost breakdown in `mission.json`. See `tracing.py` and [[PROTOCOL]].
 
 ### `_tokens_spent()` is a lifetime total, not a mission total
 
-`BaseAgent.token_usage` accumulates across every mission the process has served and
-is never reset, so `_tokens_spent()` — which sums it across the roster — climbs
-monotonically. Two consequences, both real:
+**Done.** `BaseAgent.token_usage` still accumulates across every mission the
+process has served — nothing resets it, and nothing should; it is the agent's
+lifetime record. What changed is who reads it raw. `execute_task` now snapshots
+the roster's total into `_token_baseline[task_id]` before planning, and
+`_mission_tokens_spent()` returns the difference, so the budget gate in
+`_execute_plan` measures this run and no other.
 
-- `total_tokens` in `mission.json` is the process's running total, not the run's.
-  `mission_tokens` (added with the per-step breakdown) is the correct per-mission
-  figure; `total_tokens` is left alone because the budget gate reads it.
-- The budget gate in `_execute_plan` therefore tightens as a process serves more
-  missions, and a long-lived server will eventually refuse a mission on a budget
-  that a fresh process would pass.
+The snapshot is what keeps the fix honest. Summing `_step_telemetry` instead
+would also have scoped the figure, but a row only appears there once a step has
+*finished*, and the gate is checked while steps are in flight — it would have
+stopped noticing a mission running away with itself until after it had. The
+baseline keeps per-turn resolution and costs one integer per mission.
 
-Fix is to scope the counter to the mission rather than the agent, which changes
-what the budget means — deliberately out of scope for the telemetry work that
-found it.
+`mission.json` follows: `total_tokens` is now this run's, measured the way the
+gate measures it, and sits alongside `mission_tokens`, which sums the per-step
+rows. They differ by the turns no step can be billed for, and `total_tokens` is
+the larger. [[PROTOCOL]] says so.
+
+Measured: a roster carrying 10,000 prior tokens against a 1,000-token budget used
+to fail all three steps of a mission that went on to burn 30 —
+`test_token_budget.py` pins that case, and pins that the gate still fires on a
+mission's own overspend so the scoping did not quietly disarm it.
+
+Still open: a resumed mission re-baselines, so its budget governs the work left
+rather than the work the dead process had already paid for. That is the reading
+this chose deliberately, but it does mean the two halves of a resumed mission can
+together exceed one budget.
 
 ### Steps returned free text that nothing checked
 
@@ -263,8 +286,10 @@ fixed sentence, not a conclusion drawn from the results.
 
 ### CORS is fully open
 
-`allow_origins=["*"]` with `allow_credentials=True` — fine for local dev, must be
-tightened before any deployment.
+**Done in WP7; this entry was stale.** `main.py:104` reads `settings.cors_origins`
+(default `["http://localhost:8080"]`) and sets `allow_credentials` only when the
+origins are explicit, so the wildcard-plus-credentials combination browsers reject
+can no longer be configured by accident. See the WP7 section below.
 
 ### `terminal` tool executes shell commands
 
@@ -358,11 +383,18 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**270 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
-across 21 files: the original phase tests plus telemetry, contracts, the critic,
+**296 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+across 23 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
-harness and the `dag.update` payload. CI runs the same suite on 3.10 and 3.12,
-with `ruff check` and the eval smoke suite against its cassettes.
+harness, the `dag.update` payload and the token budget. CI runs the same suite on
+3.10 and 3.12, with `ruff check` and the eval smoke suite.
+
+The CI eval step is described in the workflow as replaying cassettes, which it
+does not: there are none, so `--replay` finds no recording, `credentials_for`
+clears credentials in simulate mode and the suite runs the simulator. The run is
+deterministic and offline either way, which is what the step is there for — but
+the comment claims a stronger guarantee than the repo currently earns, and will
+only become true once cassettes exist.
 
 **Not covered:**
 

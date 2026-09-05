@@ -59,6 +59,12 @@ class Orchestrator:
         # a lifetime total that never resets, so it cannot answer what one step
         # of one mission cost.
         self._step_telemetry: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        # Roster lifetime total at the instant each mission started, so a
+        # mission's own spend is a subtraction away. Snapshotting is the only
+        # way to keep the in-flight granularity the budget gate needs: an
+        # agent's token_usage rises turn by turn, while `_step_telemetry` only
+        # gains a row once a step has finished.
+        self._token_baseline: Dict[str, int] = {}
         # One agent runs one subtask at a time even when the DAG offers it two.
         self._agent_locks: Dict[str, asyncio.Lock] = {}
         # The real parallelism cap. Rebuilt per mission so a settings change
@@ -183,6 +189,11 @@ class Orchestrator:
         workspace = MissionWorkspace(task_id)
         self.workspaces[task_id] = workspace
         self._step_telemetry.setdefault(task_id, {})
+        # Taken before planning, so the planner's own tokens are charged to the
+        # mission that asked for them. Assigned rather than set by default: a
+        # resumed mission re-baselines, because its budget governs the work
+        # still to be done and not what the process spent before it died.
+        self._token_baseline[task_id] = self._tokens_spent()
 
         trace = tracing.start_mission(task_id, workspace.dir)
         try:
@@ -355,10 +366,13 @@ class Orchestrator:
             "goal": user_prompt,
             "plan_source": plan.source,
             "duration_seconds": round(duration, 2),
-            "total_tokens": self._tokens_spent(),
+            "total_tokens": self._mission_tokens_spent(task_id),
             "token_budget": settings.max_tokens_budget_per_task,
-            # `total_tokens` above is the roster's lifetime figure, which the
-            # budget gate reads; `mission_tokens` is what this run alone spent.
+            # Both figures are now this run's. `total_tokens` is what the budget
+            # gate measured -- every token the roster burned for this mission,
+            # including turns no step could be billed for. `mission_tokens` sums
+            # the per-step rows, so it is the part the breakdown accounts for
+            # and is the smaller of the two whenever the two disagree.
             "mission_tokens": telemetry["mission_tokens"],
             "cost_usd": telemetry["cost_usd"],
             "unpriced_models": telemetry["unpriced_models"],
@@ -519,6 +533,30 @@ class Orchestrator:
         if self.boss_agent:
             total += self.boss_agent.token_usage.total_tokens
         return total
+
+    def _mission_tokens_spent(self, task_id: str) -> int:
+        """
+        What this mission alone has burned, in-flight turns included.
+
+        The roster's counters are lifetime totals that never reset, so reading
+        them directly made the budget gate tighten as a process served more
+        missions: a long-lived server would eventually refuse a mission that a
+        fresh process would have run. Subtracting the baseline taken at mission
+        start scopes the figure to the run without giving up the per-turn
+        resolution -- the gate is checked while steps are still in flight, and
+        `_step_telemetry` has nothing to say about a step until it finishes.
+
+        Clamped at zero. Nothing resets an agent's counter mid-mission today,
+        but a negative budget reading would fail open, and that is the one
+        direction this must not fail in.
+        """
+        baseline = self._token_baseline.get(task_id)
+        if baseline is None:
+            # No baseline means the mission was never registered here -- a unit
+            # test driving `_execute_plan` directly, most likely. Charging it
+            # the roster's lifetime total is the conservative reading.
+            return self._tokens_spent()
+        return max(0, self._tokens_spent() - baseline)
 
     def _record_step_telemetry(self, task_id: str, step: PlanStep, stats: Dict[str, Any]):
         """
@@ -739,7 +777,7 @@ class Orchestrator:
             # Budget gate. Checked before dispatching rather than mid-step: a
             # step already running has to be allowed to finish, or its artifact
             # is lost and everything downstream of it stalls anyway.
-            spent = self._tokens_spent()
+            spent = self._mission_tokens_spent(task_id)
             if pending and spent >= settings.max_tokens_budget_per_task:
                 for sid in sorted(pending):
                     by_id[sid].status = "failed"

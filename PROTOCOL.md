@@ -294,11 +294,19 @@ no graph to carry on.
 | `mission.json` | goal, plan, per-step status, and the cost breakdown below |
 | `trace.jsonl` | one span per line: mission, step, turn, tool, llm |
 
-`mission.json` gained `cost_usd`, `mission_tokens` (this run alone -- `total_tokens`
-is the roster's lifetime figure that the budget gate reads), `unpriced_models`,
+`mission.json` gained `cost_usd`, `mission_tokens`, `unpriced_models`,
 `tokens_estimated`, and `per_step`, one row per plan step carrying `model`,
 `prompt_tokens`, `completion_tokens`, `cost_usd`, `duration_sec`, `tool_calls`,
 `retries`, `fell_back`, `estimated` and `status`.
+
+Both token figures are this mission's. `total_tokens` is what the budget gate
+measured -- every token the roster burned between the mission starting and
+finishing, including turns that belong to no single step. `mission_tokens` sums
+the `per_step` rows, so it is the part the breakdown can account for, and is the
+smaller of the two whenever they disagree. Neither is a process-lifetime figure:
+the gate takes a baseline of the roster's counters at mission start and reads the
+difference, so a server that has already run twenty missions offers the
+twenty-first the same allowance as the first.
 
 A span in `trace.jsonl` is `{span_id, parent_id, kind, name, seq, t_start, t_end,
 duration_sec, status, error, attrs}`. `parent_id` is null on the one mission span
