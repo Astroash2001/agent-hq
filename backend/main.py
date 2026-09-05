@@ -308,4 +308,12 @@ if os.path.exists(frontend_dir):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host=settings.host, port=settings.port, reload=True)
+
+    # Reload is a development convenience and is actively wrong in a container:
+    # the source cannot change there, `watchfiles` is deliberately not a runtime
+    # dependency so uvicorn falls back to stat-polling every file in the image,
+    # and the extra reloader process makes a crashed app look like a restarting
+    # one. docker-compose.yml sets ENVIRONMENT=production; a local `python
+    # main.py` is unchanged, because `environment` defaults to development.
+    reload = settings.environment != "production"
+    uvicorn.run("main:app", host=settings.host, port=settings.port, reload=reload)

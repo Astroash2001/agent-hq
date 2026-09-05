@@ -375,6 +375,19 @@ with `ruff check` and the eval smoke suite against its cassettes.
 
 ---
 
+### The container ran uvicorn's reloader
+
+**Done.** `backend/main.py` passed `reload=True` unconditionally, so the image
+started a reloader over source that cannot change -- and because `watchfiles` is
+deliberately a dev dependency, uvicorn fell back to `StatReload`, stat-polling
+every file in the image. The extra process also makes a crashed app look like a
+restarting one. Reload is now on unless `ENVIRONMENT=production`, which
+`docker-compose.yml` sets; a local `python main.py` is unchanged.
+
+Verified by booting both ways on a runtime-only venv: development logs
+`Started reloader process ... using StatReload`, production logs only
+`Started server process`.
+
 ## Housekeeping
 
 - `backend/.pytest_cache/` is committed alongside the source
