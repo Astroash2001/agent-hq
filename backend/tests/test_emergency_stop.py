@@ -102,6 +102,11 @@ def _wire(orch, monkeypatch, agents):
     monkeypatch.setattr(orch, "agents", agents)
 
 
+async def _no_synthesis(*a, **k):
+    """`_execute_plan` is what these drive; the briefing is not under test."""
+    return ""
+
+
 def _linear_plan(n=3):
     return Plan(goal="g", source="llm", steps=[
         PlanStep(id=f"s{i}", agent_id="researcher", description=f"step {i}",
@@ -295,3 +300,59 @@ async def test_a_fresh_mission_is_not_born_halted(scratch, monkeypatch):
     await orch._execute_plan(plan, workspace, "m_next", "g")
 
     assert [s.status for s in plan.steps] == ["completed", "completed"]
+
+
+@pytest.mark.asyncio
+async def test_a_halted_mission_is_recorded_as_halted_not_failed(scratch, monkeypatch):
+    """
+    In the mission list a halt and a crash looked identical -- both `failed` --
+    so an operator could not tell a run they stopped on purpose from one that
+    broke. That is the first thing you want to know about a red row.
+
+    `api_missions` gates resume on "completed" alone, so a third status costs
+    nothing and a halted mission stays resumable.
+    """
+    root, store = scratch
+    orch = Orchestrator()
+    agent = _Agent(hold=True, returns_on_cancel=True)
+    _wire(orch, monkeypatch, {"researcher": agent})
+    monkeypatch.setattr(orch, "_synthesize_results", _no_synthesis)
+
+    workspace = MissionWorkspace("m_status")
+    agent.workspace = workspace
+    orch._slots = asyncio.Semaphore(1)
+    orch._peak_active_steps = 0
+    orch._active_steps = 0
+    orch.active_tasks["m_status"] = object()
+    store.start_mission("m_status", "g")
+
+    plan = _linear_plan(2)
+    runner = asyncio.ensure_future(
+        orch._execute_plan(plan, workspace, "m_status", "g"))
+    await asyncio.wait_for(agent.started.wait(), timeout=2)
+    orch.cancel_all()
+    await asyncio.wait_for(runner, timeout=5)
+
+    # The same call `_run_mission` makes once the scheduler returns.
+    outcome = orch._mission_outcome("m_status", plan)
+    store.end_mission("m_status", outcome, 0.0)
+
+    assert outcome == "halted", "a halt must not be filed as an ordinary failure"
+    assert store.get_mission("m_status")["status"] == "halted"
+
+
+def test_the_new_status_does_not_swallow_ordinary_outcomes():
+    orch = Orchestrator()
+
+    clean = _linear_plan(2)
+    for step in clean.steps:
+        step.status = "completed"
+    assert orch._mission_outcome("m_clean", clean) == "completed"
+
+    broken = _linear_plan(2)
+    broken.steps[0].status = "failed"
+    assert orch._mission_outcome("m_broken", broken) == "failed"
+
+    # A halt wins over the failures it caused: those steps failed because of it.
+    orch._halted.add("m_broken")
+    assert orch._mission_outcome("m_broken", broken) == "halted"

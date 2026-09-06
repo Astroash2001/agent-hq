@@ -96,9 +96,15 @@ old `cancel_all`.
 
 Still open: a step that genuinely completed a moment before the HALT, and is
 collected in the same batch, is discarded with the rest — the same conservative
-reading resume already takes of a step left `running` by a killed process. And
-the halt is not persisted, so a resume of a halted mission re-runs those steps
-rather than being told the operator stopped them on purpose.
+reading resume already takes of a step left `running` by a killed process. 
+
+**A halt is now its own mission status.** It used to be recorded as `failed`,
+so in the mission list a run somebody stopped on purpose and a run that broke
+looked identical — which is the first thing you want to know about a red row.
+`_mission_outcome` returns `halted` in preference to `failed`, because the
+steps that failed did so *because* of the halt. `api_missions` gates resume on
+`completed` alone, so a halted mission stays resumable, and resuming it re-runs
+the halted steps — which is right: you resumed it to finish it.
 
 ---
 
@@ -138,8 +144,15 @@ targets this, and it is now recorded and judged: **structural 100%, quality
 100%** — including the rubric line "the step that needed execution was given to
 an agent holding the terminal tool", which was the whole point of the task.
 
-Still open: `heuristic_plan` does not populate `needs_tools`, so the fallback
-planner is unaffected — with no key, this pass has nothing to check.
+**Also done: the fallback planner declares its tools too.** `heuristic_plan`
+left every step with an empty `needs_tools`, so the pass was a no-op on the one
+path that runs with no key — which is the configuration most likely to be
+somebody's first look at this. The buckets now name `web_search` for research
+steps, `terminal` for the ones that run code, `list_files` for the data pass,
+and `regrant_steps` (lifted out of `validate_plan` so both planners share it)
+runs over the result. A test asserts the default roster needs no regranting at
+all: the pass is a guard, not a crutch, and if that starts failing it means a
+bucket names the wrong agent.
 
 ### Everything runs sequentially
 

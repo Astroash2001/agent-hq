@@ -388,15 +388,14 @@ class Orchestrator:
         # the only other copy, so a browser that is closed or reloaded at this
         # moment would otherwise take the whole mission with it.
         telemetry = self._mission_telemetry(task_id, plan)
-        store.end_mission(
-            task_id,
-            "failed" if any(s.status == "failed" for s in plan.steps) else "completed",
-            telemetry["cost_usd"])
+        outcome = self._mission_outcome(task_id, plan)
+        store.end_mission(task_id, outcome, telemetry["cost_usd"])
 
         workspace.save_report(synthesis_text)
         workspace.save_manifest({
             "mission_id": task_id,
             "goal": user_prompt,
+            "outcome": outcome,
             "plan_source": plan.source,
             "duration_seconds": round(duration, 2),
             "total_tokens": self._mission_tokens_spent(task_id),
@@ -626,6 +625,26 @@ class Orchestrator:
             "fell_back": bool(stats.get("fell_back")) or bool(prior.get("fell_back")),
             "estimated": bool(stats.get("estimated")) or bool(prior.get("estimated")),
         }
+
+    def _mission_outcome(self, task_id: str, plan: Plan) -> str:
+        """
+        How this mission ended: completed, failed, or halted.
+
+        "halted" is its own status, not a kind of failure. In the mission list
+        the two looked identical -- both `failed` -- so an operator could not
+        tell a run they stopped on purpose from one that broke, which is the
+        first thing you want to know about a red row. `api_missions` gates
+        resume on "completed" alone, so a third value costs nothing and a
+        halted mission stays resumable.
+
+        A halt wins over the failed steps it caused, because those steps failed
+        *because* of it.
+        """
+        if task_id in self._halted:
+            return "halted"
+        if any(s.status == "failed" for s in plan.steps):
+            return "failed"
+        return "completed"
 
     def _mission_telemetry(self, task_id: str, plan: Plan) -> Dict[str, Any]:
         """
