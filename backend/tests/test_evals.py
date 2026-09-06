@@ -633,12 +633,16 @@ def test_only_tools_that_reach_outside_the_office_are_replayed():
     workspace empty and score the mission as having produced nothing. The rule
     is "record what the office cannot control", not "record every tool".
     """
-    assert replay_mod.is_external("web_search") is True
-    assert replay_mod.is_external("mcp__fs__read_file") is True
+    # Observes the machine or the network: has to be recorded.
+    for outside in ("web_search", "terminal", "list_files",
+                    "mcp__fs__read_file"):
+        assert replay_mod.is_external(outside) is True, outside
 
-    for local in ("write_file", "read_file", "list_files", "terminal",
-                  "code_analysis"):
-        assert replay_mod.is_external(local) is False, local
+    # Answers from the mission itself: has to really run. `write_file` because
+    # its side effect is the deliverable, `read_file` so a step reads what THIS
+    # run's upstream step wrote rather than a recording of an older one.
+    for inside in ("write_file", "read_file", "code_analysis"):
+        assert replay_mod.is_external(inside) is False, inside
 
 
 def test_a_tool_key_is_stable_and_argument_sensitive():

@@ -332,18 +332,29 @@ def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
 # web_search, turn two missed with a stable new key -- stable because the search
 # had settled on new results, not because anything in the repo had changed.
 #
-# Only tools whose answer comes from OUTSIDE the mission are served from disk.
-# `write_file` must genuinely run on replay: its side effect is the artifact the
-# structural checks look for, so serving a recorded "ok" would leave the
-# workspace empty and score the mission as having produced nothing. The rule is
-# therefore "record what the office cannot control", not "record every tool".
-EXTERNAL_TOOLS = ("web_search",)
+# The rule is "record what the office cannot control", and the boundary is the
+# mission workspace, not the process. A tool that observes the machine or the
+# network answers differently on every run:
+#
+#   web_search   the web moves
+#   terminal     a command's output carries this machine's timings and paths
+#   list_files   a directory listing of the repo changes whenever anyone commits
+#                -- this one was found the hard way, with `.git` and
+#                `.pytest_cache` byte sizes inside a replayed prompt
+#   mcp__*       somebody else's server, which promises nothing
+#
+# Everything else really runs, because its answer comes from the mission itself.
+# `write_file` must run: its side effect is the artifact the structural checks
+# look for, so serving a recorded "ok" leaves the workspace empty and scores the
+# run as having produced nothing. `read_file` must run too, so a step reads what
+# THIS run's upstream step actually wrote rather than a recording of what some
+# earlier run wrote.
+EXTERNAL_TOOLS = ("web_search", "terminal", "list_files")
 
 
 def is_external(tool_name: str) -> bool:
-    """Whether a tool's result comes from outside the office, and so must be
-    recorded to make a replay reproducible. MCP tools count: they are somebody
-    else's server and this office cannot promise anything about their answers."""
+    """Whether a tool's answer comes from outside the mission workspace, and so
+    has to be recorded for a replay to reproduce anything."""
     return tool_name in EXTERNAL_TOOLS or tool_name.startswith("mcp__")
 
 
