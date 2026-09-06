@@ -907,7 +907,11 @@ class RetroHUD {
             host.appendChild(card);
             overlay.style.display = 'flex';
             card.dataset.expanded = 'true';
-            if (btn) { btn.textContent = '✕'; btn.title = 'Restore output'; }
+            // NOT a cross. The card carries its own close button, and turning
+            // this one into a second ✕ put two identical crosses side by side
+            // with different meanings -- one restores the panel, one dismisses
+            // it. A shrink glyph says which is which.
+            if (btn) { btn.textContent = '⤡'; btn.title = 'Restore output to the sidebar'; }
         } else {
             const home = this._outHome;
             if (home && home.parent) home.parent.insertBefore(card, home.before);
@@ -944,6 +948,12 @@ class RetroHUD {
         const closeMemo = document.getElementById('closeMemoBtn');
         if (closeMemo) {
             closeMemo.addEventListener('click', () => {
+                // Collapse FIRST. The card physically lives inside the overlay
+                // while expanded, so hiding it on its own left the blurred
+                // backdrop covering the screen with nothing in it -- and the
+                // card back in the sidebar, hidden, so a second click on a
+                // button the user could no longer see was the only way out.
+                this.toggleOutputExpanded(false);
                 this.executiveMemoCard.style.display = 'none';
             });
         }
