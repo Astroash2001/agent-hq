@@ -689,11 +689,35 @@ model never produced. The key cannot fix this on its own — `base_agent` calls
 default into the key invalidates every committed cassette, which was verified by
 doing it and watching all 14 tasks go to `CassetteMiss`.
 
-Still open: the sweep against `gemini-3.5-flash` itself, once that model's quota
-returns. It is rate-limited to nothing today — every request exhausts three
-attempts and falls back — so the recorded suite is the fallback model, not what
-the office is configured to run on. The scorecard names it, which is the least
-that can be done about it.
+**And then the served result was reordered.** Even with tool recording in place,
+every searching task still missed — with every *value* in the served result
+correct. `Cassettes.save` writes `sort_keys=True`, and the prompt is built from
+`json.dumps(tool_result)`, so replay produced `{answer, configured, count,
+provider, query}` where the recording had `{query, answer, ...}`. The key changed
+on key order alone. Found by dumping the missing prompt rather than reasoning
+about it: alphabetical order is not an order any tool returns. Tool results are
+stored as exact JSON bytes now, and the regression test compares `json.dumps` of
+served against recorded rather than the values, because comparing values passes
+on the broken version — which is exactly how this survived the first fix.
+
+**Where it stands:** 5 tasks recorded and replaying deterministically (two runs,
+14/14 identical). The other 9 have no cassettes — the daily Gemini quota ran out
+across three sweeps in one night — and fall to the simulator, marked `unjudged`.
+
+Still open, both one command each once quota returns:
+
+```bash
+python -m evals.runner --suite all --model gemini/gemini-3.5-flash-lite --record
+```
+
+and then the same against `gemini-3.5-flash` itself, which is rate-limited to
+nothing today — every request exhausts three attempts and falls back — so even a
+full sweep records the fallback model rather than what the office is configured
+to run on. The scorecard names which model answered, which is the least that can
+be done about it.
+
+`battery_comparison`'s recording is incomplete (57% structural, unjudged) and
+should be re-recorded with the rest.
 
 ### The container ran uvicorn's reloader
 

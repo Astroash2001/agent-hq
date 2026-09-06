@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 25,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1332,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"CATL sodium ion battery energy density cycle life cost\"}",
+        "name": "web_search"
+       },
+       "id": "call_bf1d44f63dae4e13851319954d76__thought__El4KXAERTTIPJQIMfKOYb/vCuIMiYqmzNf5lCXl/vOb2WykrFSM4ca76AK8pSYO6Wv1pJ5KQ/8d+/4TvnZWFPmeKnAyOput06V9g3HOvVFrvurt+BDOJ14eRjhHoRIRD"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 25,
+   "prompt_tokens": 1332
+  }
+ }
+}

@@ -87,49 +87,60 @@ specialist produced nothing; grading them measures the assembler, not the work.
 python -m evals.runner --suite all --replay      # offline, no key, deterministic
 ```
 
-| task | mode | structural | quality | p50 latency | pass@k |
-|---|---|---|---|---|---|
-| `adversarial_ambiguous` | replay | 100% | 100% | 7.5s | 1/1 |
-| `adversarial_missing_tool` | replay | 100% | 100% | 19.5s | 1/1 |
-| `adversarial_trivial` | replay | 100% | 100% | 5.7s | 1/1 |
-| `approach_standup` | replay | 100% | 100% | 18.4s | 1/1 |
-| `battery_comparison` | replay | 86% | 100% | 11.7s | 0/1 |
-| `battery_team_review` | replay | 86% | — | 13.1s | 0/1 |
-| `code_cache_bug` | replay | 86% | 67% | 10.8s | 0/1 |
-| `code_review_fix` | replay | 100% | 100% | 11.2s | 1/1 |
-| `ev_charging_standards` | replay | 100% | 100% | 10.8s | 1/1 |
-| `grid_storage_tradeoffs` | replay | 86% | 100% | 12.7s | 0/1 |
-| `heat_pump_handoff` | replay | 100% | 100% | 11.7s | 1/1 |
-| `india_news_brief` | replay | 100% | 100% | 8.0s | 1/1 |
-| `solar_efficiency` | simulate | 100% | — | 12.3s | 1/1 |
-| `solid_state_batteries` | simulate | 100% | — | 12.2s | 1/1 |
-| **12 on gemini-3.5-flash-lite** | **replay** | **95%** | **97%** | **11.4s** | **8/12** |
+| task | mode | structural | quality | p50 latency |
+|---|---|---|---|---|
+| `adversarial_ambiguous` | replay | 100% | 0% | 7.5s |
+| `adversarial_missing_tool` | replay | 100% | 100% | 13.9s |
+| `adversarial_trivial` | replay | 100% | 50% | 5.0s |
+| `approach_standup` | replay | 100% | 100% | 15.4s |
+| `battery_comparison` | replay | 71% | — | 9.1s |
+| the other nine | simulate | 100% | — | ~12s |
 
-Read those numbers as narrowly as they are meant. **structural** is the `expect`
-block — step count, agents involved, artifacts produced — and is deterministic with
-no model involved. **quality** is `evals/judge.py` scoring each rubric line against
-the artifact files. Twelve tasks replay from committed cassettes recorded against
-`gemini-3.5-flash-lite`; two are unrecorded because the account's quota ran out
-mid-sweep, and they fall to the simulator and say so rather than borrowing a score.
-Two replay runs were compared and agreed on all 14 verdicts.
+**structural** is the `expect` block — step count, agents involved, artifacts
+produced — deterministic, no model involved. **quality** is `evals/judge.py`
+scoring each rubric line against the artifact files. Five tasks replay from
+committed cassettes recorded against `gemini-3.5-flash-lite`; the other nine have
+no cassettes yet and fall to the simulator, where they say `unjudged` rather than
+borrowing a score. Two replay runs agreed on all 14 verdicts.
 
-**Recording changed the picture, which is the entire reason for recording.** On
-the simulator every row was 100%. Against a real model, four are not:
+**Recording is what makes those rows worth reading, and it is unflattering.** On
+the simulator all fourteen read 100%. Against a real model, `adversarial_ambiguous`
+scores **0%** on quality, `adversarial_trivial` **50%**, and `battery_comparison`
+fails structurally. None of that has been tuned away: a suite you edit to match
+the model measures the edit.
 
-- **Three tasks fail `min_steps`.** The model plans a comparison in two steps
-  where the suite expects three. Left failing rather than relaxed — the
-  expectation and the model disagree about how much fan-out a comparison needs,
-  and that disagreement is worth looking at rather than editing away.
-- **`code_cache_bug` scores 67%.** The judge found no execution evidence in the
-  artifacts: the code was written and reasoned about, not run.
-- **`battery_team_review` completed 1 of 4 steps** during recording, so its
-  cassettes are incomplete and the judge call misses. The harness says exactly
-  that, with the command to re-record it.
+Getting there took three recording sweeps, because two of them proved the
+cassettes were not reproducible at all:
 
-The cost column is gone from this table because it is not measurable: neither
-`gemini-3.5-flash` nor `-flash-lite` has a row in `pricing.py`, so every figure
-reads $0.0000. The suite now marks that budget check unscored instead of passing
-it, and the server warns at startup.
+- **Tool calls were live on every replay.** The transport wrapped
+  `llm.acompletion` and nothing else. An agent's first turn searches the web and
+  the results land verbatim in the *second* turn's prompt — so when the web moved,
+  that prompt changed and the turn missed its own cassette. A suite that replayed
+  clean at 04:55 went red at 05:08 with nothing in the repo having changed.
+  `tool_registry.execute` is wrapped now, for tools that reach outside the office
+  only; `write_file` must really run, because its side effect is what gets scored.
+- **Then the served result was reordered.** Cassettes are written with
+  `sort_keys=True`, and the prompt is built from `json.dumps(tool_result)` — so
+  replay produced an alphabetised dict where the recording had insertion order,
+  and the key changed on key order alone while every value matched. Stored as
+  exact JSON bytes now.
+- **And a cassette could be served for the wrong model.** `base_agent` calls
+  `acompletion` with no model argument, so every agent turn hashed `""` and the
+  key never distinguished models. CI's smoke step was replaying flash-lite
+  recordings under flash with 16 hits and 0 misses, printing the wrong name in
+  the model column. A mismatch is refused now.
+
+**The remaining nine tasks need one `--record` sweep**, blocked only on the
+account's daily Gemini quota:
+
+```bash
+python -m evals.runner --suite all --model gemini/gemini-3.5-flash-lite --record
+```
+
+There is no cost column because cost is not measurable: neither
+`gemini-3.5-flash` nor `-flash-lite` has a row in `pricing.py`, which refuses to
+guess, so every figure reads $0.0000. The suite marks that budget check unscored
+rather than passing it, and the server warns at startup.
 
 Those rows were not always green, and the way they went green is the point of
 having them. Five failed on the first scorecard: the fallback planner answered

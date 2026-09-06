@@ -1,0 +1,23 @@
+{
+ "attempts": 2,
+ "completion_tokens": 346,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 753,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "length",
+    "message": {
+     "content": "In `solar_research.md`, Section 3 lists raw",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 346,
+   "prompt_tokens": 753
+  }
+ }
+}

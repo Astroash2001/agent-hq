@@ -1,6 +1,169 @@
 {
  "rows": [
   {
+   "task_id": "adversarial_ambiguous",
+   "run": 1,
+   "mode": "replay",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Make it better.",
+   "tags": [
+    "adversarial",
+    "ambiguous"
+   ],
+   "error": null,
+   "duration_sec": 7.45,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 1,
+   "artifacts": [
+    "assessment.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "1 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "1 steps, wanted <= 3"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['assessment.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "1/1 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "skipped": true,
+     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "7.4s of 120s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 0.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "The output acknowledges the goal is underspecified rather than inventing a subject",
+     "verdict": "fail",
+     "reason": "The output assumes a generic codebase assessment instead of acknowledging that the goal 'Make it better.' is underspecified."
+    },
+    {
+     "n": 2,
+     "criterion": "It does not fabricate detailed findings about a topic that was never named",
+     "verdict": "fail",
+     "reason": "It fabricates detailed findings about an unnamed codebase, project structure, and technical debt."
+    }
+   ],
+   "spans": 8,
+   "cassette_hits": 6,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "adversarial_missing_tool",
+   "run": 1,
+   "mode": "replay",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Write a short report on how long it takes this machine to sum the numbers 1 to ten million in Python, using a real measured timing.",
+   "tags": [
+    "adversarial",
+    "tool_routing"
+   ],
+   "error": null,
+   "duration_sec": 13.87,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "timed_sum.py",
+    "timing_report.md",
+    "timing_result.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "2 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['timed_sum.py', 'timing_result.md', 'timing_report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "skipped": true,
+     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "13.9s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Contains a timing figure that came from actually running the code",
+     "verdict": "pass",
+     "reason": "The report includes a specific measured timing of 0.245812 seconds derived from running the code."
+    },
+    {
+     "n": 2,
+     "criterion": "The step that needed execution was given to an agent holding the terminal tool",
+     "verdict": "pass",
+     "reason": "Execution of the timed script is evidenced by the concrete output and captured timing metrics included in the artifacts."
+    }
+   ],
+   "spans": 26,
+   "cassette_hits": 15,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
    "task_id": "adversarial_trivial",
    "run": 1,
    "mode": "replay",
@@ -11,12 +174,14 @@
     "trivial"
    ],
    "error": null,
-   "duration_sec": 4.16,
+   "duration_sec": 4.98,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 1,
-   "artifacts": [],
-   "structural": 0.714,
+   "artifacts": [
+    "ssd_definition.md"
+   ],
+   "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
@@ -30,23 +195,24 @@
     },
     {
      "check": "artifacts",
-     "ok": false,
-     "detail": "no artifact matched ['*.md']"
+     "ok": true,
+     "detail": "produced ['ssd_definition.md']"
     },
     {
      "check": "all_steps_completed",
-     "ok": false,
-     "detail": "0/1 completed"
+     "ok": true,
+     "detail": "1/1 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.05"
+     "skipped": true,
+     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "4.2s of 90s"
+     "detail": "5.0s of 90s"
     },
     {
      "check": "must_not_stub",
@@ -54,38 +220,867 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": 0.0,
+   "quality": 0.5,
    "quality_skipped": "",
    "rubric": [
     {
      "n": 1,
      "criterion": "Answers that SSD stands for solid-state drive",
-     "verdict": "fail",
-     "reason": "The mission produced no artifacts."
+     "verdict": "pass",
+     "reason": "The text correctly states that SSD stands for Solid State Drive."
     },
     {
      "n": 2,
      "criterion": "Does not pad a one-line answer into a multi-section report",
      "verdict": "fail",
-     "reason": "The mission produced no artifacts."
+     "reason": "The output pads a simple definition with an extra explanatory paragraph."
     }
    ],
-   "spans": 6,
-   "cassette_hits": 3,
-   "cassette_misses": 1,
+   "spans": 10,
+   "cassette_hits": 8,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "approach_standup",
+   "run": 1,
+   "mode": "replay",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Research solar panel efficiency, then hold a standup to agree the report's angle before writing it.",
+   "tags": [
+    "meeting",
+    "synthesis"
+   ],
+   "error": null,
+   "duration_sec": 15.44,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 3,
+   "artifacts": [
+    "meeting_decision.md",
+    "solar_report.md",
+    "solar_research.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "3 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "3 steps, wanted <= 5"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['solar_research.md', 'meeting_decision.md', 'solar_report.md']"
+    },
+    {
+     "check": "requires_meeting",
+     "ok": true,
+     "detail": "1 meeting step(s)"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "3/3 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "skipped": true,
+     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "15.4s of 240s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "A meeting artifact records an agreed angle for the report",
+     "verdict": "pass",
+     "reason": "The meeting decision artifact explicitly records the agreed angle: 'The Commercialization Leap: How TOPCon, HJT, and Perovskite-Silicon Tandems are Redefining Solar Efficiency in 2026.'"
+    },
+    {
+     "n": 2,
+     "criterion": "The written report follows the angle that was agreed",
+     "verdict": "pass",
+     "reason": "The written report uses the exact title and focus defined in the meeting decision artifact."
+    },
+    {
+     "n": 3,
+     "criterion": "The research is used rather than restated",
+     "verdict": "pass",
+     "reason": "The report synthesizes the research data on cell architectures and market trends rather than merely copying it verbatim."
+    }
+   ],
+   "spans": 36,
+   "cassette_hits": 24,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "battery_comparison",
+   "run": 1,
+   "mode": "replay",
+   "model": "gemini/gemini-3.5-flash-lite",
+   "goal": "Compare sodium-ion and lithium-ion home batteries and recommend one.",
+   "tags": [
+    "research",
+    "synthesis",
+    "multi_step",
+    "smoke"
+   ],
+   "error": null,
+   "duration_sec": 9.07,
+   "cost_usd": 0.0,
+   "tokens_estimated": false,
+   "steps": 3,
+   "artifacts": [
+    "battery_research.md"
+   ],
+   "structural": 0.714,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "3 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "3 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": false,
+     "detail": "no artifact matched ['*report*.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": false,
+     "detail": "1/3 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "skipped": true,
+     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "9.1s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "CassetteMiss: No cassette for key 13481cf4376f904282996b00 in evals\\cassettes\\battery_comparison. Re-record this task with:  python -m evals.runner --suite battery_comparison --record",
+   "rubric": [],
+   "spans": 25,
+   "cassette_hits": 15,
+   "cassette_misses": 3,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "battery_team_review",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Research two competing home battery technologies in parallel, discuss the findings as a team, then write the comparison report.",
+   "tags": [
+    "meeting",
+    "synthesis",
+    "multi_step"
+   ],
+   "error": null,
+   "duration_sec": 17.48,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "decision.md",
+    "meeting_notes.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 5"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'analysis.md', 'meeting_notes.md', 'decision.md', 'report.md']"
+    },
+    {
+     "check": "requires_meeting",
+     "ok": true,
+     "detail": "1 meeting step(s)"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.35"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "17.5s of 240s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 25,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "code_cache_bug",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Implement and test a fast Python fibonacci cache, and verify it with a real run.",
+   "tags": [
+    "code",
+    "analysis",
+    "smoke"
+   ],
+   "error": null,
+   "duration_sec": 11.5,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "implementation.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.25"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "11.5s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "code_review_fix",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Analyse this function for bugs and propose a fix: def average(xs): return sum(xs) / len(xs)",
+   "tags": [
+    "code",
+    "analysis"
+   ],
+   "error": null,
+   "duration_sec": 13.12,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "implementation.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.20"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "13.1s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "ev_charging_standards",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Research the competing EV charging connector standards, then write a one-page comparison for a fleet buyer.",
+   "tags": [
+    "research",
+    "synthesis",
+    "handoff"
+   ],
+   "error": null,
+   "duration_sec": 12.18,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "implementation.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.25"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "12.2s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "grid_storage_tradeoffs",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Compare grid-scale storage options on cost and duration, then produce an executive briefing with a recommendation.",
+   "tags": [
+    "research",
+    "synthesis",
+    "handoff",
+    "fan_in"
+   ],
+   "error": null,
+   "duration_sec": 12.17,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "briefing.md",
+    "implementation.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.30"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "12.2s of 200s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "heat_pump_handoff",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Research air-source heat pumps for UK homes, then have a writer turn the findings into a homeowner-facing explainer.",
+   "tags": [
+    "research",
+    "synthesis",
+    "handoff"
+   ],
+   "error": null,
+   "duration_sec": 12.16,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "implementation.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.25"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "12.2s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "india_news_brief",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Tell me what happened today in Indian news and write it up as a short brief.",
+   "tags": [
+    "research",
+    "synthesis",
+    "time_sensitive"
+   ],
+   "error": null,
+   "duration_sec": 11.47,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "briefing.md",
+    "implementation.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'briefing.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.30"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "11.5s of 200s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "solar_efficiency",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Research the current state of solar panel efficiency and summarise where the ceiling is.",
+   "tags": [
+    "research",
+    "pure_research"
+   ],
+   "error": null,
+   "duration_sec": 12.17,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "implementation.md",
+    "research_notes.md",
+    "summary.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'summary.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.20"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "12.2s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "solid_state_batteries",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Research where solid-state batteries stand commercially and what is still blocking mass production.",
+   "tags": [
+    "research",
+    "pure_research"
+   ],
+   "error": null,
+   "duration_sec": 12.16,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "implementation.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'implementation.md', 'analysis.md', 'report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.20"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "12.2s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
    "cassettes_recorded": 0
   }
  ],
  "summary": [
   {
-   "model": "gemini/gemini-3.5-flash-lite",
-   "tasks": 1,
-   "runs": 1,
+   "model": "(simulator)",
+   "tasks": 9,
+   "runs": 9,
    "errors": 0,
-   "structural": 0.714,
-   "quality": 0.0,
+   "structural": 1.0,
+   "quality": null,
    "cost_usd": 0.0,
-   "p50_latency": 4.16
+   "p50_latency": 12.17
+  },
+  {
+   "model": "gemini/gemini-3.5-flash-lite",
+   "tasks": 5,
+   "runs": 5,
+   "errors": 0,
+   "structural": 0.943,
+   "quality": 0.625,
+   "cost_usd": 0.0,
+   "p50_latency": 9.07
   }
  ]
 }

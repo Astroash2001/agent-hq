@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 30,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1232,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I have searched the web and written the definition of the acronym SSD to `ssd_definition.md` using the `write_file` tool.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 30,
+   "prompt_tokens": 1232
+  }
+ }
+}
