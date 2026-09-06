@@ -752,24 +752,57 @@ stored as exact JSON bytes now, and the regression test compares `json.dumps` of
 served against recorded rather than the values, because comparing values passes
 on the broken version — which is exactly how this survived the first fix.
 
-**Where it stands:** 5 tasks recorded and replaying deterministically (two runs,
-14/14 identical). The other 9 have no cassettes — the daily Gemini quota ran out
-across three sweeps in one night — and fall to the simulator, marked `unjudged`.
+**Recording turned out to be three separate bugs, each hidden behind the last.**
+The transport wrapped `llm.acompletion` and nothing else, so every *tool* call
+was live on every replay. Each fix exposed the next:
 
-Still open, both one command each once quota returns:
+1. **`web_search`** — an agent's first turn searches, the results land verbatim
+   in the second turn's prompt, the web moves, the turn misses its own cassette.
+   Observed as a suite that replayed clean at 04:55 and went red at 05:08 with
+   nothing in the repo changed.
+2. **The served result was reordered.** `Cassettes.save` writes `sort_keys=True`
+   and the prompt is built from `json.dumps(tool_result)`, so replay produced an
+   alphabetised dict where the recording had insertion order — the key changed
+   on key order alone while every value matched. Stored as exact JSON bytes now.
+3. **`list_files` and `read_file` read the repository.** A replayed prompt was
+   found carrying `.git` byte sizes; another carried the whole of `TODO.md`,
+   a file being edited while the suite ran.
+
+So the rule is inverted from the obvious one. **Every tool that observes is
+recorded; only `write_file` and `record_decision` really run**, because their
+side effect is the mission's output — serving `write_file` a recorded "ok"
+leaves the workspace empty and scores the run as having produced nothing.
+
+**And one source that is not a tool.** Two parallel steps each record an episode
+when they finish, so whether the second recalls the first one's depends on
+completion order, and a replay orders them differently. `memory.render_hints`
+pastes that block into the system prompt. Normalised out of the key like the
+date line — contents only, not presence, since an agent that remembered nothing
+was asked a different question.
+
+**Where it stands:** 9 of 14 tasks recorded — 95% structural, 93% quality across
+them. Seven replay clean; `battery_team_review` and `ev_charging_standards` still
+miss and say so. The other five have no cassettes and fall to the simulator,
+marked `unjudged`.
+
+Two things this does *not* establish, and they matter:
+
+- The recall normalisation changed every key for a prompt carrying hints, so the
+  cassettes recorded before it cannot confirm that fix end to end. The unit
+  tests pin the normalisation; the end-to-end proof needs a re-record.
+- `ev_charging_standards` was recorded partially (its own run scored 71%), so its
+  misses may be the incomplete recording rather than anything in the harness.
+
+Both clear with one sweep, once the daily Gemini quota resets:
 
 ```bash
 python -m evals.runner --suite all --model gemini/gemini-3.5-flash-lite --record
 ```
 
-and then the same against `gemini-3.5-flash` itself, which is rate-limited to
-nothing today — every request exhausts three attempts and falls back — so even a
-full sweep records the fallback model rather than what the office is configured
-to run on. The scorecard names which model answered, which is the least that can
-be done about it.
-
-`battery_comparison`'s recording is incomplete (57% structural, unjudged) and
-should be re-recorded with the rest.
+And then the same against `gemini-3.5-flash` itself. That model is throttled to
+near-nothing: a single task took 465s of backoff and scored 50%, which is why
+the suite is recorded on the fallback and the scorecard names which model
+answered.
 
 ### The container ran uvicorn's reloader
 
