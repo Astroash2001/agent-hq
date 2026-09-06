@@ -389,8 +389,14 @@ body { overflow: hidden; }
    dead space under the simulation card. Both grow from a zero basis so the
    split stays 2:1 whatever the window height. */
 .terminal-card {
-    flex: 2 1 0;
-    min-height: 150px;
+    /* Was `flex: 2 1 0` -- the terminal took twice the free space and the
+       MISSION OUTPUT below it was capped at 220px. That is the wrong way
+       round: the log is a progress indicator you glance at, the output is the
+       thing you actually read. It now takes a fixed slice and the output takes
+       what is left. */
+    flex: 0 0 auto;
+    min-height: 96px;
+    max-height: 168px;
 }
 
 .terminal-titlebar {
@@ -513,6 +519,14 @@ body { overflow: hidden; }
 }
 
 /* Fill the overlay instead of sitting at sidebar height. */
+/* The output is the panel that grows. `min-height` rather than a fixed height
+   so a one-line answer does not leave a tall empty box, and `flex: 1 1 auto`
+   so a long briefing takes every pixel the terminal and the gauges leave. */
+.memo-card {
+    flex: 1 1 auto;
+    min-height: 300px;
+}
+
 .memo-card[data-expanded="true"] {
     flex: 1 1 auto;
     min-height: 0;
@@ -541,7 +555,11 @@ body { overflow: hidden; }
 .memo-card { flex: 0 1 auto; min-height: 0; }
 
 .memo-content {
-    max-height: 220px;
+    flex: 1;
+    /* A floor, not a ceiling. The old `max-height: 220px` meant a 40-line
+       briefing scrolled inside a box a third of the sidebar's height while
+       empty space sat below it. */
+    min-height: 200px;
     padding: 9px 11px;
     background: var(--panel);
     border: 1px solid var(--frame-dim);
@@ -907,7 +925,7 @@ body { overflow: hidden; }
 .out-files {
     flex: 1;
     min-height: 0;
-    max-height: 260px;
+    min-height: 200px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--frame) var(--trough);
@@ -1042,4 +1060,12 @@ body { overflow: hidden; }
 .attach-chip.error {
     border-color: var(--error, #c0392b);
     color: var(--error, #c0392b);
+}
+
+/* The running view of the FILES tab: files as each desk finishes them, before
+   the mission ends and the full bodies replace them. */
+.out-where.out-live {
+    color: var(--amber-bright);
+    border-left: 2px solid var(--amber-bright);
+    padding-left: 6px;
 }

@@ -785,6 +785,7 @@ class RetroHUD {
             : this.escapeHtml(String(markdownText || ''));
 
         this.renderOutputFiles(files);
+        this.liveArtifacts = null;   // the full bodies supersede the running view
         this.executiveMemoCard.style.display = 'flex';
         this.selectOutputTab('report');
     }
@@ -823,6 +824,64 @@ class RetroHUD {
                 }</div>
               </details>`;
         }).join('');
+    }
+
+    /**
+     * Note an artifact the moment a desk produces it.
+     *
+     * The output panel used to stay hidden until `task.completed`, so a
+     * five-minute mission showed a scrolling terminal and nothing else, then a
+     * wall of text at the end. The work exists well before that -- each
+     * `artifact.created` carries a name, an author and a 180-character preview
+     * -- and showing it as it lands is the difference between watching progress
+     * and watching a log.
+     *
+     * Deliberately additive: `showExecutiveMemo` still replaces this with the
+     * full bodies when the mission finishes. This is the running view, not a
+     * second source of truth.
+     */
+    noteArtifact(payload) {
+        if (!this.executiveMemoCard) return;
+        const name = payload.name || 'untitled';
+
+        this.liveArtifacts = this.liveArtifacts || new Map();
+        this.liveArtifacts.set(name, {
+            name,
+            author_name: payload.author_name || payload.agent_name || '',
+            size_chars: payload.size_chars || 0,
+            preview: payload.preview || '',
+        });
+
+        // Opened on the first artifact, and on the FILES tab, because at this
+        // point there is no report to show -- only work.
+        this.executiveMemoCard.style.display = 'flex';
+        if (this.liveArtifacts.size === 1) this.selectOutputTab('files');
+
+        const goalEl = document.getElementById('outGoal');
+        if (goalEl && this.missionGoal) {
+            goalEl.innerHTML =
+                `<span class="out-goal-tag">ASKED</span> ${this.escapeHtml(this.missionGoal)}`;
+            goalEl.style.display = '';
+        }
+
+        const count = document.getElementById('outFileCount');
+        if (count) count.textContent = String(this.liveArtifacts.size);
+
+        const wrap = document.getElementById('outFiles');
+        if (!wrap) return;
+        const items = [...this.liveArtifacts.values()];
+        wrap.innerHTML =
+            '<div class="out-where out-live">Working — files appear here as each ' +
+            'desk finishes. The full text lands when the mission ends.</div>' +
+            items.map((f, i) => `
+              <details class="out-file"${i === items.length - 1 ? ' open' : ''}>
+                <summary>
+                    <span class="out-file-name">${this.escapeHtml(f.name)}</span>
+                    <span class="out-file-meta">${this.escapeHtml(f.author_name)} · ${f.size_chars} chars</span>
+                </summary>
+                <div class="out-file-body markdown-body"><pre>${
+                    this.escapeHtml(f.preview)}${f.preview ? ' …' : ''}</pre></div>
+              </details>`).join('');
     }
 
     /**

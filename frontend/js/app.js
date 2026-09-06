@@ -229,6 +229,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 hud.addTerminalLog(
                     `${payload.author_name || agentId} produced ${payload.name} (${payload.size_chars} chars)`,
                     'SUCCESS');
+                // And into the output panel, so the work is visible while it
+                // happens rather than only in a wall of text at the end.
+                hud.noteArtifact(payload);
                 break;
 
             // {from_agent_name, to_agent_name, name, size_chars, step_id}
