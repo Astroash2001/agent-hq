@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 26,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1171,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"LFP home battery round trip efficiency cost per kWh lifespan\"}",
+        "name": "web_search"
+       },
+       "id": "call_a98c03e622784eefa5c42a054491__thought__El4KXAERTTIPyrv28djVdJtKLU2X+0u5ajYhvwV0mqjr37tVUkZdCemtCo5nlC2G0A/UL2FBilBZK/RLhg7+lchUiup1+3BvuSVIzGYuPT/v6Q2qUmyw6GVyz+uTBTDG"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 26,
+   "prompt_tokens": 1171
+  }
+ }
+}

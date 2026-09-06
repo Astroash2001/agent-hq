@@ -45,6 +45,26 @@ _DATE_LINE = re.compile(r"Today's date is [^.\n]*\.")
 # concern.
 _RECALL_DURATION = re.compile(r", took \d+(?:\.\d+)?s")
 
+# The whole recalled-episode block, which `memory.render_hints` pastes into an
+# agent's system prompt between these two fixed lines.
+#
+# Normalising the timing inside it was not enough. Two steps that run in
+# parallel each record an episode when they finish, so whether the second one
+# sees the first one's episode depends on which finished first -- and a replay,
+# where every model call returns instantly, orders them differently from the
+# recording. The block then differs, the key differs, and a mission with any
+# fan-out is unreplayable. Observed on `battery_team_review`, whose two research
+# steps run side by side.
+#
+# Same reasoning as the date: the hint is genuinely useful to the agent and
+# stays in the prompt; the hash is this layer's concern. It does mean a cassette
+# recorded with one set of hints is served for a request with another, which is
+# the same trade already accepted for a prompt that says what day it is.
+_RECALL_BLOCK = re.compile(
+    r"Relevant things you have done before in this office:.*?"
+    r"Reuse what worked\. Do not repeat what did not\.",
+    re.S)
+
 
 class CassetteMiss(RuntimeError):
     """Replay wanted an exchange that was never recorded."""
@@ -60,6 +80,7 @@ def _canonical(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         content = item.get("content")
         if isinstance(content, str):
             content = _DATE_LINE.sub("Today's date is <DATE>.", content)
+            content = _RECALL_BLOCK.sub("<RECALLED EPISODES>", content)
             item["content"] = _RECALL_DURATION.sub(", took <SECONDS>", content)
         out.append(item)
     return out

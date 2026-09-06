@@ -65,6 +65,47 @@ def test_the_key_ignores_how_long_a_recalled_episode_took():
     assert replay_mod.cassette_key("m", slow) == replay_mod.cassette_key("m", fast)
 
 
+def _hints(*episodes):
+    """A system prompt carrying the block `memory.render_hints` pastes in."""
+    lines = ["Relevant things you have done before in this office:"]
+    lines += [f'- "{e}" -- worked, took 4.1s. Notes: n' for e in episodes]
+    lines.append("Reuse what worked. Do not repeat what did not.")
+    return ("You are a Research Specialist.\n\n"
+            + "\n".join(lines) + "\n\nGo.")
+
+
+def test_the_key_ignores_which_episodes_were_recalled():
+    """
+    Two steps that run in parallel each record an episode when they finish, so
+    whether the second sees the first one's depends on which finished first --
+    and a replay, where every model call returns instantly, orders them
+    differently from the recording. The recalled block then differs, the key
+    differs, and a mission with any fan-out is unreplayable. Diagnosed on
+    `battery_team_review`, whose two research steps run side by side.
+
+    Same trade as the date line: the hint stays in the prompt because it is
+    genuinely useful to the agent, and the hash is this layer's concern.
+    """
+    one = replay_mod.cassette_key("m", [{"role": "system", "content": _hints("a")}])
+    two = replay_mod.cassette_key(
+        "m", [{"role": "system", "content": _hints("a", "b")}])
+    assert one == two, "a differently-populated recall block changed the key"
+
+
+def test_recalling_nothing_is_still_a_different_request():
+    """
+    Normalising the block's contents is right; normalising away whether there
+    was one at all is too coarse. An agent that remembered something and one
+    that remembered nothing were asked genuinely different questions.
+    """
+    with_hints = replay_mod.cassette_key(
+        "m", [{"role": "system", "content": _hints("a")}])
+    without = replay_mod.cassette_key(
+        "m", [{"role": "system",
+              "content": "You are a Research Specialist.\n\nGo."}])
+    assert with_hints != without
+
+
 def test_the_key_still_changes_when_the_request_does():
     base = [{"role": "user", "content": "hi"}]
     key = replay_mod.cassette_key("m", base)

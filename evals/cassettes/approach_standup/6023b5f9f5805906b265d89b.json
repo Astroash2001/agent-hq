@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 47,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1928,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I have successfully held the standup meeting with Alice and Eve, reviewed the research artifacts, addressed Eve's structural suggestions, and recorded the agreed report angle and outline using `record_decision` into `meeting_decision.md`.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 47,
+   "prompt_tokens": 1928
+  }
+ }
+}

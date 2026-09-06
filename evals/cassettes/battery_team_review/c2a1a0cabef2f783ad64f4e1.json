@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 23,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1158,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"solid state battery efficiency round trip energy density\"}",
+        "name": "web_search"
+       },
+       "id": "call_e543d6102ae9447ba51f3403dfa4__thought__El4KXAERTTIPh3WITjlikhOH0FJND9xej3wPUUBRaA0lGxHNGj6JSbL51FFHljWPFI05UzB/fN48nnnRFlnJtIJHZ5L7PtifbDVqZu8krwGhseUTFIe86lHIsS9FViLJ"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 23,
+   "prompt_tokens": 1158
+  }
+ }
+}

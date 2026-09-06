@@ -87,14 +87,19 @@ specialist produced nothing; grading them measures the assembler, not the work.
 python -m evals.runner --suite all --replay      # offline, no key, deterministic
 ```
 
-| task | mode | structural | quality | p50 latency |
-|---|---|---|---|---|
-| `adversarial_ambiguous` | replay | 100% | 0% | 7.5s |
-| `adversarial_missing_tool` | replay | 100% | 100% | 13.9s |
-| `adversarial_trivial` | replay | 100% | 50% | 5.0s |
-| `approach_standup` | replay | 100% | 100% | 15.4s |
-| `battery_comparison` | replay | 71% | — | 9.1s |
-| the other nine | simulate | 100% | — | ~12s |
+| task | mode | structural | quality |
+|---|---|---|---|
+| `adversarial_ambiguous` | replay | 100% | 100% |
+| `adversarial_missing_tool` | replay | 100% | 100% |
+| `adversarial_trivial` | replay | 100% | 50% |
+| `approach_standup` | replay | 100% | 100% |
+| `battery_comparison` | replay | 86% | 100% |
+| `battery_team_review` | replay | 86% | — |
+| `code_cache_bug` | replay | 100% | 100% |
+| `code_review_fix` | replay | 100% | 100% |
+| `ev_charging_standards` | replay | 86% | — |
+| the other five | simulate | 100% | — |
+| **9 on gemini-3.5-flash-lite** | **replay** | **95%** | **93%** |
 
 **structural** is the `expect` block — step count, agents involved, artifacts
 produced — deterministic, no model involved. **quality** is `evals/judge.py`

@@ -1,0 +1,4 @@
+{
+ "result_json": "{\"success\": false, \"refused\": true, \"error\": \"Command contains forbidden shell metacharacter: '\\n'.\"}",
+ "tool": "terminal"
+}

@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 27,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1255,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"EV charging reliability availability J3400 CCS fleet operators\"}",
+        "name": "web_search"
+       },
+       "id": "call_6f9257ffcb7144c49b37fd4e8993__thought__El4KXAERTTIPeoSed2grPxUPKYUBaDUZVUoplQ4oGtARNjZGVM6IT59NPaT4FoWXNOqh2x2YzswDse5WH6PgtIf1K3do0EScSkKP7P9hKgukfQQ/kgMkA3GsRCWUjx7/"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 27,
+   "prompt_tokens": 1255
+  }
+ }
+}

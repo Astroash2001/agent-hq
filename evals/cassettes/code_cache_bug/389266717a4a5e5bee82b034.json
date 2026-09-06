@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1402,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1530,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"filepath\": \"fibonacci_cache.py\", \"content\": \"#!/usr/bin/env python3\\n\\\"\\\"\\\"\\nfibonacci_cache.py\\n\\nA fast Python Fibonacci cache module with verification, performance benchmarking,\\nand robust test coverage.\\n\\\"\\\"\\\"\\n\\nimport time\\nimport functools\\nimport unittest\\n\\n# 1. Implementation using functools.lru_cache (the most standard fast Python memoization)\\n@functools.lru_cache(maxsize=None)\\ndef fib_lru(n: int) -> int:\\n    \\\"\\\"\\\"Computes the n-th Fibonacci number using lru_cache for O(n) time complexity.\\\"\\\"\\\"\\n    if n < 0:\\n        raise ValueError(\\\"Fibonacci is not defined for negative numbers.\\\")\\n    if n <= 1:\\n        return n\\n    return fib_lru(n - 1) + fib_lru(n - 2)\\n\\n\\n# 2. Iterative implementation for large n to avoid recursion limit and overhead\\ndef fib_iterative(n: int) -> int:\\n    \\\"\\\"\\\"Computes the n-th Fibonacci number iteratively in O(n) time and O(1) space.\\\"\\\"\\\"\\n    if n < 0:\\n        raise ValueError(\\\"Fibonacci is not defined for negative numbers.\\\")\\n    if n <= 1:\\n        return n\\n    a, b = 0, 1\\n    for _ in range(2, n + 1):\\n        a, b = b, a + b\\n    return b\\n\\n\\n# 3. Class-based custom cache with dictionary and stats tracking\\nclass FibonacciCache:\\n    \\\"\\\"\\\"Custom Fibonacci cache with hit/miss statistics and configurable storage.\\\"\\\"\\\"\\n    \\n    def __init__(self):\\n        self._cache = {0: 0, 1: 1}\\n        self.hits = 0\\n        self.misses = 0\\n\\n    def get(self, n: int) -> int:\\n        if n < 0:\\n            raise ValueError(\\\"Fibonacci is not defined for negative numbers.\\\")\\n        if n in self._cache:\\n            self.hits += 1\\n            return self._cache[n]\\n        \\n        self.misses += 1\\n        # Compute recursively or iteratively\\n        val = self.get(n - 1) + self.get(n - 2)\\n        self._cache[n] = val\\n        return val\\n\\n    def clear(self):\\n        self._cache = {0: 0, 1: 1}\\n        self.hits = 0\\n        self.misses = 0\\n\\n    def stats(self) -> dict:\\n        total = self.hits + self.misses\\n        hit_ratio = (self.hits / total) if total > 0 else 0.0\\n        return {\\n            \\\"hits\\\": self.hits,\\n            \\\"misses\\\": self.misses,\\n            \\\"hit_ratio\\\": hit_ratio,\\n            \\\"cache_size\\\": len(self._cache)\\n        }\\n\\n\\ndef benchmark():\\n    \\\"\\\"\\\"Runs a performance benchmark comparing lru_cache vs iterative vs custom cache.\\\"\\\"\\\"\\n    print(\\\"=\\\" * 60)\\n    print(\\\"Fibonacci Cache Performance Benchmark\\\")\\n    print(\\\"=\\\" * 60)\\n\\n    n = 500\\n\\n    # Benchmark lru_cache\\n    fib_lru.cache_clear()\\n    start = time.perf_counter()\\n    res_lru = fib_lru(n)\\n    duration_lru = time.perf_counter() - start\\n    print(f\\\"fib_lru({n}) -> {res_lru} [Time: {duration_lru:.6f} seconds]\\\")\\n\\n    # Benchmark iterative\\n    start = time.perf_counter()\\n    res_iter = fib_iterative(n)\\n    duration_iter = time.perf_counter() - start\\n    print(f\\\"fib_iterative({n}) -> {res_iter} [Time: {duration_iter:.6f} seconds]\\\")\\n\\n    # Benchmark custom cache\\n    fc = FibonacciCache()\\n    start = time.perf_counter()\\n    res_custom = fc.get(n)\\n    duration_custom = time.perf_counter() - start\\n    print(f\\\"FibonacciCache.get({n}) -> {res_custom} [Time: {duration_custom:.6f} seconds]\\\")\\n    print(f\\\"Stats: {fc.stats()}\\\")\\n    print(\\\"=\\\" * 60)\\n\\n\\nclass TestFibonacciCache(unittest.TestCase):\\n    def test_base_cases(self):\\n        for func in [fib_lru, fib_iterative]:\\n            self.assertEqual(func(0), 0)\\n            self.assertEqual(func(1), 1)\\n\\n    def test_small_sequence(self):\\n        expected = [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55]\\n        for i, val in enumerate(expected):\\n            self.assertEqual(fib_lru(i), val)\\n            self.assertEqual(fib_iterative(i), val)\\n            fc = FibonacciCache()\\n            self.assertEqual(fc.get(i), val)\\n\\n    def test_negative_input(self):\\n        for func in [fib_lru, fib_iterative]:\\n            with self.assertRaises(ValueError):\\n                func(-1)\\n        fc = FibonacciCache()\\n        with self.assertRaises(ValueError):\\n            fc.get(-5)\\n\\n    def test_custom_cache_stats(self):\\n        fc = FibonacciCache()\\n        self.assertEqual(fc.get(10), 55)\\n        stats = fc.stats()\\n        self.assertGreater(stats[\\\"hits\\\"], 0)\\n        self.assertGreater(stats[\\\"misses\\\"], 0)\\n        fc.clear()\\n        self.assertEqual(fc.stats()[\\\"hits\\\"], 0)\\n        self.assertEqual(fc.stats()[\\\"misses\\\"], 0)\\n\\n\\nif __name__ == \\\"__main__\\\":\\n    benchmark()\\n    print(\\\"\\\\nRunning unit tests...\\\")\\n    unittest.main(argv=['first-arg-is-ignored'], exit=False)\\n\"}",
+        "name": "write_file"
+       },
+       "id": "call_881be6ef2db04d2c87511a98bae0__thought__El4KXAERTTIPYJ6ebSrmuUIr9QmK3tper3+I15+DOIumDUd9rCmvyh04nR1VoYIskvAQpmMqlXuoYe+l5DRqH9hsRQMDcH4dFR+iEqQ0R19yaXE9C17x9NfhAg6lUxfE"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1402,
+   "prompt_tokens": 1530
+  }
+ }
+}

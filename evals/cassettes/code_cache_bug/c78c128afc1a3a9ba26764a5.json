@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 21,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 2988,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"python3 fibonacci_cache.py\"}",
+        "name": "terminal"
+       },
+       "id": "call_308b889e7ef04dfa92635a2099b0__thought__El4KXAERTTIP2O+U+T+pOCBmlbAgW4otfHmKLGXxOvtJMsbkfC6s8vZsAP3Y+3LrZYo/XKMns/mxG9ARsS5fhfuK5LpOiHKVr2lcfgRGju1nAhxcGztWLqvbFf/VZmKu"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 21,
+   "prompt_tokens": 2988
+  }
+ }
+}

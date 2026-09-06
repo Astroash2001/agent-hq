@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 114,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1790,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"verdict\": \"accept\",\n  \"score\": 0.95,\n  \"reasons\": [\n    \"The artifact thoroughly covers CCS1, CCS2, NACS/J3400, and CHAdeMO standards as requested.\",\n    \"It specifically addresses reliability, availability, and fleet relevance with structured sections and a summary table.\",\n    \"The format is clean, concise, and fits the one-page comparison brief for a fleet buyer.\"\n  ],\n  \"guidance\": \"\"\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 114,
+   "prompt_tokens": 1790
+  }
+ }
+}

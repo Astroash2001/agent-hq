@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 26,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 499,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"Lithium Iron Phosphate home battery technology market adoption cost efficiency\"}",
+        "name": "web_search"
+       },
+       "id": "call_f2f13013b4ba40769089afc36dd1__thought__El4KXAERTTIPyWcEG8rSYZCfZKbR3nBgehyRKSSo1yAHDiV1schtmfczCo84P+HmrnKRMwn6egXk7v8EbJgc5c4gHZ87vqLYwkLL8EANkgmTbrZrv0tcO0a13cO8Kz3c"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 26,
+   "prompt_tokens": 499
+  }
+ }
+}
