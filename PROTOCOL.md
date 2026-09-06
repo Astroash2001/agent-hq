@@ -294,6 +294,12 @@ no graph to carry on.
 | `mission.json` | goal, plan, per-step status, and the cost breakdown below |
 | `trace.jsonl` | one span per line: mission, step, turn, tool, llm |
 
+`GET /api/missions/{id}/artifacts/{name}` serves one artifact's text off disk.
+The trace deliberately holds spans and not bodies -- it has to stay readable
+when a process is killed mid-write -- so the replay driver fetches the briefing
+from here rather than reconstructing it. The name is resolved and checked to be
+inside the mission directory; a name that escapes is a 400.
+
 `mission.json` gained `cost_usd`, `mission_tokens`, `unpriced_models`,
 `tokens_estimated`, and `per_step`, one row per plan step carrying `model`,
 `prompt_tokens`, `completion_tokens`, `cost_usd`, `duration_sec`, `tool_calls`,

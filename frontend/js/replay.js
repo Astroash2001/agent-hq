@@ -122,6 +122,23 @@ class TraceReplay {
 
     /* --- loading a trace -------------------------------------------------- */
 
+    /**
+     * One artifact's text, or '' if it is not there.
+     *
+     * Never throws: a missing report is a replay that says so, not a replay
+     * that fails to load. A mission killed before it wrote one is exactly the
+     * mission you most want to watch.
+     */
+    async fetchArtifact(missionId, name) {
+        try {
+            const res = await fetch(
+                `/api/missions/${missionId}/artifacts/${encodeURIComponent(name)}`);
+            return res.ok ? await res.text() : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
     async load(missionId) {
         if (!missionId) return;
         this.stop();
@@ -137,6 +154,13 @@ class TraceReplay {
                 return;
             }
             mission = mRes.ok ? await mRes.json() : {};
+            // The briefing, off disk. The trace records spans, not bodies --
+            // putting artifact text in it would bloat the one file that has to
+            // stay readable when a process is killed mid-write -- so a replay
+            // used to show the work happening and never what the work said.
+            // Fetched rather than synthesised: a replay that fills in blanks is
+            // a story, not a record.
+            mission.report = await this.fetchArtifact(missionId, 'report.md');
             const text = await tRes.text();
             spans = text.split('\n').filter(Boolean).map(line => {
                 try { return JSON.parse(line); } catch (e) { return null; }
@@ -321,7 +345,14 @@ class TraceReplay {
                     // is the FIRST one in start order, so at this point no step
                     // has been walked yet and every tally would read zero.
                     finished = {
-                        result: '',
+                        // The real briefing when the mission left one on disk,
+                        // and an explicit note when it did not -- an empty memo
+                        // reads as "the mission concluded nothing", which is a
+                        // different claim from "this was never written".
+                        result: (mission && mission.report) ||
+                            '_This mission left no `report.md` on disk, so the '
+                            + 'replay has no briefing to show. The steps and '
+                            + 'their costs below are from the trace._',
                         duration_seconds: Number(span.duration_sec || 0).toFixed(2),
                         steps_completed: 0, steps_failed: 0, replay: true,
                     };

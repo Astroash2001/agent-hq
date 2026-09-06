@@ -62,6 +62,37 @@ async def get_mission(mission_id: str):
     return mission
 
 
+@router.get("/{mission_id}/artifacts/{name}", response_class=PlainTextResponse)
+async def get_artifact(mission_id: str, name: str):
+    """
+    One artifact's text, off disk.
+
+    `get_mission` lists the filenames and stops there, so a replayed mission
+    could show the work happening and not what the work said -- the trace holds
+    spans, not bodies, and putting bodies in it would bloat the one file that
+    has to stay readable when a process is killed mid-write.
+
+    The name is resolved and then checked to be inside the mission directory
+    rather than pattern-matched. `..%2f` and an absolute path both survive URL
+    decoding, and a blocklist of shapes is a losing game against a filename that
+    reaches the filesystem; comparing the resolved path is not.
+    """
+    directory = os.path.realpath(_mission_dir(mission_id))
+    target = os.path.realpath(os.path.join(directory, name))
+    if os.path.commonpath([directory, target]) != directory or target == directory:
+        raise HTTPException(status_code=400, detail="artifact name escapes the mission")
+    if not os.path.isfile(target):
+        raise HTTPException(
+            status_code=404, detail=f"no artifact '{name}' in mission '{mission_id}'")
+
+    try:
+        with open(target, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError as exc:
+        raise HTTPException(status_code=500,
+                            detail=f"could not read artifact: {exc}") from exc
+
+
 @router.get("/{mission_id}/trace", response_class=PlainTextResponse)
 async def get_trace(mission_id: str):
     """The mission's spans, as the newline-delimited JSON they were written as."""

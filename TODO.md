@@ -508,9 +508,17 @@ back into the same events the WebSocket sends and handed to the same
 touched. Walks are reconstructed by looking each `tool` span's tool up in
 `/api/office`.
 
-Still open: the trace holds no artifact bodies, so a replayed mission shows the
-work happening but cannot show the briefing -- it says so rather than inventing
-one. And a replay is all-or-nothing: seeking backwards replays from zero rather
+**Done: a replay shows the briefing now.** The trace still holds spans and not
+bodies -- putting artifact text in it would bloat the one file that has to stay
+readable when a process is killed mid-write -- so the briefing is fetched off
+disk instead, from a new `GET /api/missions/{id}/artifacts/{name}`. The name is
+resolved and compared against the mission directory rather than pattern-matched:
+`..%2f` survives URL decoding, and a blocklist of bad shapes is a losing game
+against a string that reaches the filesystem. A mission that left no `report.md`
+gets a note saying so, because an empty memo reads as "this mission concluded
+nothing", which is a different claim from "this was never written".
+
+Still open: a replay is all-or-nothing -- seeking backwards replays from zero rather
 than stepping back, because the office is a state machine with no inverse for
 "the agent walked to the library".
 
