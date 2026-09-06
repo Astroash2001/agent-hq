@@ -207,9 +207,31 @@ words survive at both ends instead.
 
 `office.py` binds tools to stations and makes agents walk to them. Open items:
 
-- Walk time is straight-line distance; it ignores walls and the collision grid
-  the renderer paths against, so a backend walk and a drawn walk can disagree on
-  a route that has to go around the conference room
+- **Walk time is straight-line distance, and the reason that has not been fixed
+  turns out to be worse than the bug.** `export_layout.py` now emits the
+  `blocked` grid alongside the seats and stations — the same grid
+  `canvas.js buildCollision(true)` builds and the same one the renderer's A*
+  paths on — so the backend *could* time a walk over the real route. It does not
+  yet, because the grid is not usable for that:
+
+  **The walkable grid is 7 disconnected regions.** The largest holds 324 of 386
+  walkable tiles; the conference-room strip and a boss-office pocket are islands.
+  A* can never route between them. `stations.ops_console` sits on one of those
+  islands and `stations.conference_table` sits inside the boardroom table with no
+  open tile beside it, so neither is reachable on the grid at all.
+
+  The office looks fine anyway because `stepAgent` falls back to sliding when
+  A* finds no path, and sliding tests a tile by its **top-left corner**
+  (`blockedByProp`) rather than its centre, and exempts an agent's own seat. Two
+  different collision rules, one of which is doing nearly all the work — so the
+  pathfinder has been mostly decorative and nothing surfaced it, because the
+  backend was timing straight lines regardless.
+
+  `check_layout.py` reports this now (non-fatal — it describes the map, not a
+  regression). Wiring BFS walk-timing into `office.py` is the easy half and
+  should wait: on today's grid it would fall back on every meeting. The fix is to
+  the map — widen the aisles round the conference table, and move `ops_console`
+  off its island — after which the timing change is a few lines.
 - ~~Station capacity is modelled but the lock is always exclusive~~ — **stale.**
   `_lock_for` is an `asyncio.Semaphore(capacity)` (`office.py:284`), so the
   conference table's capacity of 4 admits four. Now covered by

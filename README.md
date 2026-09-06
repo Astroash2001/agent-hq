@@ -349,8 +349,10 @@ above. The ones worth knowing up front:
   `-flash-lite` has a row in `pricing.py`, which refuses to guess, so every cost
   figure reads $0.0000. Startup warns and the eval suite marks the budget check
   unscored, but the number is still missing until someone adds the verified rate.
-- **Walk times ignore walls**, so a backend route and a drawn route can disagree
-  around the conference room.
+- **The walkable grid is 7 disconnected regions**, so the renderer's A* can only
+  route within one of them and movement mostly falls back to sliding. Two
+  stations are not on the main region at all. `check_layout.py` reports it;
+  backend walk timing is still straight-line until the map is fixed.
 - **Hashed embeddings measure surface similarity**, not synonymy — "speed up the
   cache" and "optimise memoisation" still score 0.
 - **Nothing grades the conclusion.** The briefing now opens with a finding drawn

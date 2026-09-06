@@ -123,6 +123,86 @@ def overlap_area(a, b):
     return w * h if w > 0 and h > 0 else 0.0
 
 
+def check_reachability():
+    """
+    Report how fragmented the walkable grid is, and which stations sit off it.
+
+    Reported rather than failed, because it fails today and the fix is a map
+    change, not a code change. It is here so the number is visible and so a
+    change that makes it worse is obvious.
+
+    What this measures: `office_layout.json`'s `blocked` grid is the same one
+    `canvas.js buildCollision(true)` builds, and the same one the renderer's A*
+    paths on. The office is currently NOT one connected region on that grid --
+    the conference-room strip and the boss-office pocket are islands A* can
+    never route into. Movement still works because `stepAgent` falls back to
+    sliding, which tests each tile by its top-left corner (`blockedByProp`)
+    rather than its centre, and exempts an agent's own seat. So the office looks
+    fine and the pathfinder is doing almost nothing.
+    """
+    path = os.path.join(ROOT, 'backend', 'office_layout.json')
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding='utf-8') as f:
+        exported = json.load(f)
+    grid = exported.get('blocked')
+    if not grid:
+        return []
+
+    rows, cols = len(grid), len(grid[0])
+    blocked = [[c == '1' for c in row] for row in grid]
+    seen = [[False] * cols for _ in range(rows)]
+    regions = []
+    for y in range(rows):
+        for x in range(cols):
+            if blocked[y][x] or seen[y][x]:
+                continue
+            stack, cells = [(x, y)], []
+            seen[y][x] = True
+            while stack:
+                cx, cy = stack.pop()
+                cells.append((cx, cy))
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    nx, ny = cx + dx, cy + dy
+                    if (0 <= nx < cols and 0 <= ny < rows
+                            and not blocked[ny][nx] and not seen[ny][nx]):
+                        seen[ny][nx] = True
+                        stack.append((nx, ny))
+            regions.append(cells)
+    regions.sort(key=len, reverse=True)
+
+    notes = [f'REACHABILITY  {len(regions)} disconnected walkable region(s); '
+             f'largest holds {len(regions[0])} of '
+             f'{sum(len(r) for r in regions)} walkable tiles']
+    main = set(regions[0])
+
+    def covered(tile):
+        x, y = tile
+        return 0 <= y < rows and 0 <= x < cols and blocked[y][x]
+
+    def adjacent_to_main(tile):
+        x, y = tile
+        return any((x + dx, y + dy) in main
+                   for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+
+    for kind in ('seats', 'stations'):
+        for name, pos in sorted(exported.get(kind, {}).items()):
+            tile = (int(round(pos['x'])), int(round(pos['y'])))
+            if tile in main:
+                continue
+            # A seat sits under its own desk sprite, and an agent standing on a
+            # station stands on the furniture the station IS. Both are expected
+            # -- `blockedByProp` exempts an agent at its own seat. What matters
+            # is whether you can get there: a covered tile with open floor next
+            # to it is fine, an island is not.
+            if covered(tile) and adjacent_to_main(tile):
+                continue
+            state = ('inside a prop with no open tile beside it' if covered(tile)
+                     else 'on an island the pathfinder cannot reach')
+            notes.append(f'REACHABILITY  {kind}.{name} at {tile} is {state}')
+    return notes
+
+
 def check_layout_export(m):
     """The backend's copy of the geometry must match the map's.
 
@@ -228,6 +308,12 @@ def main():
     problems.extend(check_layout_export(m))
 
     print(f'checked {len(props)} props')
+
+    # Reported separately from `problems`, and deliberately not fatal: these
+    # describe the map, not a regression, and the fix is to move furniture.
+    for note in check_reachability():
+        print('  ' + note)
+
     if problems:
         for p in sorted(problems):
             print('  ' + p)
