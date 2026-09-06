@@ -540,7 +540,7 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 ## Testing
 
 **366 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
-across 31 files: the original phase tests plus telemetry, contracts, the critic,
+across 28 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool
 grants and the conclusion. CI runs the same suite on
