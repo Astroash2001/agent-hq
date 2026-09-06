@@ -20,9 +20,12 @@ re-runs.
 """
 import hashlib
 import json
+import logging
 import os
 import re
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("AgentHQ.Evals.Replay")
 
 CASSETTE_ROOT = os.path.join(os.path.dirname(__file__), "cassettes")
 
@@ -257,6 +260,15 @@ class CassetteModelMismatch(RuntimeError):
     """A cassette was recorded by a different model than this run asks for."""
 
 
+def _wrong_model(entry: Dict[str, Any], requested: Optional[str]) -> bool:
+    """Whether this cassette was answered by a different model than this run
+    resolves to. Shared by the replay guard and the record-mode refresh."""
+    from config import settings
+    recorded = (entry.get("model") or "").strip()
+    effective = (requested or settings.default_model or "").strip()
+    return bool(recorded and effective and recorded != effective)
+
+
 def _check_model(entry: Dict[str, Any], requested: Optional[str], key: str,
                  task_id: str) -> None:
     """
@@ -273,11 +285,11 @@ def _check_model(entry: Dict[str, Any], requested: Optional[str], key: str,
     primary is then correctly refused, because the primary is not what produced
     these answers either.
     """
-    recorded = (entry.get("model") or "").strip()
-    from config import settings
-    effective = (requested or settings.default_model or "").strip()
-    if not recorded or not effective or recorded == effective:
+    if not _wrong_model(entry, requested):
         return
+    from config import settings
+    recorded = (entry.get("model") or "").strip()
+    effective = (requested or settings.default_model or "").strip()
     raise CassetteModelMismatch(
         f"Cassette {key} in {task_id} was answered by {recorded}, but this run "
         f"resolves to {effective}. Replay with --model {recorded}, or re-record "
@@ -298,6 +310,17 @@ def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
                          max_tokens=None, timeout=None, on_retry=None):
         key = cassette_key(model, messages, tools, temperature)
         entry = cassettes.load(key)
+
+        if entry is not None and mode == "record" and _wrong_model(entry, model):
+            # Re-record rather than reuse. `record` serves a cached entry when
+            # one exists, so a sweep run over a directory left by a DIFFERENT
+            # model silently keeps that model's answers and produces a scorecard
+            # that is a blend of two -- while naming one. Found with 120
+            # gemini-flash-lite calls sitting next to 12 OpenAI ones, about to
+            # be swept over.
+            logger.info("re-recording %s: cassette was answered by %s",
+                        key, entry.get("model"))
+            entry = None
 
         if entry is not None:
             if mode != "record":
