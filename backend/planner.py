@@ -285,7 +285,8 @@ class Planner:
                   "level": "ERROR" if kind == "fallback" else "INFO"}
         ))
 
-    async def plan(self, goal: str, roster: List[Dict[str, Any]]) -> Plan:
+    async def plan(self, goal: str, roster: List[Dict[str, Any]],
+                   attachments: Optional[List[str]] = None) -> Plan:
         """
         Plan `goal` against `roster`.
 
@@ -296,11 +297,13 @@ class Planner:
         """
         valid_ids = [a["id"] for a in roster]
         agent_tools = {a["id"]: list(a.get("tools") or []) for a in roster}
+        attachments = list(attachments or [])
 
         if settings.planner_enabled and self._has_key():
             for attempt in (1, 2):
                 try:
-                    raw = await self._call_planner_llm(goal, roster, attempt)
+                    raw = await self._call_planner_llm(
+                        goal, roster, attempt, attachments)
                     if raw is None:
                         raise PlanValidationError("no JSON object in reply")
                     steps = validate_plan(raw, valid_ids, agent_tools)
@@ -340,7 +343,8 @@ class Planner:
         self,
         goal: str,
         roster: List[Dict[str, Any]],
-        attempt: int
+        attempt: int,
+        attachments: Optional[List[str]] = None
     ) -> Optional[Dict[str, Any]]:
         """One planning call. Returns the parsed payload or None."""
         # Prepended rather than folded into the template: PLANNER_SYSTEM_PROMPT
@@ -349,8 +353,24 @@ class Planner:
         # that decides whether a goal is about current events at all.
         system = date_context() + "\n\n" + PLANNER_SYSTEM_PROMPT % (
             settings.planner_max_steps, settings.meeting_capacity)
+        # Attachments are already artifacts in the workspace by the time the
+        # planner runs, so it is told they exist rather than told to fetch
+        # them. Naming one in `consumes` is all it takes to put the file on a
+        # specialist's desk -- the same machinery that hands one step's output
+        # to the next, which is why attachments needed no new plumbing.
+        attached_block = ""
+        if attachments:
+            attached_block = (
+                "\nFiles the user attached to this goal, already in the "
+                "workspace:\n"
+                + "\n".join(f"- {name}" for name in attachments)
+                + "\nThe goal is probably ABOUT these. Put them in the "
+                  "`consumes` list of whichever step needs to read them; a "
+                  "step that consumes one gets its full text on the desk.\n")
+
         user = (
-            f"Available specialists:\n{_roster_block(roster)}\n\n"
+            f"Available specialists:\n{_roster_block(roster)}\n"
+            f"{attached_block}\n"
             f"User goal:\n{goal}\n\n"
             f"Return the JSON plan."
         )

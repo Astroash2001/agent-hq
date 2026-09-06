@@ -159,6 +159,21 @@ class Settings(BaseSettings):
     persist_missions: bool = True
     missions_path: str = os.path.join(os.path.dirname(__file__), "data", "missions")
 
+    # Files a user drops with a task, before a mission exists to own them. They
+    # are copied into the mission workspace at dispatch and the staged copy is
+    # what gets cleaned up, so a browser that uploads and then never submits
+    # leaves rubbish here rather than in a half-made mission directory.
+    attachments_path: str = os.path.join(
+        os.path.dirname(__file__), "data", "attachments")
+    # Per file. An agent reads an attachment as text into its prompt, and a
+    # prompt is the thing that costs money -- 2MB of text is roughly 500k
+    # tokens, which is more than the whole mission budget.
+    max_attachment_bytes: int = 2 * 1024 * 1024
+    # How much of an attachment reaches the agent's prompt. Same reasoning and
+    # the same number as workspace.MAX_INJECTED_CHARS: long enough to carry the
+    # substance, short enough that four of them do not blow the context window.
+    max_attachment_chars: int = 12000
+
     # --- telemetry -----------------------------------------------------------
     # Every mission also leaves a trace.jsonl beside its artifacts: one span per
     # mission, step, turn, tool call and model call. On by default because it

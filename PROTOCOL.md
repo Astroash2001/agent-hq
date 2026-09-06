@@ -380,3 +380,31 @@ resolved default — `base_agent` calls `acompletion` with no model at all, so
 every agent turn hashes the empty string — which meant a suite recorded on one
 model replayed clean under another and the scorecard printed the wrong name in
 its model column.
+
+
+## Attachments
+
+A goal is often *about* something -- a CSV to analyse, a spec to review, a log
+to explain. `POST /api/attachments` (multipart, field `file`) stages one;
+`GET /api/attachments` lists what is waiting; `DELETE /api/attachments/{name}`
+drops one.
+
+`submit_task` over the socket carries `attachments: ["spec.md", ...]` -- names
+only. The bytes are already on disk, and pushing a file through the event socket
+would block the loop every agent status update shares.
+
+Staged before the mission exists because that is the order the browser does
+things in: a file is chosen before the goal is submitted, and a mission id is
+not minted until dispatch. At dispatch each named file is copied into the
+mission workspace as an artifact authored by `you`, and the staged copy is
+discarded so a second mission cannot pick it up again.
+
+From that point an attachment is an ordinary artifact -- `read_file` reads it,
+`consumes` delivers it to a desk, `artifact.delivered` animates it. That reuse
+is the design: the feature needed no new plumbing downstream of the workspace.
+
+Text only, and the refusals are deliberate. Everything an agent does with an
+attachment is read it into a prompt, so a binary is noise the user pays for on
+every turn; a NUL byte or a failed UTF-8 decode is refused with a reason written
+for whoever just dropped the file. `max_attachment_bytes` (2MB) caps the upload
+and `max_attachment_chars` (12,000) caps what reaches the prompt.

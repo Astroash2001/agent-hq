@@ -92,3 +92,4 @@ backend/*.md
 evals/results/*.json
 !evals/results/baseline_simulator.json
 !evals/results/previous.json
+data/attachments/

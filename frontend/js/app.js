@@ -314,21 +314,122 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 3. User Task Submission
+    /* ===================== attachments =====================
+     *
+     * A goal is often ABOUT something -- a CSV to analyse, a spec to review.
+     * The file is uploaded on selection rather than on dispatch, so a rejection
+     * (too big, not text) is shown while there is still a prompt on screen to
+     * correct, instead of after the mission has been sent.
+     *
+     * Only the NAMES travel with submit_task. The bytes are already staged
+     * server-side, and pushing a file through the event socket would block the
+     * loop every agent status update shares.
+     */
+    const attachInput = document.getElementById('attachInput');
+    const attachTray = document.getElementById('attachTray');
+    const attached = new Map();     // name -> {name, size_bytes}
+
+    function renderTray() {
+        if (!attachTray) return;
+        attachTray.innerHTML = '';
+        attachTray.hidden = attached.size === 0;
+        for (const item of attached.values()) {
+            const chip = document.createElement('span');
+            chip.className = 'attach-chip' + (item.error ? ' error' : '');
+            const kb = item.size_bytes ? ` ${(item.size_bytes / 1024).toFixed(1)}kB` : '';
+            chip.innerHTML = `<span>${item.name}</span>` +
+                (item.error ? '' : `<span class="size">${kb}</span>`);
+            const drop = document.createElement('button');
+            drop.type = 'button';
+            drop.textContent = '×';
+            drop.title = item.error ? 'Dismiss' : 'Remove this attachment';
+            drop.addEventListener('click', () => {
+                if (!item.error) {
+                    fetch(`/api/attachments/${encodeURIComponent(item.name)}`,
+                          { method: 'DELETE' }).catch(() => {});
+                }
+                attached.delete(item.key);
+                renderTray();
+            });
+            chip.appendChild(drop);
+            attachTray.appendChild(chip);
+        }
+    }
+
+    async function stage(file) {
+        const body = new FormData();
+        body.append('file', file);
+        try {
+            const res = await fetch('/api/attachments', { method: 'POST', body });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                // The server's reason is written for whoever just dropped the
+                // file, so it is shown verbatim rather than replaced.
+                const reason = data.detail || 'upload failed';
+                attached.set('err:' + file.name,
+                             { key: 'err:' + file.name, name: `${file.name} — ${reason}`,
+                               error: true });
+                hud.addTerminalLog(`Attachment rejected: ${file.name} — ${reason}`, 'ERROR');
+            } else {
+                attached.set(data.name, { key: data.name, ...data });
+                hud.addTerminalLog(
+                    `Attached ${data.name} (${(data.size_bytes / 1024).toFixed(1)}kB)`,
+                    'SUCCESS');
+            }
+        } catch (e) {
+            hud.addTerminalLog(`Could not attach ${file.name}: ${e}`, 'ERROR');
+        }
+        renderTray();
+    }
+
+    if (attachInput) {
+        attachInput.addEventListener('change', async () => {
+            for (const file of attachInput.files) await stage(file);
+            attachInput.value = '';     // so the same file can be re-picked
+        });
+    }
+
+    // The whole prompt bar is the drop target. Aiming a dragged file at a 14px
+    // label is worse than dropping it anywhere near the command line.
+    ['dragenter', 'dragover'].forEach(evt =>
+        promptForm.addEventListener(evt, (e) => {
+            e.preventDefault();
+            promptForm.classList.add('drag-over');
+        }));
+    ['dragleave', 'drop'].forEach(evt =>
+        promptForm.addEventListener(evt, () => promptForm.classList.remove('drag-over')));
+    promptForm.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        for (const file of (e.dataTransfer?.files || [])) await stage(file);
+    });
+
     promptForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const text = promptInput.value.trim();
         if (!text) return;
 
+        const names = [...attached.values()].filter(a => !a.error).map(a => a.name);
+
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
                 action: 'submit_task',
-                message: text
+                message: text,
+                attachments: names
             }));
+            if (names.length) {
+                hud.addTerminalLog(
+                    `Dispatched with ${names.length} attachment(s): ${names.join(', ')}`,
+                    'ANALYSIS');
+            }
         } else {
             // Standalone fallback simulation if server is not connected
             simulateStandaloneTask(text);
         }
 
+        // Cleared on dispatch: the files now belong to that mission, and
+        // leaving them in the tray would silently attach them to the next one.
+        attached.clear();
+        renderTray();
         promptInput.value = '';
     });
 

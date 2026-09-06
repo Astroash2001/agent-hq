@@ -7,6 +7,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
 
+import attachments
 import contracts
 import critic
 import debate
@@ -177,7 +178,8 @@ class Orchestrator:
     async def handle_user_input(
         self,
         user_prompt: str,
-        resume_from: Optional[str] = None
+        resume_from: Optional[str] = None,
+        attachments: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Main entry point: plan the goal, run the graph, synthesise the briefing,
@@ -192,6 +194,11 @@ class Orchestrator:
         The goal, the plan and the list of steps that already completed come
         from the run store rather than from this call, so a resume cannot
         accidentally run a different mission under an old id.
+
+        `attachments` names files the user dropped with the goal. They are
+        copied into the workspace before planning, so from the planner's point
+        of view they are simply artifacts that already exist -- which is what
+        lets a step `consume` one without any new machinery.
         """
         if not self.agents:
             self._load_agents()
@@ -227,12 +234,16 @@ class Orchestrator:
         self._halted.discard(task_id)
         self._halt_events.pop(task_id, None)
 
+        # Seeded before planning, so the planner can see what it has to work
+        # with and route the first step to whoever should read it.
+        seeded = await self._seed_attachments(workspace, attachments)
+
         trace = tracing.start_mission(task_id, workspace.dir)
         try:
             async with tracing.span("mission", user_prompt[:120],
                                     task_id=task_id, resumed=bool(resumed)) as node:
                 result = await self._run_mission(
-                    task_id, workspace, user_prompt, resumed)
+                    task_id, workspace, user_prompt, resumed, seeded)
                 node.set(cost_usd=result.get("cost_usd", 0.0),
                          steps=len(result.get("subtasks") or []))
                 return result
@@ -274,12 +285,58 @@ class Orchestrator:
             restored.append(name)
         return restored
 
+    @staticmethod
+    async def _seed_attachments(
+        workspace: MissionWorkspace,
+        names: Optional[List[str]]
+    ) -> List[str]:
+        """
+        Copy the user's dropped files into the mission workspace as artifacts.
+
+        Filed under an author of "you", because that is who produced them, and
+        an agent that sees "delivered by you" treats it as the brief rather than
+        as a colleague's working notes.
+
+        Truncated on the way in, not on the way out: the whole point of an
+        attachment is that it lands in a prompt, and `max_attachment_chars`
+        exists so a 2MB CSV does not cost the mission budget on every turn.
+
+        A named file that is not staged is skipped with a warning rather than
+        failing the mission -- the goal is still runnable without it, and losing
+        the run over a missing upload would be the worse outcome.
+        """
+        if not names:
+            return []
+
+        seeded: List[str] = []
+        for name in names:
+            body = attachments.read(name)
+            if not body.strip():
+                logger.warning("attachment %r is missing or empty; skipped", name)
+                continue
+            clipped = body[:settings.max_attachment_chars]
+            if len(body) > len(clipped):
+                clipped += (
+                    "\n\n... [attachment truncated at "
+                    f"{settings.max_attachment_chars} characters "
+                    f"of {len(body)}]")
+            await workspace.put(name=attachments.safe_name(name), content=clipped,
+                                author_id="user", author_name="you")
+            attachments.discard(name)
+            seeded.append(attachments.safe_name(name))
+
+        if seeded:
+            logger.info("seeded %d attachment(s) into the workspace: %s",
+                        len(seeded), ", ".join(seeded))
+        return seeded
+
     async def _run_mission(
         self,
         task_id: str,
         workspace: MissionWorkspace,
         user_prompt: str,
-        resumed: Optional[Dict[str, Any]] = None
+        resumed: Optional[Dict[str, Any]] = None,
+        seeded: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """The mission proper, run inside the mission span its caller opened."""
         main_task = Task(id=task_id, description=user_prompt, status="in_progress")
@@ -342,7 +399,8 @@ class Orchestrator:
             ))
         else:
             store.start_mission(task_id, user_prompt, workspace.dir or "")
-            plan = await planner.plan(user_prompt, self.get_manifests())
+            plan = await planner.plan(user_prompt, self.get_manifests(),
+                                      attachments=seeded)
             self._apply_memory_routing(plan, task_id)
             store.record_plan(task_id, plan)
         self.current_plan = plan

@@ -28,10 +28,22 @@
                     <input type="text" id="promptInput"
                            placeholder="Command Boss Dave or a specialist (e.g. 'Research market trends and write a report')…"
                            autocomplete="off" required aria-label="Command prompt">
+                    <!-- Attachments. The label is the control: a bare file input
+                         cannot be styled to match the terminal, and hiding it
+                         behind a label is the standard way round that. -->
+                    <input type="file" id="attachInput" multiple hidden
+                           accept=".md,.txt,.csv,.tsv,.json,.yaml,.yml,.log,.py,.js,.ts,.html,.css,.sql,.sh,.ini,.toml,.xml,.rst"
+                           aria-label="Attach files to this task">
+                    <label for="attachInput" class="attach-button" id="attachBtn"
+                           title="Attach a file for the agents to work from (text formats)">ATTACH</label>
                     <button type="submit" class="dispatch-button" id="dispatchBtn">DISPATCH</button>
                     <button type="button" class="emergency-button" id="emergencyStopBtn"
                             title="Emergency stop all agents">HALT</button>
                 </form>
+                <!-- Empty until something is attached; `hidden` rather than
+                     display:none so the office does not reserve a gap for it. -->
+                <div id="attachTray" class="attach-tray" hidden
+                     aria-live="polite" aria-label="Attached files"></div>
             </div>
         </main>
 

@@ -6,11 +6,13 @@ import time
 from contextlib import asynccontextmanager
 from typing import Set
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import (FastAPI, File, HTTPException, Request, UploadFile,
+                     WebSocket, WebSocketDisconnect, status)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import api_missions
+import attachments
 import pricing
 from config import settings
 from event_bus import event_bus
@@ -189,6 +191,40 @@ async def reset_memory():
     return {"status": "memory_cleared"}
 
 
+@app.post("/api/attachments")
+async def upload_attachment(file: UploadFile = File(...)):
+    """
+    Stage one file to be handed to the next mission.
+
+    Staged rather than attached directly because that is the order the browser
+    does things in: a file is chosen before the goal is submitted, and a mission
+    id is not minted until dispatch.
+
+    A rejection returns 400 with the reason as written in `attachments.py` --
+    those messages are shown to whoever just dragged the file in, so they say
+    why rather than "invalid file".
+    """
+    raw = await file.read()
+    try:
+        return attachments.save(file.filename or "", raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/attachments")
+async def list_attachments():
+    """What is staged and waiting for the next task."""
+    return {"attachments": attachments.listing()}
+
+
+@app.delete("/api/attachments/{name}")
+async def delete_attachment(name: str):
+    """Drop a staged file the user changed their mind about."""
+    if not attachments.discard(name):
+        raise HTTPException(status_code=404, detail=f"no staged file '{name}'")
+    return {"status": "discarded", "name": name}
+
+
 @app.post("/api/emergency-stop")
 async def emergency_stop(request: Request):
     """Emergency kill switch to halt all running agents."""
@@ -284,10 +320,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     last_submit_time = now
 
                     prompt = msg_data.get("message", "").strip()
+                    # Names only. The bytes are already staged on disk, and
+                    # sending a file over the event socket would block the loop
+                    # that every agent's status update shares.
+                    attached = [str(a) for a in (msg_data.get("attachments") or [])]
                     if prompt:
-                        logger.info(f"Received user task via WebSocket: {prompt}")
+                        logger.info("Received user task via WebSocket: %s%s", prompt,
+                                    f" (+{len(attached)} attachment(s))" if attached else "")
                         # Run orchestrator as an async task so WebSocket loop doesn't block!
-                        asyncio.create_task(orchestrator.handle_user_input(prompt))
+                        asyncio.create_task(
+                            orchestrator.handle_user_input(prompt, attachments=attached))
 
                 elif action == "emergency_stop":
                     logger.warning("Emergency stop requested via WebSocket!")

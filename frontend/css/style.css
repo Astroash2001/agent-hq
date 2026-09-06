@@ -967,3 +967,79 @@ body { overflow: hidden; }
     color: var(--muted);
     padding: 10px 4px;
 }
+
+/* ===================== attachments =====================
+   A file dropped with a task. Styled as a sibling of DISPATCH rather than as
+   a separate panel, because it is part of composing the command -- the tray
+   below is the only new box, and it is `hidden` until something is in it. */
+
+.attach-button {
+    padding: 8px 14px;
+    border-radius: 3px;
+    font-family: var(--font-pixel);
+    font-size: 11px;
+    letter-spacing: .06em;
+    cursor: pointer;
+    transition: filter .15s;
+    background: transparent;
+    border: 1px dashed var(--frame);
+    color: var(--amber-dim, var(--amber-bright));
+    user-select: none;
+}
+
+.attach-button:hover {
+    filter: brightness(1.25);
+    border-style: solid;
+}
+
+/* The whole prompt bar is the drop target, not just the button: dragging a
+   file at a 14px label is a worse experience than dropping it anywhere near. */
+.prompt-form.drag-over {
+    outline: 2px dashed var(--amber-bright);
+    outline-offset: 2px;
+}
+
+.attach-tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 0 4px;
+}
+
+.attach-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--frame);
+    border-radius: 3px;
+    background: var(--btn-face);
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--amber-bright);
+}
+
+.attach-chip .size {
+    opacity: .6;
+    font-size: 10px;
+}
+
+.attach-chip button {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 13px;
+    line-height: 1;
+    opacity: .7;
+}
+
+.attach-chip button:hover { opacity: 1; }
+
+/* A rejected file says why, in the same place the accepted ones appear. */
+.attach-chip.error {
+    border-color: var(--error, #c0392b);
+    color: var(--error, #c0392b);
+}
