@@ -89,16 +89,58 @@ def test_every_seat_and_station_has_open_floor_beside_it(layout):
     assert not stranded, f"nothing can stand at: {stranded}"
 
 
-def test_the_floor_is_still_seven_regions(layout):
+def test_the_floor_is_effectively_one_region(layout):
     """
-    Pinned as a fact, not endorsed as a goal. The renderer's A* can only route
-    within one region, so this number is the ceiling on how much of the office
-    the pathfinder is actually doing -- movement falls back to sliding for the
-    rest. If a map change makes it worse this fails; if someone fixes the map,
-    this fails too and should be updated downwards with the fix.
+    476 of 478 walkable tiles are mutually reachable; the leftover is a
+    two-tile decorative pocket. This is the property that makes routing over
+    the grid worth doing at all -- A* can only ever path within one region, so
+    a fragmented floor means the pathfinder is decorative.
+
+    Pinned because a first version of the exporter marked every prop and made
+    the office look like seven islands. That was the exporter being stricter
+    than the renderer, not the map being broken, and it is exactly the kind of
+    wrong number that gets written into a README.
     """
     regions = _regions(_grid(layout))
-    assert len(regions) == 7, (
-        f"walkable regions changed from 7 to {len(regions)} ({regions}). "
-        f"Fewer is better -- update this test with the map fix.")
-    assert regions[0] == 324, f"main region changed size: {regions[0]}"
+    assert regions[0] >= 470, f"main region shrank to {regions[0]} ({regions})"
+    assert sum(regions) - regions[0] <= 4, (
+        f"more than a pocket is stranded off the main region: {regions}")
+
+
+def test_every_seat_and_station_is_reachable_from_every_other(layout):
+    """
+    The one that matters for routing: an agent has to be able to walk from any
+    desk to any station. A station stranded off the main region cannot be
+    reached however good the pathfinder is.
+    """
+    grid = _grid(layout)
+    rows, cols = len(grid), len(grid[0])
+
+    start = None
+    for name, pos in layout["seats"].items():
+        x, y = int(round(pos["x"])), int(round(pos["y"]))
+        if not grid[y][x]:
+            start = (x, y)
+            break
+    assert start, "no seat is on an open tile"
+
+    seen = {start}
+    q = deque([start])
+    while q:
+        x, y = q.popleft()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if (0 <= nx < cols and 0 <= ny < rows
+                    and not grid[ny][nx] and (nx, ny) not in seen):
+                seen.add((nx, ny))
+                q.append((nx, ny))
+
+    unreachable = []
+    for kind in ("seats", "stations"):
+        for name, pos in layout[kind].items():
+            x, y = int(round(pos["x"])), int(round(pos["y"]))
+            near = [(x + dx, y + dy) for dx, dy in
+                    ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1))]
+            if not any(t in seen for t in near):
+                unreachable.append(f"{kind}.{name} at ({x},{y})")
+    assert not unreachable, f"cannot be walked to: {unreachable}"

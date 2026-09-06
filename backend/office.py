@@ -58,6 +58,14 @@ _STATION_POS: Dict[str, Tuple[float, float]] = {
     sid: (st["x"], st["y"]) for sid, st in _LAYOUT["stations"].items()
 }
 
+# The walkable grid, as rows of "0110". Same grid `canvas.js buildCollision(true)`
+# builds and the renderer's A* paths on, exported alongside the coordinates so a
+# walk can be timed over the route that is actually drawn rather than through the
+# conference room wall. Absent from an older export, in which case walk timing
+# falls back to straight-line distance and behaves exactly as it did.
+_BLOCKED: List[List[bool]] = [[c == "1" for c in row]
+                              for row in _LAYOUT.get("blocked", [])]
+
 
 def _station_xy(station_id: str, fallback: Tuple[float, float]) -> Tuple[float, float]:
     """Coordinates for a station, from the map when it names one."""
@@ -201,9 +209,102 @@ class OfficeFloor:
     def _distance(a: Tuple[float, float], b: Tuple[float, float]) -> float:
         return math.hypot(b[0] - a[0], b[1] - a[1])
 
+    @staticmethod
+    def _open(tile: Tuple[int, int]) -> bool:
+        x, y = tile
+        return (0 <= y < len(_BLOCKED) and 0 <= x < len(_BLOCKED[0])
+                and not _BLOCKED[y][x])
+
+    @classmethod
+    def _nearest_open(cls, point: Tuple[float, float]) -> Optional[Tuple[int, int]]:
+        """
+        The closest tile you can stand on, searched outward from `point`.
+
+        Needed at both ends of a route: a seat sits under its own desk and a
+        station sits on the furniture it is, so the endpoints of a real walk are
+        routinely on blocked tiles. Searching outward rather than rejecting is
+        what makes "walk to the conference table" mean "walk to the floor beside
+        the conference table", which is what actually happens.
+        """
+        start = (int(round(point[0])), int(round(point[1])))
+        if cls._open(start):
+            return start
+        for radius in range(1, 6):
+            best = None
+            for dy in range(-radius, radius + 1):
+                for dx in range(-radius, radius + 1):
+                    if max(abs(dx), abs(dy)) != radius:
+                        continue
+                    tile = (start[0] + dx, start[1] + dy)
+                    if not cls._open(tile):
+                        continue
+                    d = (tile[0] - point[0]) ** 2 + (tile[1] - point[1]) ** 2
+                    if best is None or d < best[0]:
+                        best = (d, tile)
+            if best:
+                return best[1]
+        return None
+
+    @classmethod
+    def path_tiles(cls, frm: Tuple[float, float],
+                   to: Tuple[float, float]) -> Optional[int]:
+        """
+        Length in tiles of the shortest walkable route, or None if there is none.
+
+        Breadth-first over the exported grid: it is 40x24, so the whole floor is
+        under a thousand cells and an exact search costs less than the heuristic
+        would. Four-connected, matching the renderer -- allowing diagonals here
+        would make the backend consistently optimistic about a route the office
+        draws as a staircase.
+        """
+        if not _BLOCKED:
+            return None
+        start, goal = cls._nearest_open(frm), cls._nearest_open(to)
+        if start is None or goal is None:
+            return None
+        if start == goal:
+            return 0
+
+        rows, cols = len(_BLOCKED), len(_BLOCKED[0])
+        seen = {start}
+        frontier = [start]
+        steps = 0
+        while frontier:
+            steps += 1
+            nxt = []
+            for x, y in frontier:
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    tile = (x + dx, y + dy)
+                    if tile in seen:
+                        continue
+                    if not (0 <= tile[0] < cols and 0 <= tile[1] < rows):
+                        continue
+                    if _BLOCKED[tile[1]][tile[0]]:
+                        continue
+                    if tile == goal:
+                        return steps
+                    seen.add(tile)
+                    nxt.append(tile)
+            frontier = nxt
+        return None
+
     def travel_seconds(self, frm: Tuple[float, float], to: Tuple[float, float]) -> float:
-        """Walk time for a leg, clamped so a cross-office trip stays watchable."""
-        raw = self._distance(frm, to) * settings.walk_seconds_per_tile
+        """
+        Walk time for a leg, clamped so a cross-office trip stays watchable.
+
+        Measured along the walkable route rather than through the walls. This
+        used to be straight-line distance, so the backend and the renderer
+        disagreed on every trip that has to go round something -- the office
+        drew an agent still walking after the backend had decided it had
+        arrived, and the queue at a station started before anyone reached it.
+
+        Falls back to straight-line when the grid is missing or the two points
+        are not connected, because a walk that cannot be routed still has to
+        take some time; the renderer's own movement falls back the same way.
+        """
+        tiles = self.path_tiles(frm, to)
+        distance = self._distance(frm, to) if tiles is None else float(tiles)
+        raw = distance * settings.walk_seconds_per_tile
         return max(settings.min_walk_seconds, min(raw, settings.max_walk_seconds))
 
     # ---------------------------------------------------------------- movement
