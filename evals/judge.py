@@ -41,6 +41,11 @@ _MARKS = {"pass": 1.0, "partial": 0.5, "fail": 0.0}
 # more than the run being judged.
 MAX_ARTIFACT_CHARS = 12000
 
+# No artifact is shown less than this, however many there are. Below a page or
+# so a rubric line about that file cannot be judged at all, and a judge that
+# scores it anyway is guessing rather than grading.
+MIN_ARTIFACT_SHARE = 1500
+
 JUDGE_SYSTEM_PROMPT = """You are grading the output of a multi-agent system \
 against a fixed rubric. You are given the user's goal, the artifact files the \
 system produced, and a numbered list of rubric criteria.
@@ -93,22 +98,46 @@ def render_artifacts(mission_dir: str, skip: Optional[List[str]] = None) -> str:
     if not mission_dir or not os.path.isdir(mission_dir):
         return ""
 
-    blocks: List[str] = []
-    budget = MAX_ARTIFACT_CHARS
-    for name in sorted(os.listdir(mission_dir)):
-        if name in skip or budget <= 0:
-            continue
-        path = os.path.join(mission_dir, name)
-        if not os.path.isfile(path):
-            continue
+    names = [n for n in sorted(os.listdir(mission_dir))
+             if n not in skip and os.path.isfile(os.path.join(mission_dir, n))]
+    if not names:
+        return ""
+
+    # Every artifact gets a share before any artifact gets seconds.
+    #
+    # This used to spend one budget in alphabetical order, so the first file
+    # took what it wanted and later ones took what was left. Measured on
+    # `approach_standup`: research_summary.md (11,541 chars) consumed 96% of the
+    # 12,000, the report got 459 characters, and standup_decision.md got NONE --
+    # and the judge then failed two rubric lines for a file it had never been
+    # shown. Every multi-artifact score was partly measuring alphabetical order.
+    #
+    # Same fix, and the same reasoning, as `synthesis._artifact_block`: one long
+    # document must not crowd out the short ones, because a rubric line is
+    # usually about whether a *particular* artifact says a particular thing.
+    share = max(MIN_ARTIFACT_SHARE, MAX_ARTIFACT_CHARS // len(names))
+
+    bodies = []
+    for name in names:
         try:
-            with open(path, "r", encoding="utf-8", errors="replace") as fh:
-                body = fh.read()
+            with open(os.path.join(mission_dir, name), "r",
+                      encoding="utf-8", errors="replace") as fh:
+                bodies.append((name, fh.read()))
         except OSError as exc:
-            logger.warning("could not read artifact %s: %s", path, exc)
-            continue
-        clipped = body[:budget]
-        budget -= len(clipped)
+            logger.warning("could not read artifact %s: %s", name, exc)
+
+    # A file under its share hands the remainder back, so three short artifacts
+    # and one long one still spend the whole budget rather than a quarter of it.
+    spare = sum(max(0, share - len(body)) for _, body in bodies)
+
+    blocks: List[str] = []
+    for name, body in bodies:
+        allowance = share
+        if len(body) > share and spare > 0:
+            take = min(spare, len(body) - share)
+            allowance += take
+            spare -= take
+        clipped = body[:allowance]
         suffix = "\n... [truncated]" if len(body) > len(clipped) else ""
         blocks.append(f"--- {name} ({len(body)} chars) ---\n{clipped}{suffix}")
 
