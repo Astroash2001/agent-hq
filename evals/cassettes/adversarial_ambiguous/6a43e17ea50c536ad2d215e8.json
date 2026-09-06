@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 77,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash",
+ "prompt_tokens": 3288,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"filepath\": \"ARCHITECTURE.md\"}",
+        "name": "read_file"
+       },
+       "id": "call_abe30327a47442eea25c28d5ba28__thought__Er0CCroCARFNMg+GCptZvImYD5X2hRAO07SCl/QBk5Uk4adCUQhS1q0Ip9cbbhrUQ3J5MB+fvF1ccp/Z+inJyYFeAA2bpLzpjpeBhZXypP+Gjprz19fIt5n+YozJ34Iq0r35Oi4ld3/HutpatzVmItGsIAnZxg3KSinmTUc5B82zkDc1Kgj8ERHlqjwm5feakBXDpbkm8xSVMxbZl9ixnBk/NlnjlYjlSrIWBPLmZwWSSZs7FHWUc1UpI8faG20JgHdN1NTH60Qh6uOd2z7ZBZE9rvYTVe4ol6OVa7Lg7xviB0FloO39fxaJxXrIZ1GU5nFynmqKF2kU7712We8XAlwQK6afywOskorD+CsLNikHauwPBU4c2nJdkv8N8UjYeUD11sQ/tNW85oWKoySDBos7wS5DkFR2/qpxw0vPRRM="
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 77,
+   "prompt_tokens": 3288
+  }
+ }
+}

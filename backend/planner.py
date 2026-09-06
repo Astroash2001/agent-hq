@@ -101,6 +101,66 @@ class PlanValidationError(ValueError):
     """Raised when a model-authored plan cannot be repaired into a runnable DAG."""
 
 
+def regrant_steps(
+    steps: List[PlanStep],
+    valid_agent_ids: List[str],
+    agent_tools: Optional[Dict[str, List[str]]] = None,
+) -> List[PlanStep]:
+    """
+    Move any step to an agent that holds the tools the step says it needs.
+
+    The planner prompt has always listed each agent's tools; nothing ever
+    checked that the model read them. A step declaring `needs_tools:
+    ["terminal"]` assigned to a specialist holding only write_file does not fail
+    cleanly -- the agent runs, cannot call the tool, and writes a plausible
+    report with an invented number in it, which is the worst available outcome.
+
+    Repaired rather than rejected: the plan is right about the work and wrong
+    only about who does it, so moving the step is a smaller change than throwing
+    away the graph.
+
+    Shared by both planners. `heuristic_plan` does not go through
+    `validate_plan`, so without this being callable on its own the fallback
+    planner was the one path where a tool mismatch still went unchecked -- and
+    the fallback is what runs when there is no key, which is the configuration
+    most likely to be someone's first look at this.
+
+    Mutates `steps` and returns them, for use as an expression.
+    """
+    if not agent_tools:
+        return steps
+
+    granted = {aid: set(tools or []) for aid, tools in agent_tools.items()}
+    real_tools = set().union(*granted.values()) if granted else set()
+    for step in steps:
+        # A tool nobody in the office holds is, operationally, one the model
+        # invented: it is ignored rather than treated as a requirement, or every
+        # step naming one goes to whichever agent sorts first.
+        needed = {t for t in step.needs_tools if t in real_tools}
+        if not needed or needed <= granted.get(step.agent_id, set()):
+            continue
+        candidates = [aid for aid in valid_agent_ids
+                      if needed <= granted.get(aid, set())]
+        if not candidates:
+            # Nobody holds the full set. Left where it is, loudly: the plan is
+            # not repairable, and a silent reassignment to someone who is also
+            # going to fail hides where it went wrong.
+            logger.warning(
+                "Step %s needs %s and no agent holds all of them; left with %s",
+                step.id, sorted(needed), step.agent_id)
+            continue
+        # Prefer whoever the plan already trusts, so a multi-step plan does not
+        # scatter across the roster for one tool.
+        in_plan = [c for c in candidates if c in {s.agent_id for s in steps}]
+        chosen = (in_plan or candidates)[0]
+        logger.info("Step %s regranted %s -> %s (needs %s)",
+                    step.id, step.agent_id, chosen, sorted(needed))
+        step.regranted_from = step.agent_id
+        step.agent_id = chosen
+
+    return steps
+
+
 def validate_plan(
     raw: Dict[str, Any],
     valid_agent_ids: List[str],
@@ -195,43 +255,7 @@ def validate_plan(
         step.dependencies = deps
 
     # Pass 3: a step goes to someone who can actually do it.
-    #
-    # The prompt has always listed each agent's tools; nothing ever checked that
-    # the model read them. A step declaring `needs_tools: ["terminal"]` assigned
-    # to a specialist holding only write_file does not fail cleanly -- the agent
-    # runs, cannot call the tool, and writes a plausible report with an invented
-    # number in it, which is the worst available outcome.
-    #
-    # Repaired rather than rejected: the plan is right about the work and wrong
-    # only about who does it, so moving the step is a smaller change than
-    # throwing away the graph. An unknown tool name is not held by anybody, so
-    # it is ignored rather than sending every step to the same agent.
-    if agent_tools:
-        granted = {aid: set(tools or []) for aid, tools in agent_tools.items()}
-        real_tools = set().union(*granted.values()) if granted else set()
-        for step in steps:
-            needed = {t for t in step.needs_tools if t in real_tools}
-            if not needed or needed <= granted.get(step.agent_id, set()):
-                continue
-            candidates = [aid for aid in valid_agent_ids
-                          if needed <= granted.get(aid, set())]
-            if not candidates:
-                # Nobody in the office holds the full set. Left where it is,
-                # loudly: the plan is not repairable and the run is going to
-                # show it, which is more useful than a silent reassignment to
-                # someone who is also going to fail.
-                logger.warning(
-                    "Step %s needs %s and no agent holds all of them; left with %s",
-                    step.id, sorted(needed), step.agent_id)
-                continue
-            # Prefer whoever the plan already trusts with the same tools, so a
-            # multi-step plan does not scatter across the roster.
-            in_plan = [c for c in candidates if c in {s.agent_id for s in steps}]
-            chosen = (in_plan or candidates)[0]
-            logger.info("Step %s regranted %s -> %s (needs %s)",
-                        step.id, step.agent_id, chosen, sorted(needed))
-            step.regranted_from = step.agent_id
-            step.agent_id = chosen
+    regrant_steps(steps, valid_agent_ids, agent_tools)
 
     # Pass 4: a step may only consume artifacts its dependencies actually produce,
     # and it always receives all of them even if the model forgot to ask.
@@ -300,7 +324,12 @@ class Planner:
                     break
 
         self.last_source = "heuristic"
-        steps = heuristic_plan(goal, valid_ids)
+        # Regranted like an LLM plan. The buckets name their agents by hand and
+        # are usually right, but "usually right and never checked" is what the
+        # tool-grant pass exists to stop -- and this is the path that runs when
+        # there is no key, which is the configuration most likely to be somebody's
+        # first look at the harness.
+        steps = regrant_steps(heuristic_plan(goal, valid_ids), valid_ids, agent_tools)
         return Plan(goal=goal, steps=steps, source="heuristic")
 
     @staticmethod
@@ -439,12 +468,12 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     g = goal.lower()
 
     def step(sid, agent, desc, deps=(), produces="", consumes=(), why="",
-             kind="work", attendees=()):
+             kind="work", attendees=(), needs=()):
         return PlanStep(
             id=sid, agent_id=agent, description=desc,
             dependencies=list(deps), produces=produces or f"{agent}_output.md",
             consumes=list(consumes), rationale=why,
-            kind=kind, attendees=list(attendees)
+            kind=kind, attendees=list(attendees), needs_tools=list(needs)
         )
 
     deliverable = _deliverable_name(goal)
@@ -477,7 +506,8 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
         # standup" with four solo desks.
         raw = [
             step("s1", "researcher", f"Research the first side of: {goal}",
-                 produces="research_notes.md", why="one half of the evidence"),
+                 produces="research_notes.md", why="one half of the evidence",
+                 needs=["web_search"]),
             step("s2", "data_analyst",
                  f"Quantify and sanity-check the numbers behind: {goal}",
                  produces="analysis.md", why="the other half, gathered in parallel"),
@@ -497,10 +527,11 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     elif any(w in g for w in ["code", "bug", "python", "fix", "script", "test", "build", "api", "fibonacci"]):
         raw = [
             step("s1", "researcher", f"Gather technical specifications and best-practice patterns for: {goal}",
-                 produces="research_notes.md", why="needs sources before anyone writes code"),
+                 produces="research_notes.md", why="needs sources before anyone writes code",
+                 needs=["web_search"]),
             step("s2", "coder", f"Implement the code, run AST verification and execute tests for: {goal}",
                  deps=["s1"], produces="implementation.md", consumes=["research_notes.md"],
-                 why="owns the terminal and AST tooling"),
+                 why="owns the terminal and AST tooling", needs=["terminal"]),
             step("s3", "data_analyst", f"Inspect the workspace and check inputs, edge cases and data shapes for: {goal}",
                  deps=["s1"], produces="analysis.md", consumes=["research_notes.md"],
                  why="can validate in parallel with implementation"),
@@ -511,7 +542,8 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     elif any(w in g for w in ["job", "resume", "interview", "hire", "career", "salary"]):
         raw = [
             step("s1", "researcher", f"Scan role requirements, skill criteria and interview topics for: {goal}",
-                 produces="market_scan.md", why="market research first"),
+                 produces="market_scan.md", why="market research first",
+                 needs=["web_search"]),
             step("s2", "coder", "Work through the technical and system-design interview questions this role implies",
                  deps=["s1"], produces="tech_prep.md", consumes=["market_scan.md"],
                  why="technical depth"),
@@ -522,9 +554,11 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     elif any(w in g for w in ["data", "sql", "file", "csv", "query", "database", "analytics"]):
         raw = [
             step("s1", "data_analyst", f"Inspect the data directory and validate the query schema for: {goal}",
-                 produces="analysis.md", why="owns the data tooling"),
+                 produces="analysis.md", why="owns the data tooling",
+                 needs=["list_files"]),
             step("s2", "researcher", f"Find the documented conventions and pitfalls relevant to: {goal}",
-                 produces="research_notes.md", why="context, independent of the data pass"),
+                 produces="research_notes.md", why="context, independent of the data pass",
+                 needs=["web_search"]),
             step("s3", "creative", "Format the analytical report with key insights and a recommendation",
                  deps=["s1", "s2"], produces=deliverable,
                  consumes=["analysis.md", "research_notes.md"], why="fan-in write-up"),
@@ -532,10 +566,11 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
     else:
         raw = [
             step("s1", "researcher", f"Investigate the core concepts and documentation for: {goal}",
-                 produces="research_notes.md", why="establish the ground truth"),
+                 produces="research_notes.md", why="establish the ground truth",
+                 needs=["web_search"]),
             step("s2", "coder", f"Prototype a validation script and probe the edge cases for: {goal}",
                  deps=["s1"], produces="implementation.md", consumes=["research_notes.md"],
-                 why="empirical check"),
+                 why="empirical check", needs=["terminal"]),
             step("s3", "data_analyst", f"Quantify the trade-offs and sanity-check the numbers behind: {goal}",
                  deps=["s1"], produces="analysis.md", consumes=["research_notes.md"],
                  why="runs alongside the prototype"),

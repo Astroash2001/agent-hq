@@ -174,3 +174,66 @@ def test_the_tool_pass_does_not_disturb_dependency_repair():
 def test_an_unrecognisable_payload_still_raises_with_a_tool_map():
     with pytest.raises(PlanValidationError):
         validate_plan({"steps": []}, AGENT_IDS, TOOLS)
+
+
+# ------------------------------------------------- the fallback planner too
+
+def test_the_heuristic_buckets_declare_the_tools_they_need():
+    """
+    `heuristic_plan` is what runs with no key -- the configuration most likely
+    to be somebody's first look at this. Leaving its steps with an empty
+    `needs_tools` made the whole tool-grant pass a no-op on that path.
+    """
+    from planner import heuristic_plan
+
+    steps = heuristic_plan("Fix the caching bug in the Python service", AGENT_IDS)
+    needs = {s.agent_id: s.needs_tools for s in steps}
+
+    assert "web_search" in needs["researcher"], "research without search is guessing"
+    assert "terminal" in needs["coder"], "running tests needs a terminal"
+
+
+def test_a_research_bucket_names_search_across_shapes():
+    from planner import heuristic_plan
+
+    for goal in ("Compare grid storage options",
+                 "Prepare me for a backend interview",
+                 "Analyse the sales csv in the data directory"):
+        steps = heuristic_plan(goal, AGENT_IDS)
+        named = {t for s in steps for t in s.needs_tools}
+        assert named, f"{goal!r} produced a plan needing no tools at all"
+
+
+def test_a_heuristic_step_is_regranted_when_its_agent_lacks_the_tool():
+    """
+    The bucket hands execution to `coder`. Strip coder's terminal and the step
+    has to move to whoever still has one, exactly as an LLM plan would.
+    """
+    from planner import heuristic_plan, regrant_steps
+
+    tools = dict(TOOLS)
+    tools["coder"] = ["read_file", "write_file"]      # no terminal
+
+    steps = regrant_steps(
+        heuristic_plan("Fix the caching bug in the Python service", AGENT_IDS),
+        AGENT_IDS, tools)
+
+    moved = [s for s in steps if s.regranted_from]
+    assert moved, "the execution step should have been reassigned"
+    assert all("terminal" in tools[s.agent_id] for s in moved)
+    assert all(s.regranted_from == "coder" for s in moved)
+
+
+def test_the_default_roster_needs_no_regranting():
+    """
+    The buckets should already be right about who does what -- the pass is a
+    guard, not a crutch. If this starts failing, a bucket names the wrong agent.
+    """
+    from planner import heuristic_plan, regrant_steps
+
+    for goal in ("Fix the caching bug in the Python service",
+                 "Compare grid storage options",
+                 "Analyse the sales csv in the data directory"):
+        steps = regrant_steps(heuristic_plan(goal, AGENT_IDS), AGENT_IDS, TOOLS)
+        assert not [s for s in steps if s.regranted_from], \
+            f"{goal!r} needed a regrant against the real roster"

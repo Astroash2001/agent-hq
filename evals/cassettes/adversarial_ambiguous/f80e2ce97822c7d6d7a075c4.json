@@ -1,0 +1,31 @@
+{
+ "attempts": 2,
+ "completion_tokens": 18,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash",
+ "prompt_tokens": 5345,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"filepath\": \"TODO.md\"}",
+        "name": "read_file"
+       },
+       "id": "call_d85d89e8e06a431baa6672024e83__thought__EiYKJGUyNDgzMGE3LTVjZDYtNDJmZS05OThiLWVlNTM5ZTcyYjljMw=="
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 18,
+   "prompt_tokens": 5345
+  }
+ }
+}

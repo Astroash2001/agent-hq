@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 43,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash",
+ "prompt_tokens": 2206,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"git status\"}",
+        "name": "terminal"
+       },
+       "id": "call_3ba5a2ea481641b1ab51a292cc62__thought__EtIBCs8BARFNMg/jX94tiLsilAeQNiMzH9hRKsBY8AooZtEEBtPuFODNdTggNAg4PBo86AkeEpjTb4e0lxG8mG9Es3kQs0W/cvakA7gnDrBLYQWACVsN3Bo57AdruwCr65z74zQddlx+H7PPUC2w084PT0MFI2wQDidJDgYpK/yalx9YbsZub+bVugmAw/0Wi000i+M1dNllt3dpMaaNWbHKHMRCbY6taURZ2TYlNWQiKyLH5P5efg48jtYFS7/oLUO2eQ1emf+rkrkaN+nUCXGvo65c"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 43,
+   "prompt_tokens": 2206
+  }
+ }
+}

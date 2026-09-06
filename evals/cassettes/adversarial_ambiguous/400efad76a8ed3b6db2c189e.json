@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 104,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash",
+ "prompt_tokens": 405,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"directory\": \".\"}",
+        "name": "list_files"
+       },
+       "id": "call_2dc288827b5d4814bde135409207__thought__EsgDCsUDARFNMg+c1XUlqNEUZVNrVWLO6Py/PZoKLmXQFYO892Wv8xwjI/71OL5KjN2GYg/8u6gLp5ZR8EKgUKuK1dorJS6hC5Lm4Xi8/x7XNadLZ+nmvdaQTcITjuIuvf5s+Trx4nWCCwSVdUlXrFNwtNyfIlC9xnj0fdJzmby9jWdjdpOM+aFnprS+o0jzo9YhHSvL7XKj9BNt269GwmFqolcawYR/nwgLOIfKgk5pYa4eVR2bPqiKk0fLIuXfxTcRuD2XkpEEKKdfPOthao3ejN53uA1oWtD3eaNBkigR5IS9V3axijWKxtk83INHwISdYS1hwICpe7md5lB8lhuEVv9IZ5N7GWE2Gs2jDmj3bbgJeb02J7e4EK7pRSn42tpDthT2lGdYUDkUE9R8eJn+rgy7jxXQGSAJFNncU6LqCriTm3ulmUYp5XB5rx+JVk+KthtfLckGPxKmJPXoiuyY3viFyTR3hm3gUAhT/tuHgjIZjgoYyZXhuOF/Ky+5AsiEZ21Rs6bEXgPlzgewW7l75Q1jjx7HYfisAf95/1OyubY9ZETkrQexXTNJuDP5lxI9sS0iJqkEi40cHJ9aNCfdGryOJ9wear98"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 104,
+   "prompt_tokens": 405
+  }
+ }
+}
