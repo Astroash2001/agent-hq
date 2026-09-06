@@ -332,30 +332,31 @@ def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
 # web_search, turn two missed with a stable new key -- stable because the search
 # had settled on new results, not because anything in the repo had changed.
 #
-# The rule is "record what the office cannot control", and the boundary is the
-# mission workspace, not the process. A tool that observes the machine or the
-# network answers differently on every run:
+# Which tools may be served from disk, and which have to really run.
 #
-#   web_search   the web moves
-#   terminal     a command's output carries this machine's timings and paths
-#   list_files   a directory listing of the repo changes whenever anyone commits
-#                -- this one was found the hard way, with `.git` and
-#                `.pytest_cache` byte sizes inside a replayed prompt
-#   mcp__*       somebody else's server, which promises nothing
+# The rule is inverted from the obvious one, and it took three recording sweeps
+# to get here. "Record the tools that reach outside" sounds right and is not
+# specific enough: `list_files` returns a directory listing of this repository,
+# and `read_file` will happily read `TODO.md`. Both were observed sitting in a
+# replayed prompt -- `.git` byte sizes in one, the whole of TODO.md in the other
+# -- and both change whenever anyone commits, so the turn that consumed them
+# missed its own cassette for reasons that had nothing to do with the harness.
 #
-# Everything else really runs, because its answer comes from the mission itself.
-# `write_file` must run: its side effect is the artifact the structural checks
-# look for, so serving a recorded "ok" leaves the workspace empty and scores the
-# run as having produced nothing. `read_file` must run too, so a step reads what
-# THIS run's upstream step actually wrote rather than a recording of what some
-# earlier run wrote.
-EXTERNAL_TOOLS = ("web_search", "terminal", "list_files")
+# So: a tool that OBSERVES is recorded, because nothing can promise its answer
+# twice. A tool whose point is its SIDE EFFECT really runs, because that effect
+# is the mission's output -- serving `write_file` a recorded "ok" leaves the
+# workspace empty and scores the run as having produced nothing.
+SIDE_EFFECT_TOOLS = ("write_file", "record_decision")
 
 
 def is_external(tool_name: str) -> bool:
-    """Whether a tool's answer comes from outside the mission workspace, and so
-    has to be recorded for a replay to reproduce anything."""
-    return tool_name in EXTERNAL_TOOLS or tool_name.startswith("mcp__")
+    """
+    Whether this tool's result should be served from a cassette.
+
+    True for everything except the writers, including any `mcp__*` server --
+    somebody else's server promises nothing about repeating an answer.
+    """
+    return tool_name not in SIDE_EFFECT_TOOLS
 
 
 def tool_key(tool_name: str, arguments: Dict[str, Any]) -> str:

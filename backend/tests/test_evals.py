@@ -626,23 +626,28 @@ def test_a_cassette_with_no_recorded_model_is_still_served(monkeypatch):
 
 # --------------------------------------------- tool results have to be recorded too
 
-def test_only_tools_that_reach_outside_the_office_are_replayed():
+def test_observers_are_replayed_and_writers_really_run():
     """
-    `write_file` must genuinely run on replay: its side effect is the artifact
-    the structural checks look for, so serving a recorded "ok" would leave the
-    workspace empty and score the mission as having produced nothing. The rule
-    is "record what the office cannot control", not "record every tool".
+    The rule is inverted from the obvious one, and it took three recording
+    sweeps to get here. "Record the tools that reach outside" is not specific
+    enough: `list_files` returns a listing of this repository and `read_file`
+    will read `TODO.md`. Both were found sitting in a replayed prompt, and both
+    change whenever anyone commits.
     """
-    # Observes the machine or the network: has to be recorded.
-    for outside in ("web_search", "terminal", "list_files",
-                    "mcp__fs__read_file"):
-        assert replay_mod.is_external(outside) is True, outside
+    # Observes something -- has to be recorded, because nothing can promise the
+    # same answer twice. `read_file` and `list_files` are on this list because
+    # they read the repository, not just the mission workspace: a replayed
+    # prompt was found carrying the whole of TODO.md, which changes on every
+    # commit.
+    for observes in ("web_search", "terminal", "list_files", "read_file",
+                     "code_analysis", "review_artifacts", "mcp__fs__anything"):
+        assert replay_mod.is_external(observes) is True, observes
 
-    # Answers from the mission itself: has to really run. `write_file` because
-    # its side effect is the deliverable, `read_file` so a step reads what THIS
-    # run's upstream step wrote rather than a recording of an older one.
-    for inside in ("write_file", "read_file", "code_analysis"):
-        assert replay_mod.is_external(inside) is False, inside
+    # Exists for its side effect -- has to really run, because that effect is
+    # the mission's output. Serving `write_file` a recorded "ok" leaves the
+    # workspace empty and scores the run as having produced nothing.
+    for writes in ("write_file", "record_decision"):
+        assert replay_mod.is_external(writes) is False, writes
 
 
 def test_a_tool_key_is_stable_and_argument_sensitive():
@@ -726,7 +731,7 @@ async def test_a_local_tool_always_really_runs(cassettes):
     await replay("write_file", {"name": "a.md", "content": "x"})
     await replay("write_file", {"name": "a.md", "content": "x"})
 
-    assert ran == ["write_file", "write_file"], "a local tool must not be cached"
+    assert ran == ["write_file", "write_file"], "a writer must never be cached"
 
 
 @pytest.mark.asyncio
