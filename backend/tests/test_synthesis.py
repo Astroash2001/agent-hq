@@ -109,15 +109,20 @@ async def test_an_empty_reply_is_a_skip_not_an_empty_conclusion(live, monkeypatc
 
 @pytest.mark.asyncio
 async def test_a_conclusion_carries_its_text_and_its_price(live, monkeypatch):
+    finding = ("Sodium-ion wins on cost below 200 Wh/kg: `compare.md` puts it "
+               "at $61/kWh against $98/kWh for lithium. Lithium keeps the "
+               "energy-density lead, so the recommendation holds only for "
+               "stationary storage where mass does not matter.")
+
     async def _ok(*a, **k):
-        return _result("Sodium-ion wins on cost below 200 Wh/kg.")
+        return _result(finding)
 
     monkeypatch.setattr(synthesis.llm, "acompletion", _ok)
     out = await synthesis.conclude("Compare the chemistries",
                                    [("compare.md", "long body " * 40)])
 
     assert out.skipped is False
-    assert out.text == "Sodium-ion wins on cost below 200 Wh/kg."
+    assert out.text == finding
     assert out.cost_usd == pytest.approx(0.0004)
     assert out.model == "gemini/gemini-2.5-flash-lite"
 
@@ -297,3 +302,72 @@ async def test_a_regranted_step_is_named_in_the_briefing(monkeypatch):
     assert "Reassigned for tool access" in text
     assert "creative → coder" in text
     assert "terminal" in text
+
+
+# --------------------------------------------- the conclusion is checked too
+
+@pytest.mark.asyncio
+async def test_a_stub_conclusion_is_rejected_not_printed(live, monkeypatch):
+    """
+    The conclusion is the one part of the briefing that makes a claim, and it
+    was the one part nothing checked -- the eval judge reads the artifact files
+    and never the briefing, which is right but leaves this unguarded.
+    """
+    async def _stub(*a, **k):
+        return _result("Task completed after 3 execution steps")
+
+    monkeypatch.setattr(synthesis.llm, "acompletion", _stub)
+    out = await synthesis.conclude("Compare them", [("a.md", "real body " * 40)])
+
+    assert out.skipped is True
+    assert "failed its own contract" in out.reason_skipped
+    assert out.text == ""
+
+
+@pytest.mark.asyncio
+async def test_a_one_line_conclusion_is_rejected(live, monkeypatch):
+    """A sentence that leads a briefing reads as a finding whether it is one or
+    not."""
+    async def _thin(*a, **k):
+        return _result("Sodium-ion.")
+
+    monkeypatch.setattr(synthesis.llm, "acompletion", _thin)
+    out = await synthesis.conclude("Compare them", [("a.md", "real body " * 40)])
+
+    assert out.skipped is True
+    assert "contract" in out.reason_skipped
+
+
+@pytest.mark.asyncio
+async def test_a_short_but_real_answer_still_passes(live, monkeypatch):
+    """
+    The floor has to clear a genuinely brief answer -- a definition, a single
+    measured number -- or the check costs more than it catches.
+    """
+    answer = ("SSD stands for Solid-State Drive: storage with no moving parts, "
+              "using flash memory rather than spinning platters. `answer.md` "
+              "gives the definition and nothing was left unaddressed.")
+    assert len(answer) >= synthesis.MIN_CONCLUSION_CHARS
+
+    async def _short(*a, **k):
+        return _result(answer)
+
+    monkeypatch.setattr(synthesis.llm, "acompletion", _short)
+    out = await synthesis.conclude("What is an SSD?", [("a.md", "body " * 60)])
+
+    assert out.skipped is False
+    assert out.text == answer
+
+
+@pytest.mark.asyncio
+async def test_a_rejected_conclusion_still_reports_what_it_cost(live, monkeypatch):
+    """The call was made and billed whether or not its answer was usable, and a
+    cost that vanishes because the output was rejected understates the run."""
+    async def _stub(*a, **k):
+        return _result("Task completed after 3 execution steps", cost=0.0009)
+
+    monkeypatch.setattr(synthesis.llm, "acompletion", _stub)
+    out = await synthesis.conclude("g", [("a.md", "real body " * 40)])
+
+    assert out.skipped is True
+    assert out.cost_usd == pytest.approx(0.0009)

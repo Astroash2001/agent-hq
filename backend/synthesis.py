@@ -28,6 +28,7 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
 
+import contracts
 import llm
 import tracing
 from config import llm_configured, settings
@@ -39,6 +40,11 @@ logger = logging.getLogger("AgentHQ.Synthesis")
 # steps must not cost nine times as much to conclude as a mission with one.
 MAX_ARTIFACT_CHARS = 3000
 MAX_TOTAL_CHARS = 12000
+
+# Below this a "conclusion" is a sentence, and a sentence that leads a briefing
+# reads as a finding whether or not it is one. Low enough that a genuinely
+# short answer -- a definition, a single measured number -- still passes.
+MIN_CONCLUSION_CHARS = 120
 
 SYNTHESIS_SYSTEM_PROMPT = """You are the orchestrator of a multi-agent system, \
 writing the conclusion of a mission briefing. You are given the goal the user \
@@ -164,6 +170,25 @@ async def conclude(
 
     if not text:
         return Conclusion(reason_skipped="reply was empty")
+
+    # The conclusion is the one part of the briefing that makes a claim, and
+    # until now it was the one part nothing checked -- the eval judge reads the
+    # artifact files and pointedly never the briefing, which is right but leaves
+    # this unguarded. Contracts are free and deterministic, so at minimum a
+    # conclusion that is a stub, or a sentence long, does not get presented as a
+    # finding. What this cannot check is whether the finding is *true*; that
+    # needs the artifacts it was drawn from, and is named in [[TODO]].
+    check = contracts.check(text, contracts.ArtifactSpec(
+        min_chars=MIN_CONCLUSION_CHARS,
+        require_heading=False,
+    ))
+    if not check.ok:
+        logger.warning("[synthesis] conclusion rejected: %s",
+                       "; ".join(check.failures))
+        return Conclusion(
+            cost_usd=result.cost_usd, model=result.model,
+            reason_skipped="the drawn conclusion failed its own contract: "
+                           + "; ".join(check.failures))
 
     return Conclusion(text=text, cost_usd=result.cost_usd, model=result.model,
                       skipped=False)

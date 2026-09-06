@@ -449,9 +449,18 @@ the briefing rather than hidden: a mission with no conclusion and a mission
 whose conclusion was that everything is fine must not look alike, which was the
 original bug in a different costume.
 
-Still open: nothing grades the conclusion. The judge still reads artifacts only,
-which is right — but it means the one part of the briefing that now makes a
-claim is the one part the eval suite does not check.
+**Partly closed: the conclusion is contract-checked.** It goes through
+`contracts.check` before it is printed, so a conclusion that is a stub, or one
+sentence long, is rejected and the briefing says a conclusion was not drawn
+rather than leading with a placeholder. Free and deterministic, and the cost of
+the call is still reported when the answer is thrown away — a price that
+vanishes because the output was unusable understates the run.
+
+Still open: nothing checks whether the conclusion is *true*. That needs
+comparing it against the artifacts it was drawn from, and the eval judge
+deliberately reads the artifact files rather than the briefing. A grounding
+check — does every figure in the conclusion appear in an artifact — is the
+obvious next step and is not written.
 
 ### CORS is fully open
 
