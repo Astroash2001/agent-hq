@@ -16,6 +16,45 @@ from tool_registry import tool_registry
 logger = logging.getLogger("AgentHQ.BaseAgent")
 
 
+def _call_id(step: int, call_index: int) -> str:
+    """
+    A tool call's id, unique within the conversation.
+
+    It used to be `call_{step}`, which collides the moment a model returns two
+    tool calls in one turn: both assistant messages claim the same id and both
+    results answer it. Gemini never noticed; a stricter provider matches results
+    to calls by this id.
+    """
+    return f"call_{step}_{call_index}"
+
+
+def _append_tool_exchange(messages, call_id, tool_name, tool_args, result) -> None:
+    """
+    Append the assistant/tool pair that records one tool call and its result.
+
+    The OpenAI wire format requires a `tool` message to be preceded by an
+    assistant message carrying the matching `tool_calls` entry -- send one
+    without and the whole request is rejected, not just that message. Both the
+    real-result path and the search-cap refusal go through here so neither can
+    drift into sending a bare `tool` message again.
+    """
+    messages.append({
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [{
+            "id": call_id,
+            "type": "function",
+            "function": {"name": tool_name, "arguments": json.dumps(tool_args)},
+        }],
+    })
+    messages.append({
+        "role": "tool",
+        "tool_call_id": call_id,
+        "name": tool_name,
+        "content": json.dumps(result),
+    })
+
+
 class BaseAgent:
     """
     Standard ReAct Agent Engine (LLM + Tools + Execution Loop).
@@ -269,7 +308,7 @@ class BaseAgent:
                 break
 
             # Execute tool calls, one station at a time
-            for tool_call in tool_calls:
+            for call_index, tool_call in enumerate(tool_calls):
                 tool_name = tool_call.get("name")
                 tool_args = tool_call.get("arguments", {})
                 tools_used.append(tool_name)
@@ -285,10 +324,19 @@ class BaseAgent:
                 if tool_name == "web_search":
                     searches += 1
                     if searches > settings.search_max_calls:
-                        messages.append({
-                            "role": "tool",
-                            "name": tool_name,
-                            "content": json.dumps({
+                        # Through the same helper as a real result, and that is
+                        # not tidiness. This used to append a bare `tool`
+                        # message with no assistant `tool_calls` before it and
+                        # no `tool_call_id`. Gemini accepted it; OpenAI rejects
+                        # the whole request with "messages with role 'tool' must
+                        # be a response to a preceeding message with
+                        # 'tool_calls'", which kills the step -- so the cheapest
+                        # guard against one path drifting from the other is for
+                        # there to be only one path.
+                        _append_tool_exchange(
+                            messages, _call_id(step, call_index), tool_name,
+                            tool_args,
+                            {
                                 "success": False,
                                 "error": (
                                     f"Search limit reached ({settings.search_max_calls} "
@@ -297,7 +345,6 @@ class BaseAgent:
                                     f"you have already found."
                                 ),
                             })
-                        })
                         logger.info("[%s] search cap hit (%d)", self.name, settings.search_max_calls)
                         continue
 
@@ -333,21 +380,8 @@ class BaseAgent:
                     )
 
                 # Feed observation back to context
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [{
-                        "id": f"call_{step}",
-                        "type": "function",
-                        "function": {"name": tool_name, "arguments": json.dumps(tool_args)}
-                    }]
-                })
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": f"call_{step}",
-                    "name": tool_name,
-                    "content": json.dumps(tool_result)
-                })
+                _append_tool_exchange(messages, _call_id(step, call_index),
+                                      tool_name, tool_args, tool_result)
 
             await asyncio.sleep(0.3)  # Visual pacing for UI observation
 
