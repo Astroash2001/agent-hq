@@ -677,6 +677,39 @@ async def test_a_recorded_search_replays_and_never_reaches_the_network(cassettes
 
 
 @pytest.mark.asyncio
+async def test_a_replayed_tool_result_keeps_its_key_order(cassettes):
+    """
+    The subtle one, and it cost a whole re-record sweep to find.
+
+    `Cassettes.save` writes with sort_keys=True, so a result stored as a nested
+    object comes back alphabetised. `base_agent` puts `json.dumps(tool_result)`
+    straight into the next turn's prompt -- so the replayed prompt differed from
+    the recorded one by key order alone, and that turn missed its own cassette
+    while every visible value matched. Storing the exact JSON bytes keeps the
+    insertion order, which json.loads preserves.
+    """
+    natural = {"query": "ssd", "answer": "Solid State Drive", "count": 3,
+               "configured": True, "provider": "tavily"}
+
+    async def _real(tool_name, arguments, agent_id=None, task_id=None):
+        return dict(natural)
+
+    await replay_mod.make_tool_transport(cassettes, "record", _real)(
+        "web_search", {"query": "ssd"})
+
+    async def _never(*a, **k):
+        raise AssertionError("replay must not call through")
+
+    served = await replay_mod.make_tool_transport(cassettes, "replay", _never)(
+        "web_search", {"query": "ssd"})
+
+    assert list(served) == list(natural), "key order changed"
+    assert json.dumps(served) == json.dumps(natural), (
+        "the prompt is built from json.dumps(tool_result); it must be byte "
+        "identical to what was recorded")
+
+
+@pytest.mark.asyncio
 async def test_a_local_tool_always_really_runs(cassettes):
     """Even in replay: the artifact it writes is what gets scored."""
     ran = []

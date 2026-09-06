@@ -371,7 +371,14 @@ def make_tool_transport(cassettes: "Cassettes", mode: str, real_execute):
         entry = cassettes.load(key)
         if entry is not None:
             cassettes.hits += 1
-            return entry["result"]
+            # Stored as a JSON *string*, and it has to be. `Cassettes.save`
+            # writes with sort_keys=True, so a result stored as a nested object
+            # comes back alphabetised -- and `base_agent` puts
+            # `json.dumps(tool_result)` straight into the next turn's prompt.
+            # The replayed prompt then differs from the recorded one by key
+            # order alone, and that turn misses its own cassette. Round-tripping
+            # the exact bytes keeps insertion order, which json.loads preserves.
+            return json.loads(entry["result_json"])
 
         cassettes.misses.append(key)
         if mode != "record":
@@ -384,7 +391,8 @@ def make_tool_transport(cassettes: "Cassettes", mode: str, real_execute):
 
         result = await real_execute(tool_name, arguments,
                                     agent_id=agent_id, task_id=task_id)
-        cassettes.save(key, {"tool": tool_name, "result": result})
+        cassettes.save(key, {"tool": tool_name,
+                             "result_json": json.dumps(result)})
         return result
 
     return _execute

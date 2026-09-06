@@ -11,7 +11,7 @@
     "trivial"
    ],
    "error": null,
-   "duration_sec": 3.85,
+   "duration_sec": 4.16,
    "cost_usd": 0.0,
    "tokens_estimated": false,
    "steps": 1,
@@ -46,7 +46,7 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "3.9s of 90s"
+     "detail": "4.2s of 90s"
     },
     {
      "check": "must_not_stub",
@@ -70,8 +70,8 @@
      "reason": "The mission produced no artifacts."
     }
    ],
-   "spans": 5,
-   "cassette_hits": 2,
+   "spans": 6,
+   "cassette_hits": 3,
    "cassette_misses": 1,
    "cassettes_recorded": 0
   }
@@ -85,7 +85,7 @@
    "structural": 0.714,
    "quality": 0.0,
    "cost_usd": 0.0,
-   "p50_latency": 3.85
+   "p50_latency": 4.16
   }
  ]
 }
