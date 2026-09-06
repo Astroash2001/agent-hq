@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 371,
+ "cost_usd": 0.000901,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 634,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"IRENA cost of storage 2022 lithium-ion capital cost $/kWh report site:irena.org\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_0o4KgkUrMFQm2yS8Vg7ffPD1"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 371,
+   "prompt_tokens": 634
+  }
+ }
+}

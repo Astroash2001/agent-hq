@@ -1,0 +1,4 @@
+{
+ "result_json": "{\"success\": false, \"error\": \"Directory not found: \"}",
+ "tool": "list_files"
+}

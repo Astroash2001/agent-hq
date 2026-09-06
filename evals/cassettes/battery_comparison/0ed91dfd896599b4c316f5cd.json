@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 246,
+ "cost_usd": 0.002899,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 9626,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"LiFePO4 energy density Wh/kg typical 2023 review 'LiFePO4 energy density' Wh/kg 'cell level'\", \"max_results\":10}",
+        "name": "web_search"
+       },
+       "id": "call_QBfzOnytPHggkWg7tIfcoog2"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 246,
+   "prompt_tokens": 9626
+  }
+ }
+}

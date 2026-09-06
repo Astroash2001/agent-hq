@@ -1,0 +1,108 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1548,
+ "cost_usd": 0.003287,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 765,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"QuantumScape 2024 production pilot line press release energy density cycle life 2023 2024 site:quantumscape.com\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_FMyePxJkvpusIaDs3sul50r5"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Solid Power 2024 pilot line production press release energy density cycle life 2023 2024\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_mUGR57pmlX3W0yKZNzUtjTuq"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"ProLogium pilot production 2024 Taiwan factory commercialisation press release energy density 2023 2024\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_G8rFhidvSExZBXSx5QsV8pdu"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Toyota solid-state battery commercialization timeline 2024 2025 press release prototype production 2023 2024 site:toyota.com\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_GRngjOvjkYuD0CikJtIMA9Gs"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"CATL solid-state battery semi-solid 2023 2024 production announcement 'CATL solid-state' 'prototype'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_yAzE0NCUUzC5Xh4hC6ntL7Yd"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Samsung SDI solid-state battery 2024 prototype production press release energy density 'Samsung SDI solid-state'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_uKvhon1Ey51v1tmCF2lfK1S0"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Panasonic solid-state battery 2024 mass production timeline press release 'Panasonic solid-state'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_NOWQRKbdwLFhzom5458ofERy"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Ilika solid-state battery commercial Stereax Goliath 2023 2024 press release 'Ilika' 'solid state'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_W4Uu3hF6u4F2HpS0Xnziv87e"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Factorial Energy bankruptcy 2024 'Factorial' 'Chapter 11' solid-state 2024 news\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_UxKtpupw06ADcnes9s6z9bZD"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"BNEF solid-state battery timeline 2024 'BloombergNEF' 'solid-state' timeline 2025 2030 report\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_1Uco9qBWuJ0J58xlLfYF9b8r"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"solid-state battery manufacturing methods sulfide oxide polymer composite pilot line scale-up 2023 2024 review\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_dLOERm8yKg5dWkT520MLuua2"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"solid-state battery patent dispute 'QuantumScape patent' lawsuit 'IP' '2023' '2024'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_7bcgACRJUGn24QjUZNeSCpVk"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1548,
+   "prompt_tokens": 765
+  }
+ }
+}

@@ -1,0 +1,4 @@
+{
+ "result_json": "{\"success\": true, \"directory\": \"backend/data/missions/task_7a9bef5e\", \"count\": 2, \"items\": [{\"name\": \"mission.json\", \"is_dir\": false, \"size_bytes\": 2122}, {\"name\": \"report.md\", \"is_dir\": false, \"size_bytes\": 1067}]}",
+ "tool": "list_files"
+}

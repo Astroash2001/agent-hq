@@ -87,19 +87,21 @@ specialist produced nothing; grading them measures the assembler, not the work.
 python -m evals.runner --suite all --replay      # offline, no key, deterministic
 ```
 
-| task | mode | structural | quality |
-|---|---|---|---|
-| `adversarial_ambiguous` | replay | 100% | 100% |
-| `adversarial_missing_tool` | replay | 100% | 100% |
-| `adversarial_trivial` | replay | 100% | 50% |
-| `approach_standup` | replay | 100% | 100% |
-| `battery_comparison` | replay | 86% | 100% |
-| `battery_team_review` | replay | 86% | — |
-| `code_cache_bug` | replay | 100% | 100% |
-| `code_review_fix` | replay | 100% | 100% |
-| `ev_charging_standards` | replay | 86% | — |
-| the other five | simulate | 100% | — |
-| **9 on gemini-3.5-flash-lite** | **replay** | **95%** | **93%** |
+| task | mode | structural | quality | cost |
+|---|---|---|---|---|
+| `adversarial_ambiguous` | replay | 86% | 100% | $0.0702 |
+| `adversarial_trivial` | replay | 100% | 50% | $0.0175 |
+| `battery_comparison` | replay | 100% | 100% | $0.1146 |
+| `code_cache_bug` | replay | 100% | 100% | $0.0721 |
+| `code_review_fix` | replay | 100% | 83% | $0.0283 |
+| `ev_charging_standards` | replay | 100% | 100% | $0.0564 |
+| `grid_storage_tradeoffs` | replay | 100% | — | $0.1115 |
+| `heat_pump_handoff` | replay | 100% | 100% | $0.0681 |
+| `india_news_brief` | replay | 100% | 100% | $0.0301 |
+| `solar_efficiency` | replay | 100% | 100% | $0.1064 |
+| `solid_state_batteries` | replay | 100% | 100% | $0.0969 |
+| the other three | simulate | 100% | — | — |
+| **11 on gpt-5-mini** | **replay** | **99%** | **93%** | **$0.7723** |
 
 **structural** is the `expect` block — step count, agents involved, artifacts
 produced — deterministic, no model involved. **quality** is `evals/judge.py`

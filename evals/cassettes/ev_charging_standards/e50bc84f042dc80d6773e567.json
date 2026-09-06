@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 115,
+ "cost_usd": 0.00043,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 801,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"CCS1 CCS2 power range max charging speed regional adoption vehicle compatibility manufacturers operators CCS standardization 2026\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_dgBNU8VOJRNbdOEbrLccUubS"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 115,
+   "prompt_tokens": 801
+  }
+ }
+}

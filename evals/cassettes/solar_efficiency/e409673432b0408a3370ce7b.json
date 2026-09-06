@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 303,
+ "cost_usd": 0.0008,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 775,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"2022 perovskite silicon tandem 32.5% certified efficiency press release DOI\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_C2dBVEHjLv8BxUE7Pa3NUZic"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 303,
+   "prompt_tokens": 775
+  }
+ }
+}

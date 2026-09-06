@@ -1,0 +1,87 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1192,
+ "cost_usd": 0.003015,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 2523,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"Combined Charging System CCS Wikipedia\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_lj0FK9sIzLOsXc6uAzERfj4t"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"CharIN CCS 500 kW IEC 62196-3 2026 CharIN specification high power charging\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_XVhLbec8rCrprEIXE3jcuU2F"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"CHAdeMO Association ChaoJi power levels ChaoJi 900 kW specification\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_lqAUc2MZrGlSxkrJ3TutwC8o"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"NACS Tesla North America Charging Standard opening third party adapters Ford GM 2023 2024 announcement\", \"max_results\": 10}",
+        "name": "web_search"
+       },
+       "id": "call_7tyVR3jMl9hnX06hP3L158Ru"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"GB/T 20234 charging standard China GB/T 20234.1 GB/T 20234.2 power levels DC AC\", \"max_results\": 10}",
+        "name": "web_search"
+       },
+       "id": "call_oPmOqexiYJETv2xtek7lQOn1"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"IEC 62196 Type 2 Type 1 Mennekes J1772 power ratings AC three-phase Type 2 info\", \"max_results\": 8}",
+        "name": "web_search"
+       },
+       "id": "call_HQYlOt7sXzTZgYokCluvJJf1"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Adapters CCS to NACS adapter availability ChargePoint Electrify America Owens 2024 adapter\", \"max_results\": 10}",
+        "name": "web_search"
+       },
+       "id": "call_eRNlRfQ9yTPmNOKF40pXvZky"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"CHAdeMO adoption Nissan Mitsubishi public fast chargers regional adoption Japan Europe adapters\", \"max_results\": 8}",
+        "name": "web_search"
+       },
+       "id": "call_tXIUOt0B5PWtxN5IdHe51oTp"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Major charging network operators supporting CCS CHAdeMO NACS GB/T Ionity Electrify America Tesla State Grid ABB EVBox manufacturers supporting connectors\", \"max_results\": 10}",
+        "name": "web_search"
+       },
+       "id": "call_4R6w4buGxQJ2WNmlOB8mp3aK"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1192,
+   "prompt_tokens": 2523
+  }
+ }
+}

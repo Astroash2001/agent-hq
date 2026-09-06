@@ -1,0 +1,108 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1031,
+ "cost_usd": 0.002252,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 760,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"Boiler Upgrade Scheme heat pump grant GOV.UK BEIS eligibility amount 2024 2025 2026\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_k40q335AYFiFzoLQiSaT4ZuC"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"GOV.UK air source heat pump guidance homes 'air source heat pump' site:gov.uk\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_izHKYbJTPywhcEhR7HlD6l1Z"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Energy Saving Trust air source heat pump costs running costs UK 'air source heat pump' site:energysavingtrust.org.uk\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_SHMkHWHKiup25dP0xBGjHzOv"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"typical cost to install air source heat pump UK 2024 2025 'Which?' 'Trade' 'Groundsource'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_pfZGeRd2zBhcJogfgZ5eDu3Y"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"air source heat pump COP SCOP UK typical seasonal coefficient of performance 'SCOP' 'UK'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_sctXpD7fhdrcejM1WJyTaJkw"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"air source heat pump noise dB typical 'manufacturer datasheet' 'noise level' 'dB'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_NDqyN4b5NIcFLcWbWjHnBHMA"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"air source heat pump sizing guidance UK 'heat loss calculation' 'kW' 'MCS' 'heat load'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_KSY7dEdTWavl54Vkzhido0OJ"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"air source heat pump maintenance lifetime 'Energy Saving Trust' 'Which?' 'MCS' 'lifetime'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_jFDHEeWiSvHTyl70cufQWQi4"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"air source heat pump running cost comparison gas oil vs heat pump UK example savings 'Energy Saving Trust' 'Which?'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_lv0totxp31FmHHYpgJ0x0e6h"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Mitsubishi Ecodan datasheet COP SCOP noise dB 'Ecodan' 8kW 11kW 'datasheet' UK\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_btETPGqeuUyEFIC3SfMW1vsu"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Daikin Altherma datasheet COP SCOP noise dB 'datasheet' 'UK'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_6znxkrwsI15L9BM22w7SvOoc"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Boiler Upgrade Scheme guidance 'microgeneration certification scheme' MCS registered installer list 'GOV.UK'\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_oaQ0T2dm1P0QURx8n5qS5Qo1"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1031,
+   "prompt_tokens": 760
+  }
+ }
+}

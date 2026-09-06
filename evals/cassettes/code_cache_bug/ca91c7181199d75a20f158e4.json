@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1112,
+ "cost_usd": 0.000606,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 3226,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\"scores\": [{\"n\": 1, \"verdict\": \"pass\", \"reason\": \"fib_cache.py includes a runnable cached_recursive function decorated with lru_cache(maxsize=None) implementing memoization for Fibonacci.\"}, {\"n\": 2, \"verdict\": \"pass\", \"reason\": \"Artifacts include fib_results.json and test_fib.py that run and record correctness checks and timing, showing evidence the code was executed.\"}, {\"n\": 3, \"verdict\": \"pass\", \"reason\": \"fib_report.md explains why the cached_recursive approach is faster by memoizing subproblems (O(n) total work) and contrasts it with naive recursion and the iterative approach.\"}]}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1112,
+   "prompt_tokens": 3226
+  }
+ }
+}

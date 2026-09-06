@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1960,
+ "cost_usd": 0.000877,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 1860,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\"verdict\": \"revise\", \"score\": 0.55, \"reasons\": [\"The artifact is incomplete: several required sections are missing (Steps to get quotes and select an MCS-certified installer; Available UK grants and how to apply; FAQ; actionable one-page checklist) and the Simple suitability checklist is cut off mid-sentence.\", \"Key sections present but truncated: the Simple suitability checklist ends with 'r' and the content terminates abruptly.\", \"The artifact does not yet include links to the research reference list as requested.\", \"Does not yet constitute a complete homeowner_explainer.md ready for publication; missing grant application guidance, FAQ, and actionable next-steps checklist.\"], \"guidance\": \"Revise to produce a complete homeowner_explainer.md. Specifically: 1) finish the Simple suitability checklist and repair any broken sentences. 2) Add a section 'Steps to get quotes and select an MCS-certified installer' with a clear, step-by-step process and a short checklist. 3) Add 'Available UK grants and how to apply' (e.g., Boiler Upgrade Scheme) with eligibility criteria and application steps. 4) Include a concise 'FAQ' section addressing common homeowner questions (costs, efficiency, maintenance, when not to install, noise, grid impacts). 5) Include an 'Actionable one-page checklist for next steps' at the end. 6) Add a 'References / research reference list' section with links. 7) Ensure all figures used are clearly sourced from the research and properly attributed. 8) Deliver the final content as a complete Markdown document named homeowner_explainer.md with proper headings, bullets, callout tips, and links.\"}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1960,
+   "prompt_tokens": 1860
+  }
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1600,
+ "cost_usd": 0.00078,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 2794,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "length",
+    "message": {
+     "content": "",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1600,
+   "prompt_tokens": 2794
+  }
+ }
+}

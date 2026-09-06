@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 23,
+ "cost_usd": 0.000364,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 1273,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"directory\":\"\"}",
+        "name": "list_files"
+       },
+       "id": "call_50KDyqBl2Wjej9V5ZeEDwkdM"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 23,
+   "prompt_tokens": 1273
+  }
+ }
+}

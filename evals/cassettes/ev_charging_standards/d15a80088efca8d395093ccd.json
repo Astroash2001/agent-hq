@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 593,
+ "cost_usd": 0.003503,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 9267,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"automakers adopt NACS 2023 Ford GM Rivian adoption press release 2024 2025 'adopt NACS' 'Ford' 'GM' 'Rivian' 'Hyundai' 'BMW' 'Mercedes' 2024 announcement\", \"max_results\": 10}",
+        "name": "web_search"
+       },
+       "id": "call_ER53oku4VP9u0fY4VprqYegI"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 593,
+   "prompt_tokens": 9267
+  }
+ }
+}

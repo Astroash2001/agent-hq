@@ -1,0 +1,4 @@
+{
+ "result_json": "{\"success\": true, \"directory\": \"./backend/data/missions/task_7e8f0d94\", \"count\": 4, \"items\": [{\"name\": \"greeting_response.md\", \"is_dir\": false, \"size_bytes\": 270}, {\"name\": \"mission.json\", \"is_dir\": false, \"size_bytes\": 1182}, {\"name\": \"report.md\", \"is_dir\": false, \"size_bytes\": 1105}, {\"name\": \"trace.jsonl\", \"is_dir\": false, \"size_bytes\": 3910}]}",
+ "tool": "list_files"
+}

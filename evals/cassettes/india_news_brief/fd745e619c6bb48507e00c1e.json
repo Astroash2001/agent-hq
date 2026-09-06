@@ -1,0 +1,94 @@
+{
+ "attempts": 3,
+ "completion_tokens": 770,
+ "cost_usd": 0.001685,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 581,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\": \"India news September 6 2026 top stories Reuters\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_sHqNwqGAt0st3Yz1BaKtpSkz"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Modi September 6 2026 visit or statement \\\"September 6 2026\\\" India PM Modi news\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_DpJdRVfML4CLqfZo6QpyYkyq"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"RBI decision September 2026 repo rate September 2026 India news\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_HyA4YBWhgtOsF7wKJq5l8OYV"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Indian stock market September 6 2026 Sensex Nifty Reuters September 6 2026 India markets\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_0azFG3KyTlusjRFaclJViHS6"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"train accident India September 6 2026 crash September 2026 India news\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_S4oJLaOzh4t86BzSSn4kf5qI"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"India China relations September 2026 news September 6 2026 India foreign relations\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_Y5xuuIW3YNz24RUPLhyEKkTA"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Supreme Court India September 2026 ruling September 6 2026 Indian Express The Hindu\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_d7EWahYpsvGtAce6xEen305C"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Reliance Jio or Tata or Flipkart September 6 2026 business news India September 2026\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_q23THM9FAMO8SYfyJkp2bUfp"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"West Bengal news September 6 2026 Mamata banerjee September 2026 news\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_KKIBq3LRmmZNJ8QVUfYWaNmr"
+      },
+      {
+       "function": {
+        "arguments": "{\"query\": \"Karnataka September 6 2026 news Bengaluru state government September 2026\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_8zlJNe46aOT5KAqA9ACgeQBz"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 770,
+   "prompt_tokens": 581
+  }
+ }
+}

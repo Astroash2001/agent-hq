@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 484,
+ "cost_usd": 0.001337,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 1477,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"SSD abbreviation Social Security Disability SSD meaning\", \"max_results\": 5}",
+        "name": "web_search"
+       },
+       "id": "call_1IztZwFTxF2y0rIAheCPMHVT"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 484,
+   "prompt_tokens": 1477
+  }
+ }
+}

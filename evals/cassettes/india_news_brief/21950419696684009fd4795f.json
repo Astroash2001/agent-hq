@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 101,
+ "cost_usd": 0.002074,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 7489,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I've saved the findings to news_findings.json. Notes: I used the available search quota and reliable sources (RBI press release, Reuters, Arab News and major Indian outlets). Several stories are developing (notably the train crash) — I flagged them as developing/unverified and recommended waiting for official confirmation. If you want, I can now expand this into the short brief for distribution (2–4 paragraphs) or update the JSON with additional stories/sources after you allow more searches.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 101,
+   "prompt_tokens": 7489
+  }
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 456,
+ "cost_usd": 0.001367,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 1821,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"BloombergNEF 2024 battery pack price 2024 $/kWh 115 site:bloomberg.com OR site:about.bnef.com BNEF 2024 battery price 115/kWh\", \"max_results\": 10}",
+        "name": "web_search"
+       },
+       "id": "call_I52XDcw8FUdnS5ZLoJcmnvWR"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 456,
+   "prompt_tokens": 1821
+  }
+ }
+}

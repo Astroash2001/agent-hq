@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 809,
+ "cost_usd": 0.003197,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 6316,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"SSD \\\"sum of squared\\\" abbreviation SSD \\\"sum of squared differences\\\"\",\"max_results\":10}",
+        "name": "web_search"
+       },
+       "id": "call_LUNFvAxfyNBPdvrW1nqOe7yY"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 809,
+   "prompt_tokens": 6316
+  }
+ }
+}

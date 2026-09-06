@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 17,
+ "cost_usd": 0.001123,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 4358,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "Done — I wrote the executive briefing to executive_briefing.md.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 17,
+   "prompt_tokens": 4358
+  }
+ }
+}

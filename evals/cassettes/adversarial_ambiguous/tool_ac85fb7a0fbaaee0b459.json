@@ -1,0 +1,4 @@
+{
+ "result_json": "{\"success\": false, \"syntax_valid\": true, \"exit_code\": 1, \"stdout\": \"\", \"stderr\": \"Traceback (most recent call last):\\r\\n  File \\\"C:\\\\Users\\\\avina\\\\AppData\\\\Local\\\\Temp\\\\tmprwjh6g07.py\\\", line 6, in <module>\\r\\n    with open(path, 'r', encoding='utf-8') as f:\\r\\nFileNotFoundError: [Errno 2] No such file or directory: 'scripts/metrics_from_lighthouse.py'\", \"functions\": [], \"classes\": [], \"imports\": [\"ast\", \"runpy\", \"sys\"]}",
+ "tool": "code_analysis"
+}

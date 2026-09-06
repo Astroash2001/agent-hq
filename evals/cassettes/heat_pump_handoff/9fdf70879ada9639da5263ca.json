@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 138,
+ "cost_usd": 0.003072,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 11183,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I wrote the research findings to research_findings.md. The file contains a structured UK‑focused summary covering: how ASHPs work; benefits/limitations; COP/SCOP and typical seasonal ranges; sizing/installation considerations; indicative costs; running‑cost example and sensitivity notes; noise, maintenance and lifetime; UK grant overview; FAQs; recommended next steps and primary sources.\n\nNext step suggestions (optional): I can fetch manufacturer datasheets and Which?/independent test reports, update the BUS/gov.uk links with the latest guidance, and collect representative noise (dB) figures for specific models to add to the file. Would you like me to proceed with that?",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 138,
+   "prompt_tokens": 11183
+  }
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 2687,
+ "cost_usd": 0.005565,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 765,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"filepath\":\"fib_cache.py\",\"content\":\"\\\"\\\"\\\"\\nSimple Fibonacci implementations: naive recursive, cached recursive using lru_cache,\\nand an iterative high-performance reference. Type hinted and documented.\\n\\\"\\\"\\\"\\nfrom functools import lru_cache\\nfrom typing import Dict\\n\\n\\ndef naive_recursive(n: int) -> int:\\n    \\\"\\\"\\\"Compute Fibonacci using the naive recursion.\\n\\n    Warning: exponential time; only suitable for small n.\\n    \\\"\\\"\\\"\\n    if n < 0:\\n        raise ValueError(\\\"n must be non-negative\\\")\\n    if n < 2:\\n        return n\\n    return naive_recursive(n - 1) + naive_recursive(n - 2)\\n\\n\\n@lru_cache(maxsize=None)\\ndef cached_recursive(n: int) -> int:\\n    \\\"\\\"\\\"Compute Fibonacci using recursion with memoization (lru_cache).\\n\\n    Faster than naive recursion, but still recursive so very large n can hit\\n    Python's recursion limit (~1000 by default).\\n    \\\"\\\"\\\"\\n    if n < 0:\\n        raise ValueError(\\\"n must be non-negative\\\")\\n    if n < 2:\\n        return n\\n    return cached_recursive(n - 1) + cached_recursive(n - 2)\\n\\n\\ndef iterative(n: int) -> int:\\n    \\\"\\\"\\\"Compute Fibonacci iteratively in O(n) time and O(1) extra space.\\n\\n    This is the recommended approach for large n.\\n    \\\"\\\"\\\"\\n    if n < 0:\\n        raise ValueError(\\\"n must be non-negative\\\")\\n    a, b = 0, 1\\n    for _ in range(n):\\n        a, b = b, a + b\\n    return a\\n\\n\\n# Optional utility: compute multiple fibs at once\\ndef fibs_up_to(n: int) -> Dict[int, int]:\\n    \\\"\\\"\\\"Return a dict of Fibonacci numbers for 0..n using the iterative method.\\\"\\\"\\\"\\n    result: Dict[int, int] = {}\\n    a, b = 0, 1\\n    for i in range(n + 1):\\n        result[i] = a\\n        a, b = b, a + b\\n    return result\\n\"}",
+        "name": "write_file"
+       },
+       "id": "call_wXJ6WmOlstHGYBT4FT3PEV0X"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 2687,
+   "prompt_tokens": 765
+  }
+ }
+}

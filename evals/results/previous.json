@@ -4,52 +4,58 @@
    "task_id": "adversarial_ambiguous",
    "run": 1,
    "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
+   "model": "openai/gpt-5-mini",
    "goal": "Make it better.",
    "tags": [
     "adversarial",
     "ambiguous"
    ],
    "error": null,
-   "duration_sec": 8.15,
-   "cost_usd": 0.0,
+   "duration_sec": 22.67,
+   "cost_usd": 0.070228,
    "tokens_estimated": false,
-   "steps": 1,
+   "steps": 5,
    "artifacts": [
-    "clarification_plan.md"
+    "baseline_metrics.md",
+    "clarifying_questions.md",
+    "implementation_plan_and_prototype.md",
+    "improvement_proposals.md",
+    "lh_sample_1.json",
+    "lh_sample_2.json",
+    "metrics_from_lighthouse.py",
+    "research_findings.md"
    ],
-   "structural": 1.0,
+   "structural": 0.857,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "1 steps, wanted >= 1"
+     "detail": "5 steps, wanted >= 1"
     },
     {
      "check": "max_steps",
-     "ok": true,
-     "detail": "1 steps, wanted <= 3"
+     "ok": false,
+     "detail": "5 steps, wanted <= 3"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['clarification_plan.md']"
+     "detail": "produced ['clarifying_questions.md', 'research_findings.md', 'baseline_metrics.md', 'improvement_proposals.md', 'implementation_plan_and_prototype.md', 'metrics_from_lighthouse.py', 'lh_sample_1.json', 'lh_sample_2.json']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "1/1 completed"
+     "detail": "5/5 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+     "detail": "$0.0702 of $0.10"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "8.1s of 120s"
+     "detail": "22.7s of 120s"
     },
     {
      "check": "must_not_stub",
@@ -64,39 +70,518 @@
      "n": 1,
      "criterion": "The output acknowledges the goal is underspecified rather than inventing a subject",
      "verdict": "pass",
-     "reason": "The clarification plan explicitly treats 'Make it better' as an ambiguous request and establishes a framework to define it."
+     "reason": "The clarifying_questions.md file explicitly asks 'What exactly should we \"make better\"?' and outlines required questions, showing acknowledgment that the goal is underspecified."
     },
     {
      "n": 2,
      "criterion": "It does not fabricate detailed findings about a topic that was never named",
      "verdict": "pass",
-     "reason": "It avoids fabricating specific findings and instead lists discovery questions and general optimization dimensions."
+     "reason": "Content centers on generic, widely-known improvement findings (LCP, CLS, cart abandonment) with references, not fabricating claims about an unnamed subject."
     }
    ],
-   "spans": 8,
-   "cassette_hits": 6,
+   "spans": 52,
+   "cassette_hits": 34,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
   {
    "task_id": "adversarial_missing_tool",
    "run": 1,
-   "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
+   "mode": "simulate",
+   "model": "(simulator)",
    "goal": "Write a short report on how long it takes this machine to sum the numbers 1 to ten million in Python, using a real measured timing.",
    "tags": [
     "adversarial",
     "tool_routing"
    ],
    "error": null,
-   "duration_sec": 16.75,
+   "duration_sec": 14.52,
    "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "implementation.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 4"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'analysis.md', 'implementation.md', 'report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.20"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "14.5s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 21,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "adversarial_trivial",
+   "run": 1,
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
+   "goal": "What does the acronym SSD stand for?",
+   "tags": [
+    "adversarial",
+    "trivial"
+   ],
+   "error": null,
+   "duration_sec": 7.47,
+   "cost_usd": 0.017505,
+   "tokens_estimated": false,
+   "steps": 1,
+   "artifacts": [
+    "ssd_definitions.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "1 steps, wanted >= 1"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "1 steps, wanted <= 2"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['ssd_definitions.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "1/1 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0175 of $0.05"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "7.5s of 90s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 0.5,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Answers that SSD stands for solid-state drive",
+     "verdict": "pass",
+     "reason": "The artifact explicitly states that the most common expansion of SSD is 'Solid-State Drive' and includes a Solid-State Drive heading."
+    },
+    {
+     "n": 2,
+     "criterion": "Does not pad a one-line answer into a multi-section report",
+     "verdict": "fail",
+     "reason": "The artifact is organized as a multi-section list (items 1–4) rather than a single-line answer."
+    }
+   ],
+   "spans": 19,
+   "cassette_hits": 17,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "approach_standup",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Research solar panel efficiency, then hold a standup to agree the report's angle before writing it.",
+   "tags": [
+    "meeting",
+    "synthesis"
+   ],
+   "error": null,
+   "duration_sec": 23.07,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "decision.md",
+    "meeting_notes.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 5"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'analysis.md', 'meeting_notes.md', 'decision.md', 'report.md']"
+    },
+    {
+     "check": "requires_meeting",
+     "ok": true,
+     "detail": "1 meeting step(s)"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.35"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "23.1s of 240s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 25,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "battery_comparison",
+   "run": 1,
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
+   "goal": "Compare sodium-ion and lithium-ion home batteries and recommend one.",
+   "tags": [
+    "research",
+    "synthesis",
+    "multi_step",
+    "smoke"
+   ],
+   "error": null,
+   "duration_sec": 20.87,
+   "cost_usd": 0.114607,
+   "tokens_estimated": false,
+   "steps": 3,
+   "artifacts": [
+    "final_recommendation_report.md",
+    "quantitative_comparison.csv",
+    "raw_research.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "3 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "3 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'data_analyst', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['raw_research.md', 'quantitative_comparison.csv', 'final_recommendation_report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "3/3 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.1146 of $0.25"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "20.9s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Names at least two specific battery chemistries with figures",
+     "verdict": "pass",
+     "reason": "The artifacts clearly name two chemistries, sodium‑ion and lithium‑ion (LFP), and provide accompanying figures (e.g., cost per kWh and cycle life) from quantitative_comparison.csv."
+    },
+    {
+     "n": 2,
+     "criterion": "States a recommendation with a stated reason",
+     "verdict": "pass",
+     "reason": "The executive summary explicitly recommends lithium‑ion (LFP) for most homes and explains practical ecosystem benefits that justify the recommendation."
+    },
+    {
+     "n": 3,
+     "criterion": "Cites at least one source when web_search was available",
+     "verdict": "pass",
+     "reason": "The report lists sources (raw_research.md; quantitative_comparison.csv) and cites figures from them (e.g., quantitative_comparison.csv) to support claims."
+    }
+   ],
+   "spans": 59,
+   "cassette_hits": 46,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "battery_team_review",
+   "run": 1,
+   "mode": "simulate",
+   "model": "(simulator)",
+   "goal": "Research two competing home battery technologies in parallel, discuss the findings as a team, then write the comparison report.",
+   "tags": [
+    "meeting",
+    "synthesis",
+    "multi_step"
+   ],
+   "error": null,
+   "duration_sec": 23.19,
+   "cost_usd": 0.0,
+   "tokens_estimated": true,
+   "steps": 4,
+   "artifacts": [
+    "analysis.md",
+    "decision.md",
+    "meeting_notes.md",
+    "report.md",
+    "research_notes.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "4 steps, wanted >= 3"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "4 steps, wanted <= 5"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['research_notes.md', 'analysis.md', 'meeting_notes.md', 'decision.md', 'report.md']"
+    },
+    {
+     "check": "requires_meeting",
+     "ok": true,
+     "detail": "1 meeting step(s)"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "4/4 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0000 of $0.35"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "23.2s of 240s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": null,
+   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
+   "rubric": [],
+   "spans": 25,
+   "cassette_hits": 0,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "code_cache_bug",
+   "run": 1,
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
+   "goal": "Implement and test a fast Python fibonacci cache, and verify it with a real run.",
+   "tags": [
+    "code",
+    "analysis",
+    "smoke"
+   ],
+   "error": null,
+   "duration_sec": 28.5,
+   "cost_usd": 0.072118,
    "tokens_estimated": false,
    "steps": 2,
    "artifacts": [
-    "measure.py",
-    "summation_report.md",
-    "timing_result.md"
+    "fib_cache.py",
+    "fib_report.md",
+    "fib_results.json",
+    "test_fib.py"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "2 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['coder', 'creative']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['fib_cache.py', 'test_fib.py', 'fib_results.json', 'fib_report.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0721 of $0.25"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "28.5s of 180s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Contains runnable Python implementing a cache",
+     "verdict": "pass",
+     "reason": "fib_cache.py includes a runnable cached_recursive function decorated with lru_cache(maxsize=None) implementing memoization for Fibonacci."
+    },
+    {
+     "n": 2,
+     "criterion": "Shows evidence the code was executed or analysed, not just written",
+     "verdict": "pass",
+     "reason": "Artifacts include fib_results.json and test_fib.py that run and record correctness checks and timing, showing evidence the code was executed."
+    },
+    {
+     "n": 3,
+     "criterion": "Explains why the cached version is faster",
+     "verdict": "pass",
+     "reason": "fib_report.md explains why the cached_recursive approach is faster by memoizing subproblems (O(n) total work) and contrasts it with naive recursion and the iterative approach."
+    }
+   ],
+   "spans": 62,
+   "cassette_hits": 51,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "code_review_fix",
+   "run": 1,
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
+   "goal": "Analyse this function for bugs and propose a fix: def average(xs): return sum(xs) / len(xs)",
+   "tags": [
+    "code",
+    "analysis"
+   ],
+   "error": null,
+   "duration_sec": 15.11,
+   "cost_usd": 0.028297,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "average_fix.py",
+    "average_fix_report.md"
    ],
    "structural": 1.0,
    "checks": [
@@ -118,7 +603,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['measure.py', 'timing_result.md', 'summation_report.md']"
+     "detail": "produced ['average_fix.py', 'average_fix_report.md']"
     },
     {
      "check": "all_steps_completed",
@@ -128,13 +613,102 @@
     {
      "check": "max_cost_usd",
      "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+     "detail": "$0.0283 of $0.20"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "16.8s of 150s"
+     "detail": "15.1s of 150s"
+    },
+    {
+     "check": "must_not_stub",
+     "ok": true,
+     "detail": "no stub markers found"
+    }
+   ],
+   "quality": 0.833,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Identifies the division-by-zero on an empty input",
+     "verdict": "pass",
+     "reason": "The report explicitly identifies division-by-zero for empty iterables and notes raising ValueError in the fix."
+    },
+    {
+     "n": 2,
+     "criterion": "Proposes a concrete corrected implementation",
+     "verdict": "pass",
+     "reason": "The final implementation section provides a complete, concrete average(xs) function with single-pass accumulation, error handling, and generator support."
+    },
+    {
+     "n": 3,
+     "criterion": "Does not invent bugs that are not present in the function",
+     "verdict": "partial",
+     "reason": "The Discovered bugs section uses a claim about strings being treated as sequences of characters (average('123') -> '1','2','3'), which is not a bug present in the original function."
+    }
+   ],
+   "spans": 33,
+   "cassette_hits": 26,
+   "cassette_misses": 0,
+   "cassettes_recorded": 0
+  },
+  {
+   "task_id": "ev_charging_standards",
+   "run": 1,
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
+   "goal": "Research the competing EV charging connector standards, then write a one-page comparison for a fleet buyer.",
+   "tags": [
+    "research",
+    "synthesis",
+    "handoff"
+   ],
+   "error": null,
+   "duration_sec": 11.6,
+   "cost_usd": 0.056422,
+   "tokens_estimated": false,
+   "steps": 2,
+   "artifacts": [
+    "ev_connector_research.md",
+    "one_page_comparison.md"
+   ],
+   "structural": 1.0,
+   "checks": [
+    {
+     "check": "min_steps",
+     "ok": true,
+     "detail": "2 steps, wanted >= 2"
+    },
+    {
+     "check": "max_steps",
+     "ok": true,
+     "detail": "2 steps, wanted <= 5"
+    },
+    {
+     "check": "agents_involved",
+     "ok": true,
+     "detail": "all present in ['creative', 'researcher']"
+    },
+    {
+     "check": "artifacts",
+     "ok": true,
+     "detail": "produced ['ev_connector_research.md', 'one_page_comparison.md']"
+    },
+    {
+     "check": "all_steps_completed",
+     "ok": true,
+     "detail": "2/2 completed"
+    },
+    {
+     "check": "max_cost_usd",
+     "ok": true,
+     "detail": "$0.0564 of $0.25"
+    },
+    {
+     "check": "max_duration_sec",
+     "ok": true,
+     "detail": "11.6s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -147,126 +721,57 @@
    "rubric": [
     {
      "n": 1,
-     "criterion": "Contains a timing figure that came from actually running the code",
+     "criterion": "Names at least two connector standards and what they are used for",
      "verdict": "pass",
-     "reason": "The report includes a measured timing figure of ~0.25 seconds derived from the execution script."
+     "reason": "The artifacts name CCS1/CCS2, CHAdeMO (including ChaoJi), NACS/Tesla, and GB/T, and describe CCS as the dominant international DC fast charging standard, with CHAdeMO/NACS/GB/T serving regional ecosystems."
     },
     {
      "n": 2,
-     "criterion": "The step that needed execution was given to an agent holding the terminal tool",
+     "criterion": "Gives a concrete recommendation for a fleet buyer",
      "verdict": "pass",
-     "reason": "The measure.py script was executed to produce the real timing results."
+     "reason": "The one-page brief provides a concrete fleet recommendation: CCS as the primary DC standard for most fleets outside China, with a NACS adapter strategy for North America and GB/T for China."
+    },
+    {
+     "n": 3,
+     "criterion": "Mentions a regional difference or a transition timeline",
+     "verdict": "pass",
+     "reason": "Regional differences and transition context are discussed, including CCS2 in Europe, CCS1 in North America, NACS trends in NA, GB/T in China, and the CHAdeMO/ChaoJi path."
     }
    ],
-   "spans": 26,
-   "cassette_hits": 20,
+   "spans": 37,
+   "cassette_hits": 30,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
   {
-   "task_id": "adversarial_trivial",
+   "task_id": "grid_storage_tradeoffs",
    "run": 1,
    "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
-   "goal": "What does the acronym SSD stand for?",
+   "model": "openai/gpt-5-mini",
+   "goal": "Compare grid-scale storage options on cost and duration, then produce an executive briefing with a recommendation.",
    "tags": [
-    "adversarial",
-    "trivial"
+    "research",
+    "synthesis",
+    "handoff",
+    "fan_in"
    ],
    "error": null,
-   "duration_sec": 5.96,
-   "cost_usd": 0.0,
-   "tokens_estimated": false,
-   "steps": 1,
-   "artifacts": [
-    "ssd_definition.md"
-   ],
-   "structural": 1.0,
-   "checks": [
-    {
-     "check": "min_steps",
-     "ok": true,
-     "detail": "1 steps, wanted >= 1"
-    },
-    {
-     "check": "max_steps",
-     "ok": true,
-     "detail": "1 steps, wanted <= 2"
-    },
-    {
-     "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['ssd_definition.md']"
-    },
-    {
-     "check": "all_steps_completed",
-     "ok": true,
-     "detail": "1/1 completed"
-    },
-    {
-     "check": "max_cost_usd",
-     "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
-    },
-    {
-     "check": "max_duration_sec",
-     "ok": true,
-     "detail": "6.0s of 90s"
-    },
-    {
-     "check": "must_not_stub",
-     "ok": true,
-     "detail": "no stub markers found"
-    }
-   ],
-   "quality": 0.5,
-   "quality_skipped": "",
-   "rubric": [
-    {
-     "n": 1,
-     "criterion": "Answers that SSD stands for solid-state drive",
-     "verdict": "pass",
-     "reason": "The artifact correctly states that SSD stands for Solid-State Drive."
-    },
-    {
-     "n": 2,
-     "criterion": "Does not pad a one-line answer into a multi-section report",
-     "verdict": "fail",
-     "reason": "The answer is padded into a multi-section report with an Overview heading and multiple paragraphs."
-    }
-   ],
-   "spans": 10,
-   "cassette_hits": 8,
-   "cassette_misses": 0,
-   "cassettes_recorded": 0
-  },
-  {
-   "task_id": "approach_standup",
-   "run": 1,
-   "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
-   "goal": "Research solar panel efficiency, then hold a standup to agree the report's angle before writing it.",
-   "tags": [
-    "meeting",
-    "synthesis"
-   ],
-   "error": null,
-   "duration_sec": 20.64,
-   "cost_usd": 0.0,
+   "duration_sec": 23.37,
+   "cost_usd": 0.111548,
    "tokens_estimated": false,
    "steps": 3,
    "artifacts": [
-    "meeting_decision.md",
-    "solar_report.md",
-    "solar_research.md"
+    "cost_duration_analysis.csv",
+    "cost_vs_duration_scatter.svg",
+    "executive_briefing.md",
+    "market_research.csv"
    ],
    "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "3 steps, wanted >= 2"
+     "detail": "3 steps, wanted >= 3"
     },
     {
      "check": "max_steps",
@@ -274,14 +779,14 @@
      "detail": "3 steps, wanted <= 5"
     },
     {
-     "check": "artifacts",
+     "check": "agents_involved",
      "ok": true,
-     "detail": "produced ['solar_research.md', 'meeting_decision.md', 'solar_report.md']"
+     "detail": "all present in ['creative', 'data_analyst', 'researcher']"
     },
     {
-     "check": "requires_meeting",
+     "check": "artifacts",
      "ok": true,
-     "detail": "1 meeting step(s)"
+     "detail": "produced ['market_research.csv', 'cost_duration_analysis.csv', 'cost_vs_duration_scatter.svg', 'executive_briefing.md']"
     },
     {
      "check": "all_steps_completed",
@@ -291,196 +796,12 @@
     {
      "check": "max_cost_usd",
      "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
+     "detail": "$0.1115 of $0.30"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "20.6s of 240s"
-    },
-    {
-     "check": "must_not_stub",
-     "ok": true,
-     "detail": "no stub markers found"
-    }
-   ],
-   "quality": 1.0,
-   "quality_skipped": "",
-   "rubric": [
-    {
-     "n": 1,
-     "criterion": "A meeting artifact records an agreed angle for the report",
-     "verdict": "pass",
-     "reason": "The meeting_decision.md artifact clearly records Eve's proposal and Dave's synthesis agreeing on an infographic-driven executive dashboard and structure."
-    },
-    {
-     "n": 2,
-     "criterion": "The written report follows the angle that was agreed",
-     "verdict": "pass",
-     "reason": "solar_report.md follows the agreed outline precisely, leading with an executive dashboard and combining commercial ROI with core technical breakdowns."
-    },
-    {
-     "n": 3,
-     "criterion": "The research is used rather than restated",
-     "verdict": "pass",
-     "reason": "solar_report.md synthesizes the research data (benchmarks, technologies, market trends) into a structured report rather than just dumping raw text."
-    }
-   ],
-   "spans": 36,
-   "cassette_hits": 26,
-   "cassette_misses": 0,
-   "cassettes_recorded": 0
-  },
-  {
-   "task_id": "battery_comparison",
-   "run": 1,
-   "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
-   "goal": "Compare sodium-ion and lithium-ion home batteries and recommend one.",
-   "tags": [
-    "research",
-    "synthesis",
-    "multi_step",
-    "smoke"
-   ],
-   "error": null,
-   "duration_sec": 10.75,
-   "cost_usd": 0.0,
-   "tokens_estimated": false,
-   "steps": 2,
-   "artifacts": [
-    "battery_recommendation_report.md",
-    "battery_research.md"
-   ],
-   "structural": 0.857,
-   "checks": [
-    {
-     "check": "min_steps",
-     "ok": false,
-     "detail": "2 steps, wanted >= 3"
-    },
-    {
-     "check": "max_steps",
-     "ok": true,
-     "detail": "2 steps, wanted <= 5"
-    },
-    {
-     "check": "agents_involved",
-     "ok": true,
-     "detail": "all present in ['creative', 'researcher']"
-    },
-    {
-     "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['battery_research.md', 'battery_recommendation_report.md']"
-    },
-    {
-     "check": "all_steps_completed",
-     "ok": true,
-     "detail": "2/2 completed"
-    },
-    {
-     "check": "max_cost_usd",
-     "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
-    },
-    {
-     "check": "max_duration_sec",
-     "ok": true,
-     "detail": "10.7s of 180s"
-    },
-    {
-     "check": "must_not_stub",
-     "ok": true,
-     "detail": "no stub markers found"
-    }
-   ],
-   "quality": 1.0,
-   "quality_skipped": "",
-   "rubric": [
-    {
-     "n": 1,
-     "criterion": "Names at least two specific battery chemistries with figures",
-     "verdict": "pass",
-     "reason": "The report compares Lithium Iron Phosphate (LFP) and Sodium-Ion, including specific figures such as energy density (140-180 Wh/kg vs 100-160 Wh/kg) and cycle life."
-    },
-    {
-     "n": 2,
-     "criterion": "States a recommendation with a stated reason",
-     "verdict": "pass",
-     "reason": "It explicitly recommends LFP for homeowners installing systems today due to mature ecosystems, warranties, and immediate availability."
-    },
-    {
-     "n": 3,
-     "criterion": "Cites at least one source when web_search was available",
-     "verdict": "pass",
-     "reason": "Sources such as Bonnen Batteries, Kora Power, Volta Foundation, and Zvepow are cited in the research artifact."
-    }
-   ],
-   "spans": 28,
-   "cassette_hits": 21,
-   "cassette_misses": 0,
-   "cassettes_recorded": 0
-  },
-  {
-   "task_id": "battery_team_review",
-   "run": 1,
-   "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
-   "goal": "Research two competing home battery technologies in parallel, discuss the findings as a team, then write the comparison report.",
-   "tags": [
-    "meeting",
-    "synthesis",
-    "multi_step"
-   ],
-   "error": null,
-   "duration_sec": 11.32,
-   "cost_usd": 0.0,
-   "tokens_estimated": false,
-   "steps": 4,
-   "artifacts": [
-    "tech_one_research.md",
-    "tech_two_research.md"
-   ],
-   "structural": 0.857,
-   "checks": [
-    {
-     "check": "min_steps",
-     "ok": true,
-     "detail": "4 steps, wanted >= 3"
-    },
-    {
-     "check": "max_steps",
-     "ok": true,
-     "detail": "4 steps, wanted <= 5"
-    },
-    {
-     "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['tech_one_research.md', 'tech_two_research.md']"
-    },
-    {
-     "check": "requires_meeting",
-     "ok": true,
-     "detail": "1 meeting step(s)"
-    },
-    {
-     "check": "all_steps_completed",
-     "ok": false,
-     "detail": "1/4 completed"
-    },
-    {
-     "check": "max_cost_usd",
-     "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
-    },
-    {
-     "check": "max_duration_sec",
-     "ok": true,
-     "detail": "11.3s of 240s"
+     "detail": "23.4s of 200s"
     },
     {
      "check": "must_not_stub",
@@ -489,344 +810,18 @@
     }
    ],
    "quality": null,
-   "quality_skipped": "CassetteMiss: No cassette for key 2c52c0504d24fd7245296088 in evals\\cassettes\\battery_team_review. Re-record this task with:  python -m evals.runner --suite battery_team_review --record",
+   "quality_skipped": "reply was not JSON",
    "rubric": [],
-   "spans": 31,
-   "cassette_hits": 20,
-   "cassette_misses": 3,
-   "cassettes_recorded": 0
-  },
-  {
-   "task_id": "code_cache_bug",
-   "run": 1,
-   "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
-   "goal": "Implement and test a fast Python fibonacci cache, and verify it with a real run.",
-   "tags": [
-    "code",
-    "analysis",
-    "smoke"
-   ],
-   "error": null,
-   "duration_sec": 15.23,
-   "cost_usd": 0.0,
-   "tokens_estimated": false,
-   "steps": 2,
-   "artifacts": [
-    "fibonacci_cache.py",
-    "fibonacci_report.md"
-   ],
-   "structural": 1.0,
-   "checks": [
-    {
-     "check": "min_steps",
-     "ok": true,
-     "detail": "2 steps, wanted >= 2"
-    },
-    {
-     "check": "max_steps",
-     "ok": true,
-     "detail": "2 steps, wanted <= 5"
-    },
-    {
-     "check": "agents_involved",
-     "ok": true,
-     "detail": "all present in ['coder', 'creative']"
-    },
-    {
-     "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['fibonacci_cache.py', 'fibonacci_report.md']"
-    },
-    {
-     "check": "all_steps_completed",
-     "ok": true,
-     "detail": "2/2 completed"
-    },
-    {
-     "check": "max_cost_usd",
-     "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
-    },
-    {
-     "check": "max_duration_sec",
-     "ok": true,
-     "detail": "15.2s of 180s"
-    },
-    {
-     "check": "must_not_stub",
-     "ok": true,
-     "detail": "no stub markers found"
-    }
-   ],
-   "quality": 1.0,
-   "quality_skipped": "",
-   "rubric": [
-    {
-     "n": 1,
-     "criterion": "Contains runnable Python implementing a cache",
-     "verdict": "pass",
-     "reason": "The file 'fibonacci_cache.py' contains runnable Python code implementing multiple caching strategies including lru_cache and a custom cache class."
-    },
-    {
-     "n": 2,
-     "criterion": "Shows evidence the code was executed or analysed, not just written",
-     "verdict": "pass",
-     "reason": "The script includes a benchmark function and unit tests that are executed when run as main, and the report discusses verification and test results."
-    },
-    {
-     "n": 3,
-     "criterion": "Explains why the cached version is faster",
-     "verdict": "pass",
-     "reason": "The report and code comments explain that memoization transforms the naive exponential O(2^n) recursion into a linear O(n) time complexity by avoiding redundant calculations."
-    }
-   ],
-   "spans": 20,
-   "cassette_hits": 15,
-   "cassette_misses": 0,
-   "cassettes_recorded": 0
-  },
-  {
-   "task_id": "code_review_fix",
-   "run": 1,
-   "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
-   "goal": "Analyse this function for bugs and propose a fix: def average(xs): return sum(xs) / len(xs)",
-   "tags": [
-    "code",
-    "analysis"
-   ],
-   "error": null,
-   "duration_sec": 9.47,
-   "cost_usd": 0.0,
-   "tokens_estimated": false,
-   "steps": 1,
-   "artifacts": [
-    "bug_analysis.md"
-   ],
-   "structural": 1.0,
-   "checks": [
-    {
-     "check": "min_steps",
-     "ok": true,
-     "detail": "1 steps, wanted >= 1"
-    },
-    {
-     "check": "max_steps",
-     "ok": true,
-     "detail": "1 steps, wanted <= 4"
-    },
-    {
-     "check": "agents_involved",
-     "ok": true,
-     "detail": "all present in ['coder']"
-    },
-    {
-     "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['bug_analysis.md']"
-    },
-    {
-     "check": "all_steps_completed",
-     "ok": true,
-     "detail": "1/1 completed"
-    },
-    {
-     "check": "max_cost_usd",
-     "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
-    },
-    {
-     "check": "max_duration_sec",
-     "ok": true,
-     "detail": "9.5s of 150s"
-    },
-    {
-     "check": "must_not_stub",
-     "ok": true,
-     "detail": "no stub markers found"
-    }
-   ],
-   "quality": 1.0,
-   "quality_skipped": "",
-   "rubric": [
-    {
-     "n": 1,
-     "criterion": "Identifies the division-by-zero on an empty input",
-     "verdict": "pass",
-     "reason": "The analysis explicitly identifies ZeroDivisionError on empty iterables/lists as the first bug."
-    },
-    {
-     "n": 2,
-     "criterion": "Proposes a concrete corrected implementation",
-     "verdict": "pass",
-     "reason": "A robust corrected implementation with default value handling and error catching is provided."
-    },
-    {
-     "n": 3,
-     "criterion": "Does not invent bugs that are not present in the function",
-     "verdict": "pass",
-     "reason": "The identified bugs (ZeroDivisionError, TypeError, and float precision issues) are all genuine possibilities for this function."
-    }
-   ],
-   "spans": 10,
-   "cassette_hits": 8,
-   "cassette_misses": 0,
-   "cassettes_recorded": 0
-  },
-  {
-   "task_id": "ev_charging_standards",
-   "run": 1,
-   "mode": "replay",
-   "model": "gemini/gemini-3.5-flash-lite",
-   "goal": "Research the competing EV charging connector standards, then write a one-page comparison for a fleet buyer.",
-   "tags": [
-    "research",
-    "synthesis",
-    "handoff"
-   ],
-   "error": null,
-   "duration_sec": 10.55,
-   "cost_usd": 0.0,
-   "tokens_estimated": false,
-   "steps": 2,
-   "artifacts": [
-    "ev_standards_research.md",
-    "fleet_ev_connector_comparison.md"
-   ],
-   "structural": 0.857,
-   "checks": [
-    {
-     "check": "min_steps",
-     "ok": true,
-     "detail": "2 steps, wanted >= 2"
-    },
-    {
-     "check": "max_steps",
-     "ok": true,
-     "detail": "2 steps, wanted <= 5"
-    },
-    {
-     "check": "agents_involved",
-     "ok": true,
-     "detail": "all present in ['creative', 'researcher']"
-    },
-    {
-     "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['ev_standards_research.md', 'fleet_ev_connector_comparison.md']"
-    },
-    {
-     "check": "all_steps_completed",
-     "ok": false,
-     "detail": "1/2 completed"
-    },
-    {
-     "check": "max_cost_usd",
-     "ok": true,
-     "skipped": true,
-     "detail": "not scored: no price for gemini/gemini-3.5-flash-lite. Add a row to backend/pricing.py."
-    },
-    {
-     "check": "max_duration_sec",
-     "ok": true,
-     "detail": "10.6s of 180s"
-    },
-    {
-     "check": "must_not_stub",
-     "ok": true,
-     "detail": "no stub markers found"
-    }
-   ],
-   "quality": null,
-   "quality_skipped": "CassetteMiss: No cassette for key 8091d917cd7bbc87b555b584 in evals\\cassettes\\ev_charging_standards. Re-record this task with:  python -m evals.runner --suite ev_charging_standards --record",
-   "rubric": [],
-   "spans": 29,
-   "cassette_hits": 19,
-   "cassette_misses": 3,
-   "cassettes_recorded": 0
-  },
-  {
-   "task_id": "grid_storage_tradeoffs",
-   "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
-   "goal": "Compare grid-scale storage options on cost and duration, then produce an executive briefing with a recommendation.",
-   "tags": [
-    "research",
-    "synthesis",
-    "handoff",
-    "fan_in"
-   ],
-   "error": null,
-   "duration_sec": 14.62,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
-   "steps": 4,
-   "artifacts": [
-    "analysis.md",
-    "briefing.md",
-    "implementation.md",
-    "research_notes.md"
-   ],
-   "structural": 1.0,
-   "checks": [
-    {
-     "check": "min_steps",
-     "ok": true,
-     "detail": "4 steps, wanted >= 3"
-    },
-    {
-     "check": "max_steps",
-     "ok": true,
-     "detail": "4 steps, wanted <= 5"
-    },
-    {
-     "check": "agents_involved",
-     "ok": true,
-     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
-    },
-    {
-     "check": "artifacts",
-     "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'implementation.md', 'briefing.md']"
-    },
-    {
-     "check": "all_steps_completed",
-     "ok": true,
-     "detail": "4/4 completed"
-    },
-    {
-     "check": "max_cost_usd",
-     "ok": true,
-     "detail": "$0.0000 of $0.30"
-    },
-    {
-     "check": "max_duration_sec",
-     "ok": true,
-     "detail": "14.6s of 200s"
-    },
-    {
-     "check": "must_not_stub",
-     "ok": true,
-     "detail": "no stub markers found"
-    }
-   ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 21,
-   "cassette_hits": 0,
+   "spans": 77,
+   "cassette_hits": 63,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
   {
    "task_id": "heat_pump_handoff",
    "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
    "goal": "Research air-source heat pumps for UK homes, then have a writer turn the findings into a homeowner-facing explainer.",
    "tags": [
     "research",
@@ -834,52 +829,50 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 14.52,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
-   "steps": 4,
+   "duration_sec": 12.74,
+   "cost_usd": 0.068078,
+   "tokens_estimated": false,
+   "steps": 2,
    "artifacts": [
-    "analysis.md",
-    "implementation.md",
-    "report.md",
-    "research_notes.md"
+    "homeowner_explainer.md",
+    "research_findings.md"
    ],
    "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 2"
+     "detail": "2 steps, wanted >= 2"
     },
     {
      "check": "max_steps",
      "ok": true,
-     "detail": "4 steps, wanted <= 4"
+     "detail": "2 steps, wanted <= 4"
     },
     {
      "check": "agents_involved",
      "ok": true,
-     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+     "detail": "all present in ['creative', 'researcher']"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'implementation.md', 'report.md']"
+     "detail": "produced ['research_findings.md', 'homeowner_explainer.md']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "2/2 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.25"
+     "detail": "$0.0681 of $0.25"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "14.5s of 180s"
+     "detail": "12.7s of 180s"
     },
     {
      "check": "must_not_stub",
@@ -887,19 +880,38 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 21,
-   "cassette_hits": 0,
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "The explainer contains specific figures (COP, running cost, or grant amounts)",
+     "verdict": "pass",
+     "reason": "The explainer includes specific figures such as Instant COP ~2.5–4.5, SCOP ~2.8–3.8, and upfront cost range £6,000–£15,000, as well as running-cost examples."
+    },
+    {
+     "n": 2,
+     "criterion": "The explainer is written for a homeowner, not for an engineer",
+     "verdict": "pass",
+     "reason": "The explainer is clearly written for homeowners, with a homeowner-facing title and sections like 'Simple suitability checklist' and 'Steps to get quotes.'"
+    },
+    {
+     "n": 3,
+     "criterion": "The final artifact builds on the research rather than restating the goal",
+     "verdict": "pass",
+     "reason": "The artifact is prepared from research_findings.md and uses research-derived figures (COP/SCOP ranges, costs, and grant references), demonstrating synthesis rather than restating the goal."
+    }
+   ],
+   "spans": 44,
+   "cassette_hits": 36,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
   {
    "task_id": "india_news_brief",
    "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
    "goal": "Tell me what happened today in Indian news and write it up as a short brief.",
    "tags": [
     "research",
@@ -907,52 +919,50 @@
     "time_sensitive"
    ],
    "error": null,
-   "duration_sec": 14.43,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
-   "steps": 4,
+   "duration_sec": 10.45,
+   "cost_usd": 0.030142,
+   "tokens_estimated": false,
+   "steps": 2,
    "artifacts": [
-    "analysis.md",
-    "briefing.md",
-    "implementation.md",
-    "research_notes.md"
+    "india_news_brief.md",
+    "news_findings.json"
    ],
    "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 2"
+     "detail": "2 steps, wanted >= 2"
     },
     {
      "check": "max_steps",
      "ok": true,
-     "detail": "4 steps, wanted <= 4"
+     "detail": "2 steps, wanted <= 4"
     },
     {
      "check": "agents_involved",
      "ok": true,
-     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+     "detail": "all present in ['creative', 'researcher']"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'implementation.md', 'briefing.md']"
+     "detail": "produced ['news_findings.json', 'india_news_brief.md']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "2/2 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.30"
+     "detail": "$0.0301 of $0.30"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "14.4s of 200s"
+     "detail": "10.4s of 200s"
     },
     {
      "check": "must_not_stub",
@@ -960,71 +970,89 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 21,
-   "cassette_hits": 0,
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Reports at least three distinct news items",
+     "verdict": "pass",
+     "reason": "The artifact lists six distinct news items: a Mumbai fire, a CBI case involving Subhash Chandra, rural employment data, IISER Mohali by-laws withdrawal, police flogging in Gujarat, and an RBI VRRR auction."
+    },
+    {
+     "n": 2,
+     "criterion": "Does not present undated or clearly old material as today's news",
+     "verdict": "pass",
+     "reason": "The content is anchored to a date of 06 September 2026, with notes indicating September 6, 2026 in the sources, so it is not undated or clearly old."
+    },
+    {
+     "n": 3,
+     "criterion": "Is written as a brief a reader could skim, not as raw search output",
+     "verdict": "pass",
+     "reason": "The material is presented as a brief skimmable update with a clear header and bullet items rather than raw search output."
+    }
+   ],
+   "spans": 34,
+   "cassette_hits": 27,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
   {
    "task_id": "solar_efficiency",
    "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
    "goal": "Research the current state of solar panel efficiency and summarise where the ceiling is.",
    "tags": [
     "research",
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 14.45,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
-   "steps": 4,
+   "duration_sec": 20.49,
+   "cost_usd": 0.10643,
+   "tokens_estimated": false,
+   "steps": 3,
    "artifacts": [
-    "analysis.md",
-    "implementation.md",
-    "research_notes.md",
-    "summary.md"
+    "efficiency_analysis.md",
+    "final_summary.md",
+    "research_findings.json"
    ],
    "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 1"
+     "detail": "3 steps, wanted >= 1"
     },
     {
      "check": "max_steps",
      "ok": true,
-     "detail": "4 steps, wanted <= 4"
+     "detail": "3 steps, wanted <= 4"
     },
     {
      "check": "agents_involved",
      "ok": true,
-     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+     "detail": "all present in ['creative', 'data_analyst', 'researcher']"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'implementation.md', 'summary.md']"
+     "detail": "produced ['research_findings.json', 'efficiency_analysis.md', 'final_summary.md']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "3/3 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.20"
+     "detail": "$0.1064 of $0.20"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "14.4s of 150s"
+     "detail": "20.5s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -1032,71 +1060,89 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 21,
-   "cassette_hits": 0,
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Gives a specific efficiency percentage for at least one panel technology",
+     "verdict": "pass",
+     "reason": "The artifacts provide explicit efficiency percentages, such as 47.60% for Fraunhofer ISE lab multi-junction and 34.6%/34.85% for LONGi tandem cells."
+    },
+    {
+     "n": 2,
+     "criterion": "Distinguishes laboratory records from commercially available panels",
+     "verdict": "pass",
+     "reason": "The notes explicitly distinguish lab-based records (lab multi-junction) from commercial modules, noting NO RECORDS for commercial modules in the ingested data."
+    },
+    {
+     "n": 3,
+     "criterion": "Says what limits further improvement",
+     "verdict": "pass",
+     "reason": "The final summary discusses limits to improvement, including theoretical ceilings (>50% for multi-junction under concentration) and practical barriers like stability and cost."
+    }
+   ],
+   "spans": 55,
+   "cassette_hits": 41,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
   {
    "task_id": "solid_state_batteries",
    "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
    "goal": "Research where solid-state batteries stand commercially and what is still blocking mass production.",
    "tags": [
     "research",
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 14.45,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
-   "steps": 4,
+   "duration_sec": 33.66,
+   "cost_usd": 0.096934,
+   "tokens_estimated": false,
+   "steps": 3,
    "artifacts": [
-    "analysis.md",
-    "implementation.md",
-    "report.md",
-    "research_notes.md"
+    "analysis_report.md",
+    "final_report.md",
+    "raw_findings.md"
    ],
    "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 1"
+     "detail": "3 steps, wanted >= 1"
     },
     {
      "check": "max_steps",
      "ok": true,
-     "detail": "4 steps, wanted <= 4"
+     "detail": "3 steps, wanted <= 4"
     },
     {
      "check": "agents_involved",
      "ok": true,
-     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+     "detail": "all present in ['creative', 'data_analyst', 'researcher']"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'implementation.md', 'report.md']"
+     "detail": "produced ['raw_findings.md', 'analysis_report.md', 'final_report.md']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "3/3 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.20"
+     "detail": "$0.0969 of $0.20"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "14.4s of 150s"
+     "detail": "33.7s of 150s"
     },
     {
      "check": "must_not_stub",
@@ -1104,11 +1150,30 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 21,
-   "cassette_hits": 0,
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Names at least one company or consortium working on solid-state cells",
+     "verdict": "pass",
+     "reason": "The artifacts name multiple actors actively developing solid-state cells, including QuantumScape, Solid Power, ProLogium, and CATL."
+    },
+    {
+     "n": 2,
+     "criterion": "Identifies a specific technical or manufacturing blocker",
+     "verdict": "pass",
+     "reason": "The artifacts identify manufacturing yield and throughput as a key blocker to mass production (stated as 'Manufacturing yield & throughput' and noted reliance on pilot lines rather than high-volume metrics)."
+    },
+    {
+     "n": 3,
+     "criterion": "Distinguishes shipping products from announced roadmaps",
+     "verdict": "pass",
+     "reason": "The artifacts distinguish shipped products from announced roadmaps: they describe actual shipments and prototype/pilot shipments (e.g., QuantumScape B1 shipments) versus pilot lines and milestones (Eagle Line, ProLogium factory milestones)."
+    }
+   ],
+   "spans": 74,
+   "cassette_hits": 62,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   }
@@ -1116,23 +1181,23 @@
  "summary": [
   {
    "model": "(simulator)",
-   "tasks": 5,
-   "runs": 5,
+   "tasks": 3,
+   "runs": 3,
    "errors": 0,
    "structural": 1.0,
    "quality": null,
    "cost_usd": 0.0,
-   "p50_latency": 14.45
+   "p50_latency": 23.07
   },
   {
-   "model": "gemini/gemini-3.5-flash-lite",
-   "tasks": 9,
-   "runs": 9,
+   "model": "openai/gpt-5-mini",
+   "tasks": 11,
+   "runs": 11,
    "errors": 0,
-   "structural": 0.952,
-   "quality": 0.929,
-   "cost_usd": 0.0,
-   "p50_latency": 10.75
+   "structural": 0.987,
+   "quality": 0.933,
+   "cost_usd": 0.7723,
+   "p50_latency": 20.49
   }
  ]
 }

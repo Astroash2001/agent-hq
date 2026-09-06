@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 953,
+ "cost_usd": 0.003687,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 7125,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"CATL Naxtra sodium-ion battery specs 160 Wh/kg Naxtra datasheet 2023 2024 site:catl.com\", \"max_results\":10}",
+        "name": "web_search"
+       },
+       "id": "call_tXqhLi8d8NCt1NIiDPFGD67r"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 953,
+   "prompt_tokens": 7125
+  }
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1808,
+ "cost_usd": 0.000867,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 2874,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"scores\": [\n    {\n      \"n\": 1,\n      \"verdict\": \"pass\",\n      \"reason\": \"The explainer includes specific figures such as Instant COP ~2.5–4.5, SCOP ~2.8–3.8, and upfront cost range £6,000–£15,000, as well as running-cost examples.\"\n    },\n    {\n      \"n\": 2,\n      \"verdict\": \"pass\",\n      \"reason\": \"The explainer is clearly written for homeowners, with a homeowner-facing title and sections like 'Simple suitability checklist' and 'Steps to get quotes.'\"\n    },\n    {\n      \"n\": 3,\n      \"verdict\": \"pass\",\n      \"reason\": \"The artifact is prepared from research_findings.md and uses research-derived figures (COP/SCOP ranges, costs, and grant references), demonstrating synthesis rather than restating the goal.\"\n    }\n  ]\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1808,
+   "prompt_tokens": 2874
+  }
+ }
+}

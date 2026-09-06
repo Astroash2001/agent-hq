@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 2205,
+ "cost_usd": 0.000969,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 1734,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"verdict\": \"revise\",\n  \"score\": 0.62,\n  \"reasons\": [\n    \"Grants section missing: artifact has no 'Grants' section or guidance on applying for UK grants (e.g., Boiler Upgrade Scheme).\",\n    \"FAQ section missing: no homeowner-friendly frequently asked questions are provided.\",\n    \"Actionable one-page checklist missing: the requested concise next-steps checklist is not present.\",\n    \"Reference list links missing: instruction asked to include links to the research reference list; the artifact does not show references or links.\",\n    \"Incomplete closing of 'Steps to get quotes and select an MCS-certified installer' section: ends abruptly with 'Ensure the contract in' and is not finished.\",\n    \"Running-cost example not explicit: the document gives COP/SCOP ranges but lacks a simple worked example with explicit currency figures using research-provided data.\",\n    \"Some required content present but not clearly labeled or organized as requested (e.g., costs, running costs, grants, FAQ) and the tone/structure could be improved for homeowner readability.\"\n  ],\n  \"guidance\": \"Please produce a complete homeowner_explainer.md. Specifically: (1) add a Grants section with current UK schemes (e.g., Boiler Upgrade Scheme) and a clear how-to-apply guide; (2) add a short FAQ covering common questions on cost, noise, maintenance, suitability, and timelines; (3) include a concise one-page actionable checklist for next steps; (4) include links or citations to the research reference list and any other credible sources; (5) finish the 'Steps to get quotes and select an MCS-certified installer' section so it ends with a complete, actionable step; (6) include a simple running-cost example using figures from the research (e.g., assume X kWh/year heat demand and Y pence/kWh electricity, compute annual running cost and potential savings); (7) ensure all requested sections are clearly titled and formatted with headings, bullets, short examples, and callout tips; (8) keep the tone UK homeowner‑friendly and ensure accuracy by cross-checking figures from research_findings.md; (9) output Markdown in a single file named homeowner_explainer.md with links to the research reference list.\"\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 2205,
+   "prompt_tokens": 1734
+  }
+ }
+}

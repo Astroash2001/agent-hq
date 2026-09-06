@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 60,
+ "cost_usd": 0.001479,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 5437,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I've saved the requested CSV to quantitative_comparison.csv. It contains the cleaned numeric comparison table with the specified rows and header format.\n\nNext, I will save the 1‑page analysis summary as a separate file (analysis_summary.txt) in the workspace. Do you want that now?",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 60,
+   "prompt_tokens": 5437
+  }
+ }
+}

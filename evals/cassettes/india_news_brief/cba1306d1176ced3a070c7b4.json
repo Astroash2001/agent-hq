@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 3013,
+ "cost_usd": 0.001285,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 1588,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\"verdict\":\"revise\",\"score\":0.55,\"reasons\":[\"Multiple items lack an explicit article timestamp (only one item includes a timestamp). The spec requires a timestamp for each story.\",\"Several primary_source_url fields point to archive or index pages rather than the direct article's page (e.g., Indian Express archive URLs and The Indian Express/archive/2026/09/06) which violates 'direct URL' requirement.\",\"One item uses a generic Reuters landing page rather than a specific article URL, making it hard to verify exact content and timestamp.\",\"Some entries rely on archive listings and not the latest developing status; ensure items flagged as developing reflect current article status with a live timestamp.\"],\"guidance\":\"Rebuild the brief as a clean 5–8-story JSON array. For each story, include: a one-sentence headline, 1–2 sentence context, primary source name, a direct URL to the article, and the exact publication timestamp in ISO 8601. Ensure the timestamp is present for all items. Use current reputable outlets and avoid archive/index pages. Mark items as developing only if the article itself indicates ongoing updates, otherwise set developing to false. Do not include extra fields like timestamp_note or verification_status unless specified.\"}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 3013,
+   "prompt_tokens": 1588
+  }
+ }
+}

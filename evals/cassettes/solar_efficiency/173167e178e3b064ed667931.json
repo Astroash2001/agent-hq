@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 396,
+ "cost_usd": 0.002294,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 6008,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"Fraunhofer 47.6% four-junction solar cell 47.6% concentrator 2023 paper DOI '47.6%' multijunction cell Fraunhofer ISE 2022 2023 2024\", \"max_results\":10}",
+        "name": "web_search"
+       },
+       "id": "call_fYX2S2tuo41zvON2UJR7vPD3"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 396,
+   "prompt_tokens": 6008
+  }
+ }
+}

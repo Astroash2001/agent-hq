@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 1995,
+ "cost_usd": 0.000897,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 1976,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"verdict\": \"revise\",\n  \"score\": 0.28,\n  \"reasons\": [\n    \"Missing complete coverage of all specified standards: the artifact only partially covers CCS1/CCS2 and CHAdeMO; NACS/Tesla, GB/T, and Type 2/Type 1 sections are entirely absent.\",\n    \"CHAdeMO section is truncated and ends mid-thought; no complete data for typical AC power, regulatory status, vehicle compatibility, or use-cases for CHAdeMO.\",\n    \"No dedicated, per-standard sections for NACS/Tesla, GB/T, or Type 2/Type 1, which were explicitly requested.\",\n    \"Sources appear incomplete or non-authoritative (unclear URLs, some likely non-existent pages), and there is no consolidated sources list that supports all sections.\",\n    \"The artifact lacks the required 3 actionable implications for a fleet buyer and does not clearly present a single Markdown file as requested.\",\n    \"Some factual statements (e.g., transition risks and regional adoption) are presented without full, verifiable sourcing within the artifact.\"\n  ],\n  \"guidance\": \"Produce a complete, single Markdown document that covers CCS1/CCS2, CHAdeMO, NACS/Tesla, GB/T, and IEC Type 2/Type 1 as separate standard sections. For each standard, include: (1) typical AC power ranges, (2) max DC charging speeds, (3) regional adoption/regulatory status, (4) vehicle compatibility, (5) common use-cases, (6) installation and equipment cost drivers, (7) interoperability or adapter availability, (8) major manufacturers/operators supporting it, and (9) recent market/standardization trends or transition risks. List all sources with working URLs, and finish with 3 short, actionable implications for a fleet buyer (charging uptime, future-proofing, and procurement/installation considerations). Save and deliver as a single Markdown file, current to 2026, with clear headings for each standard and consistent data fields. Validate data against authoritative sources (IEEE/IEC/ISO, government regulators, major OEMs, and large charger manufacturers).\"\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 1995,
+   "prompt_tokens": 1976
+  }
+ }
+}

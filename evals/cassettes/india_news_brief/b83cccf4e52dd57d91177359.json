@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 2075,
+ "cost_usd": 0.000897,
+ "fell_back": false,
+ "model": "openai/gpt-5-nano",
+ "prompt_tokens": 1350,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "{\n  \"verdict\": \"revise\",\n  \"score\": 0.45,\n  \"reasons\": [\n    \"Not all items are today's news (timestamps include 2026-09-04, 2026-08-25, 2026-08-26).\",\n    \"Multiple sources are not primary reporting outlets (e.g., PowerCorridors aggregating government schedules).\",\n    \"Some timestamps are imprecise (e.g., 2026-09) rather than exact dates/time.\",\n    \"The developing rail-crash item risks spreading unverified casualty figures; require corroboration from official or major outlets before publication.\"\n  ],\n  \"guidance\": \"Produce a new 5–8 item brief focused strictly on today (2026-09-06) Indian news from established outlets. For each story include: a 1-sentence headline, 1–2 sentences of context/why it matters, the primary source name (well-known outlets like Reuters, AP, The Hindu, Indian Express, PTI, Bloomberg, LiveMint, Economic Times, etc.), a direct URL to the article, and the exact timestamp (ISO 8601). Flag items as developing/unverified only when corroborated by reliable sources. Exclude aggregator-only sources and ensure all items are clearly verifiable with primary-source URLs.\"\n}",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 2075,
+   "prompt_tokens": 1350
+  }
+ }
+}
