@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 30,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 2151,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "I have successfully synthesized the research and the agreed standup angle into the final market-facing report, written directly to `solar_report.md`.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 30,
+   "prompt_tokens": 2151
+  }
+ }
+}

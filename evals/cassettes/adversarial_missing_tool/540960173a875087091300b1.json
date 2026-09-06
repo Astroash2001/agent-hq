@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 19,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 1183,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"command\": \"python timed_sum.py\"}",
+        "name": "terminal"
+       },
+       "id": "call_7b8dac7511fd47aa9485ab01f44e__thought__El4KXAERTTIPd9p4IyP3U+LzwK6qWciVsH6GbBVC/bJtuzD6ESO3ux4HJLxv0W9Na8y5wcZ+tHE8JMz8K6ldQNSk3LUu31ohqPcCZapcNqsxja56VuC0+BV4PjHEtPY3"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 19,
+   "prompt_tokens": 1183
+  }
+ }
+}

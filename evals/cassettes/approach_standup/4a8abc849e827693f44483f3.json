@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 20,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 565,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"filepath\": \"solar_research.md\"}",
+        "name": "read_file"
+       },
+       "id": "call_b2bfc55c8bf048c08448f1e1571d__thought__El4KXAERTTIP0NqnzB92yvrtfuvA+pw0t1migJTw5zRGYcjV8qwtUa0xIjPWxOjFZBIAdzXYoyLLEOpRBP25pcR3Qcj6vWu9xlaBCddEXspcECupPQgawZhPbDTDJwDS"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 20,
+   "prompt_tokens": 565
+  }
+ }
+}

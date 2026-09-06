@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 40,
+ "cost_usd": 0.0,
+ "fell_back": false,
+ "model": "gemini/gemini-3.5-flash-lite",
+ "prompt_tokens": 743,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"cwd\": \"C:\\\\Users\\\\avina\\\\Desktop\\\\agentic AI\\\\agent-hq\", \"command\": \"python timed_sum.py\"}",
+        "name": "terminal"
+       },
+       "id": "call_38c53065a09f4931ac28fb29d96c__thought__El4KXAERTTIP9GsgjAAqOqKKUnTE4HnYkuGZLzDcGTLuApkpwlOV9NvcLxb215jXyYtwfnwxmirEEptwwEclAqbO1G/J30/YOshI7kLF+hchu/q+n5Y96ipdDSF+ahyz"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 40,
+   "prompt_tokens": 743
+  }
+ }
+}
