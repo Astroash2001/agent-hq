@@ -360,9 +360,22 @@ body { overflow: hidden; }
 .hud-card-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 8px;
     margin-bottom: 5px;
+}
+
+/* The title absorbs the slack so everything after it sits hard right.
+   `justify-content: space-between` used to do that job, and it worked while a
+   header had two children -- with three (title, expand, close) it spread the
+   two buttons apart instead of grouping them, which is what made the controls
+   look scattered rather than paired. */
+.hud-card-header .card-title-neon { flex: 1 1 auto; min-width: 0; }
+
+.hud-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
 }
 
 .card-title-neon {
@@ -419,8 +432,16 @@ body { overflow: hidden; }
 .hud-icon-btn {
     width: 20px;
     height: 20px;
+    flex: 0 0 20px;
+    padding: 0;
     display: grid;
     place-items: center;
+    /* The glyphs live in different Unicode blocks -- × is text, ⛶ and ⤡ are
+       symbols -- so a font substitution can render them at different weights
+       and baselines inside identically sized boxes. A fixed box with the glyph
+       centred keeps them level whichever font answers. */
+    font-variant-emoji: text;
+    text-align: center;
     background: var(--btn-face);
     border: 1px solid var(--frame);
     border-radius: 3px;
@@ -1068,4 +1089,27 @@ body { overflow: hidden; }
     color: var(--amber-bright);
     border-left: 2px solid var(--amber-bright);
     padding-left: 6px;
+}
+
+/* Expanded, the panel is the window: its controls belong at the top-right of
+   the overlay, sized for a full screen rather than for a 20px sidebar row. The
+   pair is a fullscreen toggle and a close, and nothing else -- everything that
+   was useful in the sidebar header (the goal line, the tabs) stays in the card
+   body where it already is. */
+.memo-card[data-expanded="true"] .hud-card-actions {
+    gap: 8px;
+}
+
+.memo-card[data-expanded="true"] .hud-icon-btn {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    font-size: 15px;
+    border-color: var(--frame);
+}
+
+.memo-card[data-expanded="true"] .hud-card-header {
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--frame-dim);
+    margin-bottom: 8px;
 }

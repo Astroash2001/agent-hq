@@ -84,9 +84,11 @@
                     <div class="card-title-neon">
                         <span class="header-icon" aria-hidden="true">🗺️</span> EXECUTION PLAN
                     </div>
-                    <button class="hud-icon-btn" id="dagExpandBtn"
-                            title="Expand graph" aria-label="Expand graph">⛶</button>
-                    <div class="metric" id="planSource">—</div>
+                    <div class="hud-card-actions">
+                        <div class="metric" id="planSource">—</div>
+                        <button class="hud-icon-btn" id="dagExpandBtn"
+                                title="Expand graph" aria-label="Expand graph">⛶</button>
+                    </div>
                 </div>
                 <!-- The DAG as an actual graph. SVG rather than canvas so the
                      labels stay crisp and each node is a real hoverable node. -->
@@ -180,9 +182,12 @@
                     <div class="card-title-neon">
                         <span class="header-icon" aria-hidden="true">📜</span> MISSION OUTPUT
                     </div>
-                    <button class="hud-icon-btn" id="outExpandBtn"
-                            title="Expand output" aria-label="Expand output">&#9974;</button>
-                    <button class="hud-icon-btn" id="closeMemoBtn" aria-label="Close output">&times;</button>
+                    <div class="hud-card-actions">
+                        <button class="hud-icon-btn" id="outExpandBtn"
+                                title="Expand output" aria-label="Expand output">&#9974;</button>
+                        <button class="hud-icon-btn" id="closeMemoBtn"
+                                title="Close output" aria-label="Close output">&times;</button>
+                    </div>
                 </div>
 
                 <div class="out-goal" id="outGoal"></div>
