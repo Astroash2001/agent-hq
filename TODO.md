@@ -591,12 +591,13 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**366 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
-across 28 files: the original phase tests plus telemetry, contracts, the critic,
+**396 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+across 31 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool
-grants and the conclusion. CI runs the same suite on
-3.10 and 3.12, with `ruff check` and the eval smoke suite.
+grants, the conclusion, station capacity, artifact condensing, the exported
+office grid, routed walk timing and the artifact endpoint. CI runs the same
+suite on 3.10 and 3.12, with `ruff check` and the eval smoke suite.
 
 The CI eval step is described in the workflow as replaying cassettes, which it
 does not: there are none, so `--replay` finds no recording, `credentials_for`
