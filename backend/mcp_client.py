@@ -50,6 +50,16 @@ class MCPServer:
     transport: str                       # stdio | http
     tools: List[str] = field(default_factory=list)
     close: Optional[Callable[[], Awaitable[None]]] = None
+    # Enough to ask the server what it offers a second time. Nothing did that,
+    # so a server that gained a tool while the office was running stayed
+    # invisible until a restart -- which is the normal case for an MCP server
+    # under active development, and exactly when you want to see the new tool.
+    relist: Optional[Callable[[], Awaitable[Any]]] = None
+    spec: Dict[str, Any] = field(default_factory=dict)
+    # The session's own call function, held so a refresh can register a NEW
+    # tool against the live session. Reaching back through the registry instead
+    # would hand the new tool a wrapper that calls itself.
+    call: Optional[Callable[[str, Dict[str, Any]], Awaitable[Any]]] = None
 
 
 # Connected servers, by name. Also the shutdown list.
@@ -352,10 +362,69 @@ async def connect(
         server_name, list(getattr(listing, "tools", listing) or []), _call,
         agents=agents, grant_to=spec.get("grant_to"),
     )
+    async def _relist():
+        return await session.list_tools()
+
     entry = MCPServer(name=server_name, transport=transport, tools=names,
-                      close=stack.aclose)
+                      close=stack.aclose, relist=_relist, spec=dict(spec),
+                      call=_call)
     _servers[server_name] = entry
     return entry
+
+
+async def refresh(agents: Optional[Dict[str, Any]] = None,
+                  server_name: Optional[str] = None) -> Dict[str, List[str]]:
+    """
+    Ask the connected servers what they offer now, and register anything new.
+
+    Nothing did this, so a server that gained a tool while the office was
+    running stayed invisible until a restart -- the normal case for a server
+    under active development, and exactly when you want to see the new tool.
+
+    Re-uses the live session rather than reconnecting: a reconnect would drop
+    whatever is mid-call, and the point is to add a tool without disturbing a
+    mission.
+
+    Returns {server: [newly registered tool names]}. A server whose listing
+    fails is logged and skipped, for the same reason a server that will not
+    connect does not stop startup.
+    """
+    added: Dict[str, List[str]] = {}
+    targets = ([server_name] if server_name else list(_servers))
+
+    for name in targets:
+        entry = _servers.get(name)
+        if entry is None or entry.relist is None or entry.call is None:
+            logger.warning("MCP server '%s' cannot be refreshed (not connected)", name)
+            continue
+        try:
+            listing = await entry.relist()
+        except Exception as e:
+            logger.warning("MCP server '%s' would not re-list (%s: %s); keeping "
+                           "the tools it registered at startup",
+                           name, type(e).__name__, e)
+            continue
+
+        before = set(entry.tools)
+        names = register_server(
+            name, list(getattr(listing, "tools", listing) or []),
+            entry.call, agents=agents,
+            grant_to=entry.spec.get("grant_to"))
+        entry.tools = names
+
+        # A tool the server has DROPPED is left registered on purpose. Removing
+        # it mid-mission would turn a step that planned around it into a step
+        # calling a tool that no longer exists, which fails worse than calling
+        # one the server has quietly retired.
+        fresh = [n for n in names if n not in before]
+        if fresh:
+            logger.info("MCP server '%s' gained %d tool(s): %s",
+                        name, len(fresh), ", ".join(fresh))
+        added[name] = fresh
+
+    return added
+
+
 
 
 async def connect_all(agents: Optional[Dict[str, Any]] = None) -> List[str]:

@@ -431,8 +431,24 @@ the rules can be read without a registry or an office in the way. An unknown
 agent or tool name is a logged warning that costs that line, not the server —
 a typo in `mcp_servers.json` should not lose a working integration.
 
-Still open: nothing re-lists tools after startup — a server that gains a tool
-while the office is running is not seen until a restart.
+**Also done: tools can be re-listed after startup.** They were listed once at
+connect and never again, so a server that gained one while the office was
+running stayed invisible until a restart — the normal case for a server under
+active development, and exactly when you want to see the new tool.
+`POST /api/mcp/refresh` asks every connected server what it offers now and
+registers anything new.
+
+It re-uses the **live session** rather than reconnecting, so it can be called
+during a mission without dropping whatever is mid-call. That is also the part
+that was easy to get wrong: a first version looked the call wrapper up through
+the registry, which would have handed a newly registered tool a function that
+called itself. The session's own call function is kept on the server record
+instead.
+
+A tool the server has *dropped* stays registered, deliberately. Removing one
+mid-mission turns a step that planned around it into a step calling something
+that no longer exists, which fails worse than calling a tool the server has
+quietly retired.
 
 ### Synthesis is string assembly
 

@@ -225,6 +225,27 @@ async def delete_attachment(name: str):
     return {"status": "discarded", "name": name}
 
 
+@app.post("/api/mcp/refresh")
+async def refresh_mcp():
+    """
+    Ask the connected MCP servers what they offer now.
+
+    Tools were listed once at startup and never again, so a server that gained
+    one while the office was running stayed invisible until a restart -- which
+    is the normal case for a server under active development, and exactly when
+    you want to see the new tool.
+
+    Uses the live sessions rather than reconnecting, so this can be called
+    during a mission without dropping anything mid-call.
+    """
+    if not settings.mcp_enabled:
+        raise HTTPException(status_code=409, detail="MCP is disabled")
+    import mcp_client
+    added = await mcp_client.refresh(orchestrator.agents)
+    return {"added": added,
+            "servers": {n: s.tools for n, s in mcp_client.connected_servers().items()}}
+
+
 @app.post("/api/emergency-stop")
 async def emergency_stop(request: Request):
     """Emergency kill switch to halt all running agents."""

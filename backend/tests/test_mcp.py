@@ -458,3 +458,114 @@ async def test_an_empty_goal_is_refused_before_a_mission_starts(monkeypatch):
 
     monkeypatch.setattr(orchestrator, "handle_user_input", _boom)
     assert "error" in await mcp_server.dispatch("run_mission", {"goal": "   "})
+
+
+# ------------------------------------------------- re-listing after startup
+
+class _Listing:
+    """What `session.list_tools()` returns."""
+    def __init__(self, tools):
+        self.tools = tools
+
+
+@pytest.fixture
+def connected(stub):
+    """A server already on the floor, as `connect` would have left it."""
+    server, register = stub
+    register()
+    entry = mcp_client.MCPServer(
+        name=server.name, transport="stdio",
+        tools=["mcp__demo__echo", "mcp__demo__slow"],
+        relist=None, spec={}, call=server.call_tool)
+    mcp_client._servers[server.name] = entry
+    yield server, entry
+    mcp_client._servers.pop(server.name, None)
+    for extra in ("mcp__demo__ping",):
+        tool_registry._tools.pop(extra, None)
+        office._tool_index.pop(extra, None)
+
+
+@pytest.mark.asyncio
+async def test_a_tool_added_after_startup_is_picked_up(connected):
+    """
+    Tools were listed once at startup and never again, so a server that gained
+    one while the office was running stayed invisible until a restart -- the
+    normal case for a server under active development.
+    """
+    server, entry = connected
+
+    async def _relist():
+        return _Listing([StubTool("echo", "Echo."), StubTool("slow", "Slow."),
+                         StubTool("ping", "New since startup.")])
+    entry.relist = _relist
+
+    added = await mcp_client.refresh()
+
+    assert added["demo"] == ["mcp__demo__ping"]
+    assert "mcp__demo__ping" in tool_registry._tools
+    assert "mcp__demo__ping" in entry.tools
+
+
+@pytest.mark.asyncio
+async def test_a_new_tool_is_callable_not_just_registered(connected):
+    """
+    The registration has to point at the live session. An earlier version
+    looked the wrapper up through the registry, which handed a new tool a
+    function that called itself.
+    """
+    server, entry = connected
+
+    async def _relist():
+        return _Listing([StubTool("ping", "New since startup.")])
+    entry.relist = _relist
+
+    await mcp_client.refresh()
+    result = await tool_registry.execute("mcp__demo__ping", {"text": "hi"})
+
+    assert result["success"] is True
+    assert result["result"] == "ping:hi"
+
+
+@pytest.mark.asyncio
+async def test_a_dropped_tool_stays_registered(connected):
+    """
+    Deliberate. Removing a tool mid-mission turns a step that planned around it
+    into a step calling something that no longer exists, which fails worse than
+    calling one the server has quietly retired.
+    """
+    server, entry = connected
+
+    async def _relist():
+        return _Listing([StubTool("echo", "Echo.")])     # `slow` is gone
+    entry.relist = _relist
+
+    await mcp_client.refresh()
+    assert "mcp__demo__slow" in tool_registry._tools
+
+
+@pytest.mark.asyncio
+async def test_a_server_that_will_not_relist_keeps_what_it_had(connected):
+    """Same reasoning as a server that will not connect at startup: it is a
+    logged warning, never a reason to lose the tools already on the floor."""
+    server, entry = connected
+
+    async def _boom():
+        raise RuntimeError("server went away")
+    entry.relist = _boom
+
+    added = await mcp_client.refresh()
+
+    assert "demo" not in added
+    assert "mcp__demo__echo" in tool_registry._tools
+
+
+@pytest.mark.asyncio
+async def test_refresh_can_name_one_server(connected):
+    server, entry = connected
+
+    async def _relist():
+        return _Listing([StubTool("echo", "Echo.")])
+    entry.relist = _relist
+
+    assert "demo" in await mcp_client.refresh(server_name="demo")
+    assert await mcp_client.refresh(server_name="nope") == {}
