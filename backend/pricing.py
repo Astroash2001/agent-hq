@@ -58,6 +58,15 @@ _PRICES: Dict[str, Tuple[float, float]] = {
     "claude-3-5-haiku": (0.80, 4.00),
     "claude-3-haiku": (0.25, 1.25),
 
+    # --- Free lanes -------------------------------------------------------
+    # A zero here is a MEASURED zero, not the "we have never heard of this
+    # model" zero that `is_priced()` exists to distinguish. Experiential Labs
+    # serves these `-free` variants at no charge; the row is what stops the
+    # startup warning crying wolf about a model whose cost genuinely is nothing.
+    # If a provider ever starts charging for one, delete the row rather than
+    # guessing a rate -- an unpriced model is visible, a wrong one is not.
+    "minimax-m3-free": (0.0, 0.0),
+
     # --- Groq ---
     # Groq bills the open-weight models it hosts, so the key is the model
     # name rather than the provider.
