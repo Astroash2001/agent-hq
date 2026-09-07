@@ -487,11 +487,27 @@ rather than leading with a placeholder. Free and deterministic, and the cost of
 the call is still reported when the answer is thrown away — a price that
 vanishes because the output was unusable understates the run.
 
-Still open: nothing checks whether the conclusion is *true*. That needs
-comparing it against the artifacts it was drawn from, and the eval judge
-deliberately reads the artifact files rather than the briefing. A grounding
-check — does every figure in the conclusion appear in an artifact — is the
-obvious next step and is not written.
+**Also done: the conclusion is grounded against the artifacts.** Every figure
+it asserts is checked against the text it was drawn from, and any that appears
+in none of them is named under the conclusion and recorded in `mission.json` as
+`ungrounded_figures`. A model that misreads $61/kWh as $45/kWh writes the second
+as confidently as the first.
+
+Matched on the digits alone, in a corpus with separators stripped, so `$61/kWh`
+grounds against "61 USD per kWh" and nothing is flagged over how its units were
+written. Years and integers under thirteen are skipped: a year is context, and a
+small number is far more often a list position or a count of sources than a
+measurement, so checking them would bury a real finding under noise.
+
+**Reported, never rejected**, and that is the important half — $98 minus $61 is
+$37, and arithmetic on grounded numbers is what a good summary does. Rejecting
+on this would throw away good work to catch a bad number; naming the figure lets
+a reader check it in seconds. `ungrounded_figures` is written even when empty,
+because "checked and clean" and "never checked" must not read alike.
+
+Still open: it checks figures, not claims. "Sodium-ion is cheaper" grounds
+against nothing and is not caught -- that needs an entailment judgement, which
+is a model call and a different kind of check.
 
 ### CORS is fully open
 

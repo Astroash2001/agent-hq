@@ -25,7 +25,8 @@ finding, because it reads like one. Skipped, the briefing keeps the deterministi
 step-count line it always had.
 """
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from typing import List, Optional, Sequence, Tuple
 
 import contracts
@@ -45,6 +46,18 @@ MAX_TOTAL_CHARS = 12000
 # reads as a finding whether or not it is one. Low enough that a genuinely
 # short answer -- a definition, a single measured number -- still passes.
 MIN_CONCLUSION_CHARS = 120
+
+# A number as it appears in prose: 61, 1.4, 31,256, 0.5. The surrounding units
+# and currency are deliberately NOT captured -- "$61/kWh" and "61 USD per kWh"
+# are the same claim written twice, and a check that insisted on the decoration
+# would flag the honest ones.
+_NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+# Numbers not worth checking, because they are almost never a claim about the
+# work: a year, and anything small enough to be a list position, a step count,
+# a number of sources or an ordinary English "three of the four".
+_YEAR_RANGE = (1900, 2100)
+_SMALL = 12
 
 SYNTHESIS_SYSTEM_PROMPT = """You are the orchestrator of a multi-agent system, \
 writing the conclusion of a mission briefing. You are given the goal the user \
@@ -75,6 +88,9 @@ class Conclusion:
     # fallback prose as a conclusion the system reached.
     skipped: bool = True
     reason_skipped: str = ""
+    # Figures the conclusion asserts that no artifact contains. Reported beside
+    # the conclusion rather than used to reject it -- see `ungrounded`.
+    ungrounded: List[str] = field(default_factory=list)
 
 
 def enabled() -> bool:
@@ -114,6 +130,73 @@ def _artifact_block(artifacts: Sequence[Tuple[str, str]]) -> str:
         if budget <= 0:
             break
     return "\n\n".join(blocks)
+
+
+def figures(text: str) -> List[str]:
+    """
+    The numbers a piece of prose asserts, normalised for comparison.
+
+    Thousands separators are stripped so "31,256" and "31256" are one figure,
+    and a trailing ".0" goes the same way. Years and small integers are dropped:
+    a year is context rather than a finding, and a number under thirteen is far
+    more often a list position or a count of sources than a measurement.
+    """
+    out: List[str] = []
+    for raw in _NUMBER_RE.findall(text or ""):
+        cleaned = raw.replace(",", "")
+        try:
+            value = float(cleaned)
+        except ValueError:
+            continue
+        if value.is_integer():
+            n = int(value)
+            if abs(n) <= _SMALL:
+                continue
+            if _YEAR_RANGE[0] <= n <= _YEAR_RANGE[1]:
+                continue
+            cleaned = str(n)
+        if cleaned not in out:
+            out.append(cleaned)
+    return out
+
+
+def ungrounded(text: str, artifacts: Sequence[Tuple[str, str]]) -> List[str]:
+    """
+    Figures the conclusion asserts that appear in none of the artifacts.
+
+    The conclusion is the one part of the briefing that makes a claim, and until
+    this it was the one part nothing measured -- `evals/judge.py` grades the
+    artifact files and pointedly never the briefing, which is right, and leaves
+    exactly this unguarded. A model that misreads $61/kWh as $45/kWh writes the
+    second as confidently as the first.
+
+    Reported, never rejected, and that is the important half. A conclusion may
+    legitimately state a figure no artifact contains -- $98 minus $61 is $37,
+    and arithmetic on grounded numbers is the sort of thing a good summary does.
+    Rejecting on this would throw away good work to catch a bad number; naming
+    the figure lets a reader check it in seconds.
+
+    Matched on the digits alone, in a corpus with its own separators stripped,
+    so "$61/kWh" grounds against "61 USD per kWh" and a claim is not flagged
+    over how its units were written.
+    """
+    claimed = figures(text)
+    if not claimed:
+        return []
+    corpus = " ".join(body or "" for _, body in artifacts).replace(",", "")
+    present = set(_NUMBER_RE.findall(corpus))
+    # A figure written 61.0 in one place and 61 in the other is one figure.
+    normalised = set()
+    for token in present:
+        normalised.add(token)
+        try:
+            value = float(token)
+        except ValueError:
+            continue
+        if value.is_integer():
+            normalised.add(str(int(value)))
+        normalised.add(str(value))
+    return [f for f in claimed if f not in normalised]
 
 
 async def conclude(
@@ -190,5 +273,10 @@ async def conclude(
             reason_skipped="the drawn conclusion failed its own contract: "
                            + "; ".join(check.failures))
 
+    loose = ungrounded(text, artifacts)
+    if loose:
+        logger.warning("[synthesis] conclusion cites figures no artifact "
+                       "contains: %s", ", ".join(loose))
+
     return Conclusion(text=text, cost_usd=result.cost_usd, model=result.model,
-                      skipped=False)
+                      skipped=False, ungrounded=loose)

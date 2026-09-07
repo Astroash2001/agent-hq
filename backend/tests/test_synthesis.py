@@ -371,3 +371,71 @@ async def test_a_rejected_conclusion_still_reports_what_it_cost(live, monkeypatc
 
     assert out.skipped is True
     assert out.cost_usd == pytest.approx(0.0009)
+
+
+# ----------------------------------------------- is the conclusion grounded?
+
+def test_a_figure_no_artifact_contains_is_flagged():
+    """
+    The conclusion is the one part of the briefing that makes a claim, and the
+    eval judge deliberately grades the artifact files and never the briefing --
+    correct, and it leaves exactly this unguarded. A model that misreads
+    $61/kWh as $45/kWh writes the second as confidently as the first.
+    """
+    artifacts = [("compare.md", "Sodium-ion landed at $61/kWh against $98/kWh.")]
+
+    assert synthesis.ungrounded("Sodium-ion is $45/kWh.", artifacts) == ["45"]
+    assert synthesis.ungrounded("Sodium-ion is $61/kWh.", artifacts) == []
+
+
+def test_units_and_currency_do_not_decide_it():
+    """`$61/kWh` and `61 USD per kWh` are one claim written twice. A check that
+    insisted on the decoration would flag the honest ones."""
+    artifacts = [("a.md", "the price is 61 USD per kWh, density 205 Wh/kg")]
+
+    assert synthesis.ungrounded("It costs $61/kWh at 205Wh/kg.", artifacts) == []
+
+
+def test_thousands_separators_are_not_a_difference():
+    artifacts = [("a.md", "the run used 31,256 tokens")]
+
+    assert synthesis.ungrounded("It used 31256 tokens.", artifacts) == []
+    assert synthesis.ungrounded("It used 31,256 tokens.", artifacts) == []
+
+
+def test_years_and_small_numbers_are_not_claims():
+    """
+    A year is context, and a number under thirteen is far more often a list
+    position or a count of sources than a measurement. Checking them would bury
+    a real finding under noise.
+    """
+    assert synthesis.figures("In 2026 we found 3 sources and 2 problems.") == []
+    assert synthesis.figures("It reached 550 MB/s in 2026.") == ["550"]
+
+
+@pytest.mark.asyncio
+async def test_a_derived_figure_is_flagged_but_not_rejected(live, monkeypatch):
+    """
+    $98 minus $61 is $37, and arithmetic on grounded numbers is what a good
+    summary does. So this is reported, never used to throw the conclusion away
+    -- rejecting here would discard good work to catch a bad number.
+    """
+    text = ("Sodium-ion at $61/kWh against lithium at $98/kWh is a $37 saving "
+            "per usable kilowatt-hour, which is the whole case for it in "
+            "stationary storage where mass does not matter.")
+
+    async def _ok(*a, **k):
+        return _result(text)
+
+    monkeypatch.setattr(synthesis.llm, "acompletion", _ok)
+    out = await synthesis.conclude(
+        "Compare them", [("c.md", "sodium $61/kWh, lithium $98/kWh")])
+
+    assert out.skipped is False, "a derived figure must not reject the conclusion"
+    assert out.text == text
+    assert out.ungrounded == ["37"]
+
+
+def test_an_empty_conclusion_has_nothing_to_ground():
+    assert synthesis.ungrounded("", [("a.md", "61")]) == []
+    assert synthesis.ungrounded("No numbers here at all.", [("a.md", "61")]) == []

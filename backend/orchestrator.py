@@ -79,6 +79,9 @@ class Orchestrator:
         # tool call or queueing for a station, which is exactly when someone
         # reaches for the kill switch. The wait blocks on this too.
         self._halt_events: Dict[str, asyncio.Event] = {}
+        # Figures the last briefing's conclusion asserted that no artifact
+        # contained. Set by `_synthesize_results`, read by the manifest.
+        self._last_ungrounded: List[str] = []
         # One agent runs one subtask at a time even when the DAG offers it two.
         self._agent_locks: Dict[str, asyncio.Lock] = {}
         # The real parallelism cap. Rebuilt per mission so a settings change
@@ -478,6 +481,10 @@ class Orchestrator:
             "mission_tokens": telemetry["mission_tokens"],
             "cost_usd": telemetry["cost_usd"],
             "unpriced_models": telemetry["unpriced_models"],
+            # Figures the conclusion asserts that no artifact contains. Empty is
+            # the good case and is recorded either way, because "checked and
+            # clean" and "never checked" must not read alike.
+            "ungrounded_figures": list(getattr(self, "_last_ungrounded", [])),
             "tokens_estimated": telemetry["tokens_estimated"],
             "per_step": telemetry["per_step"],
             "steps": [
@@ -1651,6 +1658,12 @@ class Orchestrator:
         rerouted = [r for r in results if r.get("routed_from")]
         regranted = [s for s in plan.steps if getattr(s, "regranted_from", None)]
         conclusion = await self._draw_conclusion(user_prompt, plan, workspace)
+        # Read by the manifest, which is written by the caller. Held here rather
+        # than threaded back through the return value because the briefing is a
+        # string by contract and three tests read it as one -- and the same
+        # single-mission-at-a-time assumption already holds for `self._slots`
+        # and the tracing stack.
+        self._last_ungrounded = list(conclusion.ungrounded)
 
         lines = [
             "# 🎯 AgentHQ Mission Briefing",
@@ -1666,6 +1679,19 @@ class Orchestrator:
         if not conclusion.skipped:
             lines.append("## 🧠 What the mission found\n")
             lines.append(conclusion.text)
+            if conclusion.ungrounded:
+                # Named, not hidden, and not grounds for throwing the conclusion
+                # away: $98 minus $61 is $37, and arithmetic on grounded numbers
+                # is what a good summary does. A reader can check a named figure
+                # in seconds; an unnamed wrong one is the one that gets quoted.
+                shown = ", ".join(f"`{f}`" for f in conclusion.ungrounded)
+                verb = "appears" if len(conclusion.ungrounded) == 1 else "appear"
+                lines.append("")
+                lines.append(
+                    f"> ⚠️ **Check before quoting:** {shown} {verb} in the "
+                    f"conclusion above but in none of the artifacts it was "
+                    f"drawn from. Either derived from figures that are there, "
+                    f"or wrong.")
             lines.append("")
             lines.append("---")
 
