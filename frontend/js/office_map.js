@@ -657,6 +657,56 @@ const OFFICE_MAP = {
         conference_table: { x: 11.0, y: 21.0, label: 'Conference Room' }
     },
 
+    /* Where a crowd stands when several agents are sent to ONE coordinate.
+       The backend has no notion of seats -- every attendee of a meeting is sent
+       to the conference_table station's single point -- so without this they
+       all walked onto the same tile and the room read as one person.
+
+       Keyed by station id; canvas.js claimSpot() matches a destination to the
+       station it belongs to and hands out the first unclaimed seat. Anywhere
+       without a list here gets the generic fan-out instead, which is enough for
+       a water cooler but not for a table with chairs drawn round it.
+
+       SEAT GEOMETRY. A seated agent's baseline sits just ABOVE its chair's, so
+       the chair draws in front and the figure is tucked into it -- the same
+       relationship the desks use. The table itself is solid (px 120..328 by
+       291..333, i.e. tiles x 7-19 of rows 18-20), so nobody can stand at the
+       chairs' own rows: the north seats are on row 17 and the south seats on
+       row 21, each side of it, and the two end seats in the open tiles the
+       table leaves at x 6 and x 20.
+
+       The x is the chair's PLUS HALF A TILE, which is not what the desk seats
+       do. A prop at x is centred on (x+0.5)*16 but an agent at x is centred on
+       x*16, so a seat that copies its chair's x -- as all five desks do -- is
+       drawn 8px to its left. One chair alone hides that; a row of them does
+       not, and at the desk pitch here the figures straddled the gaps between
+       chairs instead of sitting in them.
+
+       Ordered so the room fills alternating sides from the middle outwards: at
+       the usual four attendees that reads as a meeting rather than a queue. */
+    gatherSpots: {
+        conference_table: [
+            { x: 14.0, y: 17.7, facing: 'down'  },
+            { x: 13.1, y: 21.3, facing: 'up'    },
+            { x: 15.9, y: 17.7, facing: 'down'  },
+            { x: 14.9, y: 21.3, facing: 'up'    },
+            { x: 12.1, y: 17.7, facing: 'down'  },
+            { x: 11.2, y: 21.3, facing: 'up'    },
+            { x: 17.7, y: 17.7, facing: 'down'  },
+            { x: 16.8, y: 21.3, facing: 'up'    },
+            { x: 10.3, y: 17.7, facing: 'down'  },
+            { x: 9.3,  y: 21.3, facing: 'up'    },
+            { x: 19.5, y: 17.7, facing: 'down'  },
+            { x: 18.7, y: 21.3, facing: 'up'    },
+            { x: 8.5,  y: 17.7, facing: 'down'  },
+            /* The two chairs drawn up at the ends of the table. The west one
+               would centre on x 7.1, which is the table's own first solid tile,
+               so it takes the last of the floor at 6.9 instead. */
+            { x: 6.9,  y: 19.9, facing: 'right' },
+            { x: 20.9, y: 19.9, facing: 'left'  }
+        ]
+    },
+
     hangouts: [
         { x: 28.8, y: 18.8, label: 'water cooler'  },
         { x: 28.8, y: 19.4, label: 'dining table'  },

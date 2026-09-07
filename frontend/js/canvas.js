@@ -88,6 +88,15 @@ const BUBBLE_FG   = '#14100f';
 const WALK_SPEED = 2.4;          // tiles per second
 const FRAME_MS = 140;            // per walk frame
 
+// Two agents standing closer than this overlap on screen: the figures are 18px
+// wide on a 16px tile, so anything under about 1.15 tiles reads as one person.
+const MIN_SEP = 1.15;
+// Fan-out radii, in tiles, tried in order around a destination already taken.
+const SPREAD_RINGS = [1.25, 2.0, 2.9];
+// How close a destination must be to a station before it counts as that
+// station, and so gets its seats rather than the generic fan-out.
+const SEAT_RING_REACH = 2.5;
+
 class PixelOfficeCanvas {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -311,6 +320,37 @@ class PixelOfficeCanvas {
         return this.blocked[y][x] === 1;
     }
 
+    /**
+     * Masonry at this tile? `isSolid` answers "may an agent stand here", which
+     * is masonry PLUS furniture; this answers "is there a wall here", which is
+     * the only question the wall renderer should be asking.
+     */
+    isWall(tx, ty) {
+        if (tx < 0 || ty < 0 || tx >= this.map.cols || ty >= this.map.rows) return true;
+        return this.solid[ty][tx] === 1;
+    }
+
+    /** The building shell: the outer course, three tiles deep along the north. */
+    isPerimeter(tx, ty) {
+        return tx === 0 || tx === this.map.cols - 1 ||
+               ty <= 2 || ty === this.map.rows - 1;
+    }
+
+    /**
+     * Which way does the partition on this tile run? Horizontal when a wall
+     * continues east or west of it and nothing walls it in above or below.
+     *
+     * Masonry only, deliberately. Asking `isSolid` here meant the fridge and
+     * counters standing along row 12 counted as "walled in below", which
+     * flipped seven tiles of the boss office / kitchen divider from lengths of
+     * wall to free-standing posts -- the divider simply stopped halfway along
+     * and carried on as a row of stubs with floor showing between them.
+     */
+    isHorizontalRun(tx, ty) {
+        return (this.isWall(tx - 1, ty) || this.isWall(tx + 1, ty)) &&
+               !(this.isWall(tx, ty - 1) || this.isWall(tx, ty + 1));
+    }
+
     buildAgents() {
         return Object.entries(this.map.seats).map(([id, seat]) => ({
             id,
@@ -319,6 +359,10 @@ class PixelOfficeCanvas {
             x: seat.x,
             y: seat.y,
             seat: { x: seat.x, y: seat.y, facing: seat.facing },
+            // Where this agent has undertaken to end up. Seeded with its own
+            // desk so the very first claim already knows the desks are taken.
+            goal: { x: seat.x, y: seat.y, facing: seat.facing },
+            goalFor: { x: seat.x, y: seat.y },
             room: seat.room,
             facing: seat.facing,
             state: 'idle',
@@ -424,7 +468,21 @@ class PixelOfficeCanvas {
         const a = this.agents.find(v => v.id === agentId);
         if (!a) return;
         if (a.path || (a.waypoints && a.waypoints.length)) return;
-        if (typeof x === 'number' && typeof y === 'number') { a.x = x; a.y = y; }
+        if (typeof x !== 'number' || typeof y !== 'number') return;
+
+        // Snapping straight onto the backend's coordinate is what stacked a
+        // meeting: it sends every attendee the table's one point, so four
+        // agents placed here all land on the same tile. If this is the trip
+        // they already claimed a seat for, that seat IS the arrival; a scrub or
+        // a reload that never walked claims one now.
+        const same = a.goalFor &&
+                     Math.hypot(a.goalFor.x - x, a.goalFor.y - y) < 0.6;
+        const spot = same && a.goal ? a.goal : this.claimSpot(a, { x, y });
+        a.goal = spot;
+        a.goalFor = { x, y };
+        a.x = spot.x;
+        a.y = spot.y;
+        if (spot.facing) a.facing = spot.facing;
     }
 
     /**
@@ -507,11 +565,95 @@ class PixelOfficeCanvas {
         return out;
     }
 
-    sendTo(agent, dest) {
-        const route = this.findPath(agent.x, agent.y, dest.x, dest.y);
+    /**
+     * The seat list for the place `dest` belongs to, or null for open floor.
+     *
+     * Matched by proximity to a station rather than by name, because a
+     * destination arrives as a bare coordinate -- from the backend's
+     * agent.move, from a hangout, from a click -- and never as an id.
+     */
+    seatRing(dest) {
+        const rings = this.map.gatherSpots || {};
+        const stations = this.map.stations || {};
+        for (const [id, spots] of Object.entries(rings)) {
+            const at = stations[id];
+            if (!at) continue;
+            if (Math.hypot(at.x - dest.x, at.y - dest.y) <= SEAT_RING_REACH) return spots;
+        }
+        return null;
+    }
+
+    /**
+     * Is another agent standing on this spot, or walking to it?
+     *
+     * Claims have to be read off destinations, not positions: four agents sent
+     * to a meeting are all still mid-stride when the last of them picks a seat,
+     * so comparing where everyone currently IS would hand out the same chair
+     * four times. `goal` is where each agent has undertaken to end up.
+     */
+    spotTaken(spot, self, sep) {
+        return this.agents.some((a) => {
+            if (a === self) return false;
+            const at = a.goal || a;
+            return Math.hypot(at.x - spot.x, at.y - spot.y) < sep;
+        });
+    }
+
+    /**
+     * Where `agent` actually stands when it is sent to `dest`.
+     *
+     * The office sends several agents to one point routinely -- every attendee
+     * of a meeting gets the conference table's single coordinate, and any two
+     * idlers can pick the same hangout -- and they used to stack on it exactly,
+     * so a table of four looked like one person standing alone.
+     *
+     * A place with chairs drawn round it hands out those chairs. Everywhere
+     * else the first arrival gets the spot it asked for and later ones fan out
+     * around it, skipping anything solid, furnished, or already claimed.
+     */
+    claimSpot(agent, dest) {
+        const ring = this.seatRing(dest);
+        if (ring) {
+            // Seats are far enough apart that identity, not distance, is the
+            // question: is anyone else sitting in this exact chair?
+            const free = ring.find(s => !this.spotTaken(s, agent, 0.5));
+            if (free) return { ...free };
+        }
+        if (!this.spotTaken(dest, agent, MIN_SEP)) return { ...dest };
+
+        for (const r of SPREAD_RINGS) {
+            for (let i = 0; i < 8; i++) {
+                // Half-step the odd rings so the second ring's spots fall in
+                // the gaps of the first instead of directly behind them.
+                const th = (i / 8 + (r % 2 ? 0.0625 : 0)) * Math.PI * 2;
+                const spot = {
+                    x: dest.x + Math.cos(th) * r,
+                    y: dest.y + Math.sin(th) * r,
+                    facing: dest.facing || null
+                };
+                if (this.isSolid(spot.x, spot.y)) continue;
+                if (this.blockedByProp(spot.x, spot.y, agent)) continue;
+                if (this.spotTaken(spot, agent, MIN_SEP)) continue;
+                return spot;
+            }
+        }
+        // Nowhere free within reach: stand on the spot rather than not arrive.
+        return { ...dest };
+    }
+
+    /**
+     * `claim` is off only for a trip to the agent's OWN seat, which is its
+     * alone by construction -- claiming there could only ever push somebody off
+     * their own desk because a visitor happened to be standing beside it.
+     */
+    sendTo(agent, dest, claim = true) {
+        const goal = claim ? this.claimSpot(agent, dest) : { ...dest };
+        agent.goal = goal;
+        agent.goalFor = { x: dest.x, y: dest.y };
+        const route = this.findPath(agent.x, agent.y, goal.x, goal.y);
         // Unreachable (or already there): go direct rather than freezing.
         agent.waypoints = route && route.length ? route.slice(0, -1) : [];
-        agent.waypoints.push({ x: dest.x, y: dest.y, facing: dest.facing || null });
+        agent.waypoints.push({ x: goal.x, y: goal.y, facing: goal.facing || null });
         agent.path = agent.waypoints.shift();
     }
 
@@ -556,7 +698,7 @@ class PixelOfficeCanvas {
 
         // An errand: whoever delivered a task walks back to their own desk.
         if (a.errand && Date.now() >= a.errand.at) {
-            this.sendTo(a, a.errand.returnTo);
+            this.sendTo(a, a.errand.returnTo, false);
             a.errand = null;
             return;
         }
@@ -574,7 +716,7 @@ class PixelOfficeCanvas {
             }
             const goHome = Math.random() < 0.5;
             if (goHome) {
-                this.sendTo(a, a.seat);
+                this.sendTo(a, a.seat, false);
             } else {
                 const spots = this.map.hangouts;
                 const spot = spots[Math.floor(Math.random() * spots.length)];
@@ -721,13 +863,23 @@ class PixelOfficeCanvas {
                 // Exterior shell keeps the full 16px course; interior
                 // dividers are thin partitions, which is both architecturally
                 // right and what stops the office reading as a bunker.
-                const perimeter = tx === 0 || tx === this.map.cols - 1 ||
-                                  ty <= 2 || ty === this.map.rows - 1;
+                const perimeter = this.isPerimeter(tx, ty);
                 if (!perimeter) {
-                    // A run is horizontal if its east/west neighbours are wall.
-                    const horiz = this.isSolid(tx - 1, ty) || this.isSolid(tx + 1, ty);
-                    if (horiz && !(this.isSolid(tx, ty - 1) || this.isSolid(tx, ty + 1))) {
+                    if (this.isHorizontalRun(tx, ty)) {
                         this.drawSprite('thin_h', tx * T, ty * T + 4, false);
+                        // Close the T-junction where this run meets a vertical
+                        // one. thin_h fills its tile edge to edge but thin_v is
+                        // a 7px plank inset 4px, so it stops five pixels short
+                        // of the next tile -- a hole in the wall, at exactly the
+                        // corner where two rooms and a corridor meet. A second
+                        // plank laid half a tile into the junction covers it.
+                        for (const nx of [tx - 1, tx + 1]) {
+                            if (this.isWall(nx, ty) && !this.isPerimeter(nx, ty) &&
+                                !this.isHorizontalRun(nx, ty)) {
+                                this.drawSprite('thin_h', tx * T + (nx < tx ? -8 : 8),
+                                                ty * T + 4, false);
+                            }
+                        }
                     } else {
                         this.drawSprite('thin_v', tx * T + 4, ty * T, false);
                     }

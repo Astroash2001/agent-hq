@@ -9,6 +9,14 @@ queue when one is busy, hand each other real files, argue at the conference tabl
 and get their work checked before anything downstream reads it. Every mission
 leaves a trace you can replay through the same office, step by step.
 
+![Four agents are called to the conference room, walk across the office, and
+argue at the table while the execution graph fills in and the cost ticks
+up](docs/hero.gif)
+
+*Twenty-five seconds of a real mission: the boss calls a standup, three
+specialists walk to the conference room, and the DAG, token gauge and cost
+panel move as they work. Nothing here is a mock-up.*
+
 The office is not decoration. It **is** the observability layer: a queue at the
 ops console is a real `asyncio` queue, and moving a station in the map changes how
 long missions take.
