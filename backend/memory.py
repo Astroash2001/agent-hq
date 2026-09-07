@@ -84,6 +84,11 @@ class AgentMemory:
         # call. Keyed by the token tuple; bounded because a long-lived server
         # sees a new query on every step.
         self._query_vectors: Dict[Tuple[str, ...], List[float]] = {}
+        # How many episodes `recall` may see. None means all of them, which is
+        # the resting state; a mission freezes it so a step cannot recall its
+        # own parallel sibling's episode and make recall depend on which
+        # finished first. See `freeze`.
+        self._horizon: Optional[int] = None
         self.load()
 
     # -------------------------------------------------------------- persistence
@@ -284,11 +289,37 @@ class AgentMemory:
 
         return self._lexical_similarity(query_tokens, episode)
 
+    def freeze(self) -> None:
+        """
+        Fix what `recall` can see to what exists right now.
+
+        Called at the start of a mission. Without it, whether a step recalls its
+        parallel sibling's episode depends on which of them finished first --
+        and that is a race, not a decision. It made the eval suite unreplayable:
+        during a recording the sibling had not finished, so the step ran with no
+        hints; on replay every model call returns instantly, the sibling HAD
+        finished, the hints appeared, and the turn missed its own cassette.
+
+        Recall is for learning across missions anyway. Within one, work is
+        handed forward explicitly through `consumes` and the artifact on the
+        desk -- which is a better channel than a 110-character summary.
+
+        Episodes recorded after the freeze are still stored, and the NEXT
+        mission sees them.
+        """
+        self._horizon = len(self.episodes)
+
+    def thaw(self) -> None:
+        """Let `recall` see everything again. The office's normal state."""
+        self._horizon = None
+
     def recall(self, agent_id: str, query: str, k: Optional[int] = None) -> List[Episode]:
         """The `k` most similar things this agent has done, best first."""
         k = k or settings.memory_recall_k
         query_tokens = tokenize(query)
-        mine = [e for e in self.episodes if e.agent_id == agent_id]
+        horizon = getattr(self, "_horizon", None)
+        visible = self.episodes if horizon is None else self.episodes[:horizon]
+        mine = [e for e in visible if e.agent_id == agent_id]
         self._warm_vectors(mine)
         scored: List[Tuple[float, Episode]] = []
         for episode in mine:
@@ -443,6 +474,8 @@ class AgentMemory:
         """Wipe the store. Used by tests and the reset endpoint."""
         self.episodes = []
         self._df = Counter()
+        # A horizon into an emptied list would hide the episodes recorded next.
+        self._horizon = None
         self.save()
 
 

@@ -555,14 +555,31 @@ than stepping back, because the office is a state machine with no inverse for
 
 ### No hero image
 
-`Preview.png` has been deleted — it was a third-party asset pack's contact
-sheet, not a screenshot of this project, and nothing referenced it. The README
-opens with a Mermaid diagram and the scorecard instead.
+**Done.** `docs/hero.gif` -- twenty-five seconds of a real mission, at the top
+of the README.
 
-Still open, and now the only thing on this list that cannot be done from a
-terminal: a recording of a mission — planning, fanning out, the DAG lighting up,
-the cost ticking, the memo landing. It needs a browser driving the running app,
-and it is the one claim in the README the README cannot itself show.
+`Preview.png` was deleted earlier: it was a third-party asset pack's contact
+sheet, not a screenshot of this project, and nothing referenced it.
+
+The window is 32-57s of a 2:11 capture, chosen by sampling twelve stills across
+the run rather than guessing: it is the stretch where the boss calls a standup,
+three specialists walk to the conference room, and the DAG, token gauge and cost
+panel all move. The opening twenty seconds are an idle office and the closing
+minute is one agent writing, so neither earns a place in a loop.
+
+Made with the ffmpeg that `imageio_ffmpeg` bundles -- there is none on PATH:
+
+```
+crop=1920:1052:0:148   drop the browser chrome; the app is the subject
+fps=8, scale=860       6.24MB at 10fps/900px, 3.62MB here
+palettegen stats_mode=diff, max_colors=128
+paletteuse dither=bayer:bayer_scale=3
+```
+
+`stats_mode=diff` because the office is mostly static, so the palette is better
+spent on what moves. Bayer dithering because the default banded the flat colour
+that most of this frame is. Frames were dropped before pixels: losing resolution
+costs more in a pixel-art scene than losing smoothness.
 
 ### Standalone simulation names are hardcoded
 

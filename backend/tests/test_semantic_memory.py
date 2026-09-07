@@ -298,3 +298,77 @@ def test_routing_fires_on_a_paraphrase_the_lexical_scorer_missed(store, capsys):
           f"\n  lexical  {lexical:.3f}  -> no recall, no reroute"
           f"\n  semantic {semantic:.3f}  -> rerouted to {suggestion[0]} "
           f"({suggestion[2]:.3f} -> {suggestion[1]:.3f})")
+
+
+# ------------------------------------------------- the recall horizon
+
+def _mem(scratch):
+    """A private store, made the way the rest of this file makes them --
+    `tmp_path` errors with WinError 5 on this machine, hence the `scratch`
+    fixture above."""
+    return AgentMemory(path=os.path.join(scratch, "horizon.json"))
+
+
+def test_freeze_hides_episodes_recorded_after_it(scratch):
+    """
+    Whether a step recalls its parallel sibling's episode used to depend on
+    which of them finished first -- a race, not a decision. It also made the
+    eval suite unreplayable: during a recording the sibling had not finished so
+    the step ran with no hints, and on replay every call returns instantly, the
+    sibling HAD finished, the hints appeared, and the turn missed its own
+    cassette.
+    """
+    mem = _mem(scratch)
+    mem.record(agent_id="researcher", agent_name="Alice", goal="g",
+               subtask="Research battery chemistry", outcome="success",
+               summary="earlier work", duration_sec=1.0, total_tokens=10,
+               tools_used=[], artifact="a.md")
+
+    mem.freeze()
+    before = mem.render_hints("researcher", "Research battery chemistry")
+    assert "earlier work" in before, "the fixture episode should be recalled"
+
+    # What a parallel sibling would write mid-mission.
+    mem.record(agent_id="researcher", agent_name="Alice", goal="g",
+               subtask="Research battery chemistry", outcome="success",
+               summary="sibling wrote this", duration_sec=1.0, total_tokens=10,
+               tools_used=[], artifact="b.md")
+
+    during = mem.render_hints("researcher", "Research battery chemistry")
+    assert "sibling wrote this" not in during, (
+        "an episode recorded after the freeze must not change what this "
+        "mission recalls")
+    assert during == before, "the hints block must be stable for the whole run"
+
+    mem.thaw()
+    assert "sibling wrote this" in mem.render_hints(
+        "researcher", "Research battery chemistry"), "the next mission sees it"
+
+
+def test_the_episode_is_still_stored_while_frozen(scratch):
+    """Frozen hides it from recall; it must not drop the write."""
+    mem = _mem(scratch)
+    mem.freeze()
+    mem.record(agent_id="coder", agent_name="Bob", goal="g",
+               subtask="Write the thing", outcome="success", summary="s",
+               duration_sec=1.0, total_tokens=10, tools_used=[], artifact="a.md")
+
+    assert len(mem.episodes) == 1, "the episode was not stored"
+    assert mem.render_hints("coder", "Write the thing") == ""
+    mem.thaw()
+    assert "Write the thing" in mem.render_hints("coder", "Write the thing")
+
+
+def test_clear_drops_the_horizon_too(scratch):
+    """A horizon into an emptied list would hide everything recorded next."""
+    mem = _mem(scratch)
+    mem.record(agent_id="coder", agent_name="Bob", goal="g", subtask="x",
+               outcome="success", summary="s", duration_sec=1.0,
+               total_tokens=10, tools_used=[], artifact="a.md")
+    mem.freeze()
+    mem.clear()
+
+    mem.record(agent_id="coder", agent_name="Bob", goal="g",
+               subtask="Write the thing", outcome="success", summary="fresh",
+               duration_sec=1.0, total_tokens=10, tools_used=[], artifact="a.md")
+    assert "fresh" in mem.render_hints("coder", "Write the thing")

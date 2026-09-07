@@ -238,6 +238,15 @@ class Orchestrator:
         # with and route the first step to whoever should read it.
         seeded = await self._seed_attachments(workspace, attachments)
 
+        # What this mission may recall is fixed here, before any step runs.
+        # Otherwise whether a step sees its parallel sibling's episode depends
+        # on which of them finished first, which is a race rather than a
+        # decision -- and it made the eval suite unreplayable, since a replay
+        # returns instantly and orders those completions differently from the
+        # recording that produced the cassettes.
+        if settings.memory_enabled:
+            memory.freeze()
+
         trace = tracing.start_mission(task_id, workspace.dir)
         try:
             async with tracing.span("mission", user_prompt[:120],
@@ -249,6 +258,9 @@ class Orchestrator:
                 return result
         finally:
             tracing.end_mission()
+            # Back to seeing everything, so the NEXT mission recalls what this
+            # one learned. The horizon is per mission, not a global setting.
+            memory.thaw()
 
     @staticmethod
     def _rehydrate_workspace(workspace: MissionWorkspace) -> List[str]:
