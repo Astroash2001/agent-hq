@@ -125,7 +125,15 @@ class Settings(BaseSettings):
     # no tools, no ReAct loop, run concurrently because the turns are
     # independent. Off restores the silent-attendee meeting exactly.
     debate_enabled: bool = True
-    debate_rounds: int = 1
+    # Two, so the meeting is an argument rather than a row of statements. Round
+    # one is each attendee's position; every round after it is a REPLY round --
+    # they are shown the transcript and told to name who they are answering and
+    # where they have changed their mind. At one round `earlier` is always empty
+    # and nobody replies to anybody, which is a meeting in shape only.
+    #
+    # The cost is linear and small: rounds x seats x debate_max_tokens, and a
+    # turn is three sentences. Set it back to 1 for the cheaper silent version.
+    debate_rounds: int = 2
     # A per-turn output ceiling, and the reason the round is affordable. An
     # objection is three sentences; the meeting-wide cost is this times the
     # number of seats times the number of rounds, which is the arithmetic the

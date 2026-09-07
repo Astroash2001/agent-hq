@@ -121,7 +121,22 @@ async def _one_turn(
         user_parts.append(f"On the table:\n{table}")
     if earlier:
         user_parts.append(f"Already said in this meeting:\n{earlier}")
-    user_parts.append("State your objection.")
+
+    # Round one is a position; every round after it is a reply, and the
+    # instruction has to say so. Handing a later round the same "state your
+    # objection" prompt with the transcript merely appended produced attendees
+    # restating themselves next to each other -- a meeting in shape only.
+    # Naming who to answer is what turns the transcript from background context
+    # into something to engage with.
+    if round_index > 1 and earlier:
+        user_parts.append(
+            "This is a REPLY round. Do not restate your earlier position. "
+            "Answer the objections above: name the person you are answering, "
+            "say where you now agree, and say what you still disagree with and "
+            "why. If someone has changed your mind, say so plainly -- a meeting "
+            "where nobody moves was not worth holding.")
+    else:
+        user_parts.append("State your objection.")
     user = "\n\n".join(p for p in user_parts if p)
 
     system = (f"{date_context()}\n\n{agent.manifest.system_prompt}\n\n"

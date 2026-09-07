@@ -382,10 +382,25 @@ Bounded by `debate_rounds` (1) x `meeting_capacity - 1` seats x
 meeting exactly, which `test_debate.py` asserts against the chair's context
 string.
 
-Still open: a round is stateless -- attendees see each other's positions only
-from the round before, so with the default of one round nobody replies to
-anybody. Raising `debate_rounds` gets a reply round at a linear cost, and the
-chair still owns the decision either way.
+**Also done: the meeting is an argument now.** At `debate_rounds: 1` the
+`earlier` transcript is always empty, so nobody replied to anybody and the
+meeting was a row of statements read out side by side.
+
+Raising the default to 2 was necessary and not sufficient. Handing a second
+round the same "State your objection." prompt with the transcript merely
+appended gets attendees restating themselves next to each other -- the
+transcript is background, not something to engage with. A later round is now
+told explicitly that it is a REPLY round: name who you are answering, say where
+you now agree, say what you still disagree with, and say plainly if someone has
+changed your mind.
+
+Cost is linear and small -- rounds x seats x `debate_max_tokens`, and a turn is
+three sentences. `debate_rounds: 1` restores the silent version exactly, which
+`test_the_reply_round_can_be_turned_off` pins.
+
+One test had to be pinned rather than updated: it read the default round count
+while testing the simulated fallback, so it broke the day the default changed
+and told nobody anything useful.
 
 ### No MCP
 

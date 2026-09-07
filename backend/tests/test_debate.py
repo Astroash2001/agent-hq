@@ -311,6 +311,10 @@ async def test_without_a_credential_the_turns_are_simulated_and_say_so(monkeypat
 
     monkeypatch.setattr(llm, "acompletion", _boom)
     monkeypatch.setattr(settings, "debate_enabled", True)
+    # Pinned: this test is about the simulated fallback, not about how many
+    # rounds the default happens to be. Reading the default made it fail the
+    # day that default changed, which told nobody anything useful.
+    monkeypatch.setattr(settings, "debate_rounds", 1)
 
     positions = await debate.hold([_agent("coder", "Bob")], goal="g",
                                   step_description="Agree the launch plan")
@@ -319,3 +323,67 @@ async def test_without_a_credential_the_turns_are_simulated_and_say_so(monkeypat
     assert positions[0].simulated is True
     assert "simulated" in positions[0].text
     assert "Bob" in debate.render(positions)
+
+
+# ------------------------------------------------- the meeting is an argument
+
+@pytest.mark.asyncio
+async def test_a_later_round_is_told_to_reply_not_restate(monkeypatch):
+    """
+    At one round `earlier` is always empty, so nobody replies to anybody and
+    the meeting is a row of statements. A second round on its own is not enough
+    either: handing it the same "state your objection" prompt with the
+    transcript appended gets attendees restating themselves next to each other.
+
+    The instruction is what makes it a reply, so the instruction is what this
+    pins.
+    """
+    seen = []
+
+    async def _capture(messages, **kwargs):
+        seen.append(messages[-1]["content"])
+        return llm.LLMResult(response=_Resp("Fine by me."), model="m",
+                             prompt_tokens=10, completion_tokens=5,
+                             cost_usd=0.0, attempts=1, fell_back=False)
+
+    monkeypatch.setattr(llm, "acompletion", _capture)
+    monkeypatch.setattr(settings, "debate_enabled", True)
+    monkeypatch.setattr(settings, "debate_rounds", 2)
+    monkeypatch.setattr(debate, "llm_configured", lambda: True)
+
+    await debate.hold([_agent("coder", "Bob"), _agent("creative", "Eve")],
+                      goal="g", step_description="Agree the launch plan")
+
+    first_round = seen[:2]
+    later_round = seen[2:]
+
+    assert first_round and later_round, f"expected two rounds, got {len(seen)} turns"
+    for prompt in first_round:
+        assert "State your objection." in prompt
+        assert "REPLY round" not in prompt
+    for prompt in later_round:
+        assert "REPLY round" in prompt, "a later round must be told to answer"
+        assert "Already said in this meeting" in prompt, "it needs the transcript"
+
+
+@pytest.mark.asyncio
+async def test_the_reply_round_can_be_turned_off(monkeypatch):
+    """`debate_rounds: 1` restores the cheaper, silent version exactly."""
+    seen = []
+
+    async def _capture(messages, **kwargs):
+        seen.append(messages[-1]["content"])
+        return llm.LLMResult(response=_Resp("A point."), model="m",
+                             prompt_tokens=10, completion_tokens=5,
+                             cost_usd=0.0, attempts=1, fell_back=False)
+
+    monkeypatch.setattr(llm, "acompletion", _capture)
+    monkeypatch.setattr(settings, "debate_enabled", True)
+    monkeypatch.setattr(settings, "debate_rounds", 1)
+    monkeypatch.setattr(debate, "llm_configured", lambda: True)
+
+    await debate.hold([_agent("coder", "Bob")], goal="g",
+                      step_description="Agree the launch plan")
+
+    assert len(seen) == 1
+    assert "REPLY round" not in seen[0]
