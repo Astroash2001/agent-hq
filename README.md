@@ -25,6 +25,57 @@ long missions take.
 
 ---
 
+## What this is for
+
+**A reference implementation you can watch.** Multi-agent orchestration is
+normally a wall of logs; here it is a floor plan. That makes it useful in three
+ways, in the order people actually use it:
+
+- **To understand how agent systems work.** The plan, the fan-out, the queue at a
+  busy tool, the argument at the table -- each is a real mechanism, drawn.
+- **To lift patterns from.** `pricing.py` refuses to guess a rate rather than
+  quietly report $0.00. `runstore.py` writes a transition before emitting its
+  event, so a killed process cannot have shown you a step it never recorded.
+  `evals/replay.py` records tool calls as well as model calls, because a live
+  `web_search` in turn one changes turn two's prompt. The reasoning is in the
+  files, not just the result.
+- **To delegate real multi-step work to**, over MCP -- see *Integrating* below.
+
+**What it is not:** a production framework. LangGraph, CrewAI and AutoGen are
+libraries you build products on. This is one opinionated harness with a face,
+and it is honest about that.
+
+---
+
+## Integrating
+
+**As a tool for your own agent.** `mcp_server.py` serves this office over stdio,
+so Claude Code or any MCP client can hand it a job:
+
+```json
+{ "mcpServers": {
+    "agenthq": { "command": "python", "args": ["-m", "mcp_server"], "cwd": "backend" }
+} }
+```
+
+It exposes `run_mission(goal)`, `get_mission(id)` and `list_agents()`. Your agent
+delegates a multi-step research or code task and gets back a report, the
+artifacts, and what it cost.
+
+**From Python.**
+
+```python
+from orchestrator import orchestrator
+result = await orchestrator.handle_user_input("Compare X and Y, write a report")
+```
+
+**Over HTTP.** `GET /api/missions` lists past runs, `/{id}` returns one with its
+plan and step statuses, `/{id}/artifacts/{name}` returns a file's text,
+`/{id}/trace` returns the NDJSON span log, and `POST /{id}/resume` picks up a
+mission a killed process left unfinished. Contract in [[PROTOCOL]].
+
+---
+
 ## How a mission runs
 
 ```mermaid
@@ -285,7 +336,7 @@ OpenAI-compatible gateway. See [[DECISIONS]].
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 396 tests, all passing
+cd backend && python -m pytest -q      # 439 tests, all passing
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, plus `ruff check` and the eval
@@ -356,25 +407,21 @@ Adding an agent is a new JSON file in `backend/agents/` plus a desk in
 Kept current in [[TODO]], which is the file to read before trusting anything
 above. The ones worth knowing up front:
 
-- **No hero GIF yet.** The office is best understood moving, and this README has
-  no recording of it.
-- **Two of the 14 eval tasks have no cassette** — the account's Gemini quota ran
-  out mid-sweep. They fall to the simulator and are marked unjudged.
-- **Cost is unmeasurable on the default models.** Neither `gemini-3.5-flash` nor
-  `-flash-lite` has a row in `pricing.py`, which refuses to guess, so every cost
-  figure reads $0.0000. Startup warns and the eval suite marks the budget check
-  unscored, but the number is still missing until someone adds the verified rate.
-- **The walkable grid is 7 disconnected regions**, so the renderer's A* can only
-  route within one of them and movement mostly falls back to sliding. Two
-  stations are not on the main region at all. `check_layout.py` reports it;
-  backend walk timing is still straight-line until the map is fixed.
-- **Hashed embeddings measure surface similarity**, not synonymy — "speed up the
-  cache" and "optimise memoisation" still score 0.
-- **Nothing grades the conclusion.** The briefing now opens with a finding drawn
-  from the artifacts rather than a fixed sentence, but the eval judge still reads
-  artifact files only — so the one part of the briefing that makes a claim is the
-  part the suite does not check.
-- **15 authored sprites and 8 orphaned PNGs** are dead weight in the atlas.
+- **Memory matches surface words, not meaning.** "Speed up the cache" and
+  "optimise memoisation" score 0 against each other. Real synonymy needs
+  `embedding_provider="litellm"`, which costs a call per uncached text.
+- **The conclusion's figures are grounded, its claims are not.** Every number it
+  asserts is checked against the artifacts and flagged if absent, but
+  "sodium-ion is cheaper" grounds against nothing — that needs an entailment
+  judgement, which is a different kind of check.
+- **The planner's shortcuts are English-only.** A goal that asks for a meeting
+  without using a meeting-ish word gets solo desks.
+- **108 unused frames** from the source packs are still in the atlas. The 14
+  provably dead authored sprites were pruned; these are a palette for layout
+  work, and nothing independently confirms they are dead rather than unplaced.
+- **A replay cannot seek backwards.** Dragging the scrubber left replays from
+  zero, because the office is a state machine with no inverse for "the agent
+  walked to the library".
 
 ---
 
