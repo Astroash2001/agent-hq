@@ -651,7 +651,17 @@ const OFFICE_MAP = {
        boardroom table once the room was rebuilt. */
     stations: {
         ops_console:      { x: 21.5, y: 21.5, label: 'Ops Console' },
-        research_library: { x: 2.6,  y: 12.4, label: 'Research Library' },
+        /* ON the shelving, which is where a station belongs -- office.py's
+           `_nearest_open` snaps the walk to the floor beside it, and
+           canvas.js nearestOpen() does the same for the drawn one.
+
+           It used to sit at (2.6, 12.4) against the west wall, 9.4 tiles from
+           the nearest bookshelf, with a potted plant and the side of a desk for
+           company. An agent sent to "the Research Library" stood at somebody's
+           workstation. The bullpen's library is the shelf run on the north
+           wall -- bookshelf_tall at (6.47, 3.84) and this 46x47 bookshelf --
+           which is the "library wall" the file header has always claimed. */
+        research_library: { x: 8.91, y: 4.97, label: 'Research Library' },
         filing_archive:   { x: 2.6,  y: 9.4,  label: 'Filing Archive' },
         whiteboard:       { x: 5.2,  y: 5.2,  label: 'Whiteboard' },
         conference_table: { x: 11.0, y: 21.0, label: 'Conference Room' }
@@ -707,15 +717,31 @@ const OFFICE_MAP = {
         ]
     },
 
+    /* Somewhere to drift to when there is no work on. Each entry's LABEL is
+       spoken aloud -- "heading to the water cooler" -- so the coordinate has to
+       be the thing it names, or the office narrates a journey nobody takes.
+
+       Two of these named furniture they were nowhere near. `water cooler` was
+       at (28.8, 18.8), bare floor in the lounge, while the only water_cooler in
+       the building stands on the bullpen's north wall 26 tiles away; `dining
+       table` was 0.6 of a tile from it, bare floor again, with the dining set
+       four tiles north in the kitchen. Both now stand at the furniture they are
+       named after, in front of it rather than on it. */
     hangouts: [
-        { x: 28.8, y: 18.8, label: 'water cooler'  },
-        { x: 28.8, y: 19.4, label: 'dining table'  },
+        /* Below the cooler at (3.53, 3.22), centred on it: a prop at x is drawn
+           centred on (x+0.5)*16 but an agent at x on x*16, hence the +0.5. */
+        { x: 4.03, y: 4.60, label: 'water cooler'  },
+        /* The kitchen nook: round_table_only at (28.78, 15.09) with its three
+           wooden chairs. Row 16 is the open floor along its south side. */
+        { x: 28.8, y: 16.5, label: 'dining table'  },
         /* In front of the suite, not on it: at (31, 21.4) this sat inside the
            back sofa, which is walk-through no longer. */
         { x: 36.25, y: 20.0, label: 'lounge'        },
         { x: 31.5, y: 16.2, label: 'kitchen'       },
         { x: 5.2,  y: 5.2,  label: 'whiteboard'    },
-        { x: 2.6,  y: 12.4, label: 'library'       },
+        /* The floor in front of the shelf run, so an idler stands looking at
+           the books rather than at the desk the old (2.6, 12.4) put them at. */
+        { x: 9.41, y: 6.20, label: 'library'       },
         /* Both of these used to sit inside the table they are named after --
            fine while furniture was walk-through, unreachable now. They stand
            beside it instead. */

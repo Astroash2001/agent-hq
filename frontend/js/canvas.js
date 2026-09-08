@@ -91,11 +91,18 @@ const FRAME_MS = 140;            // per walk frame
 // Two agents standing closer than this overlap on screen: the figures are 18px
 // wide on a 16px tile, so anything under about 1.15 tiles reads as one person.
 const MIN_SEP = 1.15;
-// Fan-out radii, in tiles, tried in order around a destination already taken.
-const SPREAD_RINGS = [1.25, 2.0, 2.9];
+// Fan-out radii, in tiles, tried in order around a destination already taken,
+// and how many directions are sampled on each.
+const SPREAD_RINGS = [1.25, 1.9, 2.6, 3.3];
+const SPREAD_DIRS = 12;
+// Tighter radii, for finding the floor beside a point that is inside furniture.
+const SNAP_RINGS = [0.8, 1.2, 1.6, 2.1, 2.6];
 // How close a destination must be to a station before it counts as that
 // station, and so gets its seats rather than the generic fan-out.
 const SEAT_RING_REACH = 2.5;
+// Shortest walk worth announcing. Under this the figure barely moves, so a
+// bubble naming somewhere it is going reads as a lie.
+const MIN_TRIP = 2.0;
 
 class PixelOfficeCanvas {
     constructor(canvasId) {
@@ -415,7 +422,7 @@ class PixelOfficeCanvas {
         if (!a) return;
         a.state = status;
         if (status === 'active' || status === 'tool_calling') {
-            this.sendTo(a, a.seat);           // back to the desk to work
+            this.sendTo(a, a.seat, false);    // back to its own desk to work
         } else if (status === 'done') {
             // No bubble here: the only thing that pops one is work arriving.
             this.spawnCelebration(a.x, a.y);
@@ -599,6 +606,56 @@ class PixelOfficeCanvas {
         });
     }
 
+    /** Floor an agent can actually stand on -- not masonry, not furniture. */
+    isStandable(x, y, agent) {
+        return !this.isSolid(x, y) && !this.blockedByProp(x, y, agent);
+    }
+
+    /**
+     * The closest floor you can stand on, searched outward from `point`.
+     *
+     * The mirror of office.py's `_nearest_open`, and needed for the same
+     * reason it gives: "a station sits on the furniture it IS", so a station's
+     * own coordinate is routinely a blocked tile. The backend has always
+     * snapped; the renderer walked at the raw point instead, which only worked
+     * because no station happened to sit on its furniture yet.
+     */
+    nearestOpen(point, agent) {
+        if (this.isStandable(point.x, point.y, agent)) return { ...point };
+        for (const r of SNAP_RINGS) {
+            for (let i = 0; i < SPREAD_DIRS; i++) {
+                const th = (i / SPREAD_DIRS) * Math.PI * 2;
+                const x = point.x + Math.cos(th) * r;
+                const y = point.y + Math.sin(th) * r;
+                if (this.isStandable(x, y, agent)) {
+                    return { x, y, facing: point.facing || null };
+                }
+            }
+        }
+        return { ...point };
+    }
+
+    /**
+     * Can you get from one point to the other without crossing anything?
+     *
+     * Straight-line, sampled every quarter tile. The fan-out below needs it
+     * because "not a wall tile" is not the same question as "the same place":
+     * the dining table sits a tile and a half from the corridor partition, so
+     * an offset that cleared the furniture check still put an agent on the far
+     * side of that wall, in the bullpen, under a bubble reading "heading to the
+     * dining table". Rejecting those costs nothing -- there are two dozen
+     * candidates and the destination itself as the fallback.
+     */
+    walkLineClear(from, to) {
+        const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / 0.25);
+        for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            if (this.isSolid(from.x + (to.x - from.x) * t,
+                             from.y + (to.y - from.y) * t)) return false;
+        }
+        return true;
+    }
+
     /**
      * Where `agent` actually stands when it is sent to `dest`.
      *
@@ -619,26 +676,45 @@ class PixelOfficeCanvas {
             const free = ring.find(s => !this.spotTaken(s, agent, 0.5));
             if (free) return { ...free };
         }
-        if (!this.spotTaken(dest, agent, MIN_SEP)) return { ...dest };
+        // The floor at the place, which is not always the place: a station's
+        // point can be inside the shelving it names.
+        const at = this.nearestOpen(dest, agent);
+        if (!this.spotTaken(at, agent, MIN_SEP)) return at;
 
-        for (const r of SPREAD_RINGS) {
-            for (let i = 0; i < 8; i++) {
-                // Half-step the odd rings so the second ring's spots fall in
-                // the gaps of the first instead of directly behind them.
-                const th = (i / 8 + (r % 2 ? 0.0625 : 0)) * Math.PI * 2;
+        // Every offset that is real floor, in the same room, and not inside
+        // furniture. Collected rather than returned on the first hit, because
+        // a cramped place -- the library alcove holds four before it runs out
+        // -- needs a fallback better than standing on somebody.
+        const open = [];
+        for (let ring = 0; ring < SPREAD_RINGS.length; ring++) {
+            const r = SPREAD_RINGS[ring];
+            for (let i = 0; i < SPREAD_DIRS; i++) {
+                // Half-step alternate rings so the outer spots fall in the gaps
+                // of the inner ones instead of directly behind them.
+                const th = (i + (ring % 2 ? 0.5 : 0)) / SPREAD_DIRS * Math.PI * 2;
                 const spot = {
-                    x: dest.x + Math.cos(th) * r,
-                    y: dest.y + Math.sin(th) * r,
+                    x: at.x + Math.cos(th) * r,
+                    y: at.y + Math.sin(th) * r,
                     facing: dest.facing || null
                 };
-                if (this.isSolid(spot.x, spot.y)) continue;
-                if (this.blockedByProp(spot.x, spot.y, agent)) continue;
-                if (this.spotTaken(spot, agent, MIN_SEP)) continue;
-                return spot;
+                if (!this.isStandable(spot.x, spot.y, agent)) continue;
+                if (!this.walkLineClear(at, spot)) continue;
+                if (!this.spotTaken(spot, agent, MIN_SEP)) return spot;
+                open.push(spot);
             }
         }
-        // Nowhere free within reach: stand on the spot rather than not arrive.
-        return { ...dest };
+        // Cramped: take the emptiest patch of floor there is rather than stack.
+        let best = null, bestGap = -1;
+        for (const spot of open) {
+            let gap = Infinity;
+            for (const other of this.agents) {
+                if (other === agent) continue;
+                const at = other.goal || other;
+                gap = Math.min(gap, Math.hypot(at.x - spot.x, at.y - spot.y));
+            }
+            if (gap > bestGap) { bestGap = gap; best = spot; }
+        }
+        return best || at;
     }
 
     /**
@@ -714,11 +790,19 @@ class PixelOfficeCanvas {
                 a.idleTimer = 6000;
                 return;
             }
-            const goHome = Math.random() < 0.5;
+            // Somewhere the agent is NOT already standing. Picking blind meant
+            // announcing "heading to the water cooler" over a figure that then
+            // did not move, because the hangout it drew was the one under its
+            // own feet -- findPath returns an empty route when start and goal
+            // share a tile, so the bubble was the only thing that happened.
+            // office.py guards its own walks the same way (walk_to returns
+            // early inside 0.25 tiles); this is the renderer's half of it.
+            const spots = this.map.hangouts.filter(
+                s => Math.hypot(s.x - a.x, s.y - a.y) >= MIN_TRIP);
+            const goHome = Math.random() < 0.5 || !spots.length;
             if (goHome) {
                 this.sendTo(a, a.seat, false);
             } else {
-                const spots = this.map.hangouts;
                 const spot = spots[Math.floor(Math.random() * spots.length)];
                 this.sendTo(a, spot);
                 this.showSpeech(a.id, `heading to the ${spot.label}`);

@@ -90,10 +90,14 @@ STATIONS: List[Station] = [
     Station(
         id="research_library",
         label="Research Library",
-        x=_station_xy("research_library", (2.6, 12.4))[0], y=_station_xy("research_library", (2.6, 12.4))[1],
+        # The fallback follows the map: the shelf run on the bullpen's north
+        # wall. It used to read (2.6, 12.4), which was the west wall -- nine
+        # tiles from the nearest bookshelf, beside a potted plant and the end
+        # of somebody's desk.
+        x=_station_xy("research_library", (8.91, 4.97))[0], y=_station_xy("research_library", (8.91, 4.97))[1],
         tools=["web_search", "read_file"],
         kind="tool",
-        description="The west library wall. Search and reading happens at the shelves."
+        description="The library shelves on the north wall. Search and reading happens here."
     ),
     Station(
         id="filing_archive",
@@ -101,7 +105,7 @@ STATIONS: List[Station] = [
         x=_station_xy("filing_archive", (2.6, 9.4))[0], y=_station_xy("filing_archive", (2.6, 9.4))[1],
         tools=["write_file", "list_files"],
         kind="tool",
-        description="The cabinets north of the library. Anything written to disk is filed here."
+        description="The cabinets on the west wall. Anything written to disk is filed here."
     ),
     Station(
         id="whiteboard",
