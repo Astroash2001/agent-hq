@@ -159,3 +159,19 @@ def test_the_store_can_be_switched_off(store, monkeypatch):
     monkeypatch.setattr(settings, "runstore_enabled", False)
     store.start_mission("m7", "goal")
     assert store.get_mission("m7") is None, "writes are suppressed when disabled"
+
+
+def test_a_cost_of_none_leaves_the_recorded_cost_alone(store):
+    """
+    Ending a mission without a bill is not the same as ending it with a bill of
+    zero. A run that dies by raising knows its status and not its cost, and a
+    resumed mission is already carrying what its first run spent -- writing a
+    confident 0.0 over that reports money as never having been spent.
+    """
+    store.start_mission("m9", "goal")
+    store.end_mission("m9", "completed", 0.42)
+    store.end_mission("m9", "failed", cost_usd=None)
+
+    got = store.get_mission("m9")
+    assert got["status"] == "failed"
+    assert got["cost_usd"] == pytest.approx(0.42)

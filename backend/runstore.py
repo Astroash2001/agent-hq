@@ -164,7 +164,21 @@ class RunStore:
         self._write("UPDATE missions SET plan_source=?, plan_json=? WHERE id=?",
                     (plan.source, payload, mission_id))
 
-    def end_mission(self, mission_id: str, status: str, cost_usd: float = 0.0) -> None:
+    def end_mission(self, mission_id: str, status: str,
+                    cost_usd: Optional[float] = 0.0) -> None:
+        """
+        Give a mission its terminal status.
+
+        `cost_usd=None` leaves the recorded cost alone, which is not the same
+        as passing 0.0. A mission that ends by raising knows its status but not
+        its bill, and a resumed mission already carries what the first run
+        spent -- writing a confident zero over that loses money the run really
+        did cost.
+        """
+        if cost_usd is None:
+            self._write("UPDATE missions SET status=?, ended_at=? WHERE id=?",
+                        (status, time.time(), mission_id))
+            return
         self._write(
             "UPDATE missions SET status=?, ended_at=?, cost_usd=? WHERE id=?",
             (status, time.time(), float(cost_usd or 0.0), mission_id))

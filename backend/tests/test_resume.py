@@ -365,3 +365,116 @@ async def test_steps_behind_a_failure_are_marked_unreachable(scratch, monkeypatc
     assert [s.status for s in plan.steps] == ["failed", "failed", "failed"]
     rows = {r["step_id"]: r for r in store.get_steps("m_block")}
     assert "unreachable" in (rows["s3"]["error"] or "")
+
+
+@pytest.mark.asyncio
+async def test_a_mission_that_raises_is_not_left_running(scratch, monkeypatch):
+    """
+    `end_mission` sits at the end of the happy path, so a mission that raised
+    on the way there kept the status `start_mission` gave it: the row read
+    `running` for the life of the database, which is not "this broke" but
+    "this is still going" -- the one thing it certainly was not.
+
+    Seen for real on a mission whose planner took a 502 from the provider. No
+    plan, no steps, and a row still claiming to be in flight hours later.
+    """
+    root, store = scratch
+    orch = Orchestrator()
+    _wire(orch, monkeypatch, {"researcher": _Agent()})
+
+    store.start_mission("m_raise", "goal")
+    store.record_plan("m_raise", _linear_plan(2))
+
+    async def boom(*a, **kw):
+        raise RuntimeError("planner took a 502")
+
+    monkeypatch.setattr(orch, "_run_mission", boom)
+
+    with pytest.raises(RuntimeError):
+        await orch.handle_user_input("goal", resume_from="m_raise")
+
+    got = store.get_mission("m_raise")
+    assert got["status"] == "failed", "a mission that raised still reads as running"
+    assert got["ended_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_mission_is_not_left_running(scratch, monkeypatch):
+    """
+    CancelledError is not an Exception, so an `except Exception` here would
+    catch the planner's 502 and miss the commonest way out that is not a
+    return. A mission cancelled at shutdown strands its row exactly as a
+    crashed one does.
+    """
+    root, store = scratch
+    orch = Orchestrator()
+    _wire(orch, monkeypatch, {"researcher": _Agent()})
+
+    store.start_mission("m_cancel", "goal")
+    store.record_plan("m_cancel", _linear_plan(2))
+
+    async def hang(*a, **kw):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(orch, "_run_mission", hang)
+
+    task = asyncio.create_task(orch.handle_user_input("goal", resume_from="m_cancel"))
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert store.get_mission("m_cancel")["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_a_halt_that_escapes_is_not_downgraded_to_failed(scratch, monkeypatch):
+    """
+    A halt that goes through the normal path already ends as `halted`, and that
+    distinction is the first thing you want from a red row: a run somebody
+    stopped on purpose is not a run that broke. The rare halt that escapes by
+    raising must not lose it.
+    """
+    root, store = scratch
+    orch = Orchestrator()
+    _wire(orch, monkeypatch, {"researcher": _Agent()})
+
+    store.start_mission("m_halt", "goal")
+    store.record_plan("m_halt", _linear_plan(2))
+
+    async def boom(*a, **kw):
+        orch._halted.add("m_halt")
+        raise RuntimeError("stopped mid-flight")
+
+    monkeypatch.setattr(orch, "_run_mission", boom)
+
+    with pytest.raises(RuntimeError):
+        await orch.handle_user_input("goal", resume_from="m_halt")
+
+    assert store.get_mission("m_halt")["status"] == "halted"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_resume_keeps_what_the_first_run_spent(scratch, monkeypatch):
+    """
+    The cost of a mission that died on the way to `end_mission` is unknown, not
+    zero. A resumed mission is already carrying its first run's bill, and
+    writing a confident 0.0 over that reports money as never having been spent.
+    """
+    root, store = scratch
+    orch = Orchestrator()
+    _wire(orch, monkeypatch, {"researcher": _Agent()})
+
+    store.start_mission("m_cost", "goal")
+    store.record_plan("m_cost", _linear_plan(2))
+    store.end_mission("m_cost", "failed", 0.37)      # what the dead run spent
+
+    async def boom(*a, **kw):
+        raise RuntimeError("died again")
+
+    monkeypatch.setattr(orch, "_run_mission", boom)
+
+    with pytest.raises(RuntimeError):
+        await orch.handle_user_input("goal", resume_from="m_cost")
+
+    assert store.get_mission("m_cost")["cost_usd"] == pytest.approx(0.37)

@@ -259,6 +259,30 @@ class Orchestrator:
                 node.set(cost_usd=result.get("cost_usd", 0.0),
                          steps=len(result.get("subtasks") or []))
                 return result
+        except BaseException:
+            # `end_mission` sits at the end of the happy path, so until now
+            # anything raising in between left the row saying `running` for the
+            # life of the database -- not "this broke" but "this is still
+            # going", which is the one thing it certainly was not. Observed on
+            # a mission whose planner took a 502 from the provider: no plan, no
+            # steps, and a row that still claimed to be in flight hours later.
+            #
+            # BaseException, not Exception, because a cancelled mission is the
+            # commonest way out that is not a return -- CancelledError is not
+            # an Exception, and a mission cancelled at shutdown strands its row
+            # exactly like a crashed one does.
+            #
+            # A halt that goes through the normal path already ends as
+            # `halted`; this reads `_halted` too so the rare halt that escapes
+            # is not downgraded to `failed`. The cost is left as it stands: a
+            # run that died here does not know its bill, and a resumed mission
+            # already carries what its first run spent.
+            runstore.get_store().end_mission(
+                task_id,
+                "halted" if task_id in self._halted else "failed",
+                cost_usd=None,
+            )
+            raise
         finally:
             tracing.end_mission()
             # Back to seeing everything, so the NEXT mission recalls what this
