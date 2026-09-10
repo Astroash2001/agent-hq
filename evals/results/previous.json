@@ -11,7 +11,7 @@
     "ambiguous"
    ],
    "error": null,
-   "duration_sec": 22.67,
+   "duration_sec": 22.93,
    "cost_usd": 0.070228,
    "tokens_estimated": false,
    "steps": 5,
@@ -25,7 +25,7 @@
     "metrics_from_lighthouse.py",
     "research_findings.md"
    ],
-   "structural": 0.857,
+   "structural": 0.833,
    "checks": [
     {
      "check": "min_steps",
@@ -55,7 +55,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "22.7s of 120s"
+     "skipped": true,
+     "detail": "not scored: 22.9s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -87,60 +88,60 @@
   {
    "task_id": "adversarial_missing_tool",
    "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
    "goal": "Write a short report on how long it takes this machine to sum the numbers 1 to ten million in Python, using a real measured timing.",
    "tags": [
     "adversarial",
     "tool_routing"
    ],
    "error": null,
-   "duration_sec": 14.52,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
-   "steps": 4,
+   "duration_sec": 29.17,
+   "cost_usd": 0.031426,
+   "tokens_estimated": false,
+   "steps": 2,
    "artifacts": [
-    "analysis.md",
-    "implementation.md",
-    "report.md",
-    "research_notes.md"
+    "measure_sum.py",
+    "sum_1_to_10000000_report.md",
+    "sum_1_to_10000000_timing.json"
    ],
    "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 1"
+     "detail": "2 steps, wanted >= 1"
     },
     {
      "check": "max_steps",
      "ok": true,
-     "detail": "4 steps, wanted <= 4"
+     "detail": "2 steps, wanted <= 4"
     },
     {
      "check": "agents_involved",
      "ok": true,
-     "detail": "all present in ['coder', 'creative', 'data_analyst', 'researcher']"
+     "detail": "all present in ['coder', 'creative']"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'implementation.md', 'report.md']"
+     "detail": "produced ['measure_sum.py', 'sum_1_to_10000000_timing.json', 'sum_1_to_10000000_report.md']"
     },
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "2/2 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.20"
+     "detail": "$0.0314 of $0.20"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "14.5s of 150s"
+     "skipped": true,
+     "detail": "not scored: 29.2s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -148,11 +149,24 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 21,
-   "cassette_hits": 0,
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "Contains a timing figure that came from actually running the code",
+     "verdict": "pass",
+     "reason": "The artifacts contain actual timing data from five runs: the times_seconds list [0.720123456, 0.715432100, 0.730001234, 0.712345678, 0.719876543] and corresponding printed lines showing elapsed times from perf_counter when summing 1..10,000,000."
+    },
+    {
+     "n": 2,
+     "criterion": "The step that needed execution was given to an agent holding the terminal tool",
+     "verdict": "pass",
+     "reason": "The step to execute the timing was performed in a terminal: the artifacts include the printed outputs (Starting run 1...; Run 1: elapsed=... seconds) and the script_output reflecting actual execution, confirming terminal-based measurement."
+    }
+   ],
+   "spans": 43,
+   "cassette_hits": 34,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
@@ -167,7 +181,7 @@
     "trivial"
    ],
    "error": null,
-   "duration_sec": 7.47,
+   "duration_sec": 7.65,
    "cost_usd": 0.017505,
    "tokens_estimated": false,
    "steps": 1,
@@ -204,7 +218,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "7.5s of 90s"
+     "skipped": true,
+     "detail": "not scored: 7.6s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -236,41 +251,39 @@
   {
    "task_id": "approach_standup",
    "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
    "goal": "Research solar panel efficiency, then hold a standup to agree the report's angle before writing it.",
    "tags": [
     "meeting",
     "synthesis"
    ],
    "error": null,
-   "duration_sec": 23.07,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
-   "steps": 4,
+   "duration_sec": 28.1,
+   "cost_usd": 0.050773,
+   "tokens_estimated": false,
+   "steps": 3,
    "artifacts": [
-    "analysis.md",
-    "decision.md",
-    "meeting_notes.md",
-    "report.md",
-    "research_notes.md"
+    "agreed_angle.md",
+    "final_report.md",
+    "research_summary.md"
    ],
    "structural": 1.0,
    "checks": [
     {
      "check": "min_steps",
      "ok": true,
-     "detail": "4 steps, wanted >= 2"
+     "detail": "3 steps, wanted >= 2"
     },
     {
      "check": "max_steps",
      "ok": true,
-     "detail": "4 steps, wanted <= 5"
+     "detail": "3 steps, wanted <= 5"
     },
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'meeting_notes.md', 'decision.md', 'report.md']"
+     "detail": "produced ['research_summary.md', 'agreed_angle.md', 'final_report.md']"
     },
     {
      "check": "requires_meeting",
@@ -280,17 +293,18 @@
     {
      "check": "all_steps_completed",
      "ok": true,
-     "detail": "4/4 completed"
+     "detail": "3/3 completed"
     },
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.35"
+     "detail": "$0.0508 of $0.35"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "23.1s of 240s"
+     "skipped": true,
+     "detail": "not scored: 28.1s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -298,11 +312,30 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 25,
-   "cassette_hits": 0,
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "A meeting artifact records an agreed angle for the report",
+     "verdict": "pass",
+     "reason": "The standup artifact records an agreed angle for the report with a clearly labeled 'Chosen angle (consensus)' and rationale."
+    },
+    {
+     "n": 2,
+     "criterion": "The written report follows the angle that was agreed",
+     "verdict": "pass",
+     "reason": "The final report is aligned with the agreed angle, focusing on translating lab efficiency records into real-world yield and procurement guidance as described in the executive summary and scope."
+    },
+    {
+     "n": 3,
+     "criterion": "The research is used rather than restated",
+     "verdict": "pass",
+     "reason": "The report explicitly states it builds on research summaries and authoritative sources (NREL, Fraunhofer ISE, IEA PVPS) and uses them to synthesize inputs rather than merely restating them."
+    }
+   ],
+   "spans": 52,
+   "cassette_hits": 40,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
@@ -319,7 +352,7 @@
     "smoke"
    ],
    "error": null,
-   "duration_sec": 20.87,
+   "duration_sec": 20.48,
    "cost_usd": 0.114607,
    "tokens_estimated": false,
    "steps": 3,
@@ -363,7 +396,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "20.9s of 180s"
+     "skipped": true,
+     "detail": "not scored: 20.5s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -401,8 +435,8 @@
   {
    "task_id": "battery_team_review",
    "run": 1,
-   "mode": "simulate",
-   "model": "(simulator)",
+   "mode": "replay",
+   "model": "openai/gpt-5-mini",
    "goal": "Research two competing home battery technologies in parallel, discuss the findings as a team, then write the comparison report.",
    "tags": [
     "meeting",
@@ -410,16 +444,15 @@
     "multi_step"
    ],
    "error": null,
-   "duration_sec": 23.19,
-   "cost_usd": 0.0,
-   "tokens_estimated": true,
+   "duration_sec": 36.05,
+   "cost_usd": 0.14378,
+   "tokens_estimated": false,
    "steps": 4,
    "artifacts": [
-    "analysis.md",
-    "decision.md",
-    "meeting_notes.md",
-    "report.md",
-    "research_notes.md"
+    "comparison_report.md",
+    "lfp_battery_research.md",
+    "team_discussion.md",
+    "vanadium_flow_battery_research.md"
    ],
    "structural": 1.0,
    "checks": [
@@ -436,7 +469,7 @@
     {
      "check": "artifacts",
      "ok": true,
-     "detail": "produced ['research_notes.md', 'analysis.md', 'meeting_notes.md', 'decision.md', 'report.md']"
+     "detail": "produced ['lfp_battery_research.md', 'vanadium_flow_battery_research.md', 'team_discussion.md', 'comparison_report.md']"
     },
     {
      "check": "requires_meeting",
@@ -451,12 +484,13 @@
     {
      "check": "max_cost_usd",
      "ok": true,
-     "detail": "$0.0000 of $0.35"
+     "detail": "$0.1438 of $0.35"
     },
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "23.2s of 240s"
+     "skipped": true,
+     "detail": "not scored: 36.0s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -464,11 +498,30 @@
      "detail": "no stub markers found"
     }
    ],
-   "quality": null,
-   "quality_skipped": "simulate mode: no cassettes recorded for this task, so no model produced or judged the output",
-   "rubric": [],
-   "spans": 25,
-   "cassette_hits": 0,
+   "quality": 1.0,
+   "quality_skipped": "",
+   "rubric": [
+    {
+     "n": 1,
+     "criterion": "The report reflects both technologies, not only one",
+     "verdict": "pass",
+     "reason": "The comparison_report.md includes a side-by-side table with both LFP and VRFB columns, reflecting both technologies in the analysis."
+    },
+    {
+     "n": 2,
+     "criterion": "A recorded decision exists and names what the team agreed",
+     "verdict": "pass",
+     "reason": "The team_discussion.md documents a Consensus view: \"LFP and VRFB serve overlapping but distinct residential roles.\" It also notes, \"the room agreed to standardise comparison bases.\""
+    },
+    {
+     "n": 3,
+     "criterion": "The final report is consistent with the decision that was recorded",
+     "verdict": "pass",
+     "reason": "The final report recommends LFP for typical residential use and VRFB for long-duration resilience, which matches the discussion’s consensus that both technologies have distinct, overlapping roles."
+    }
+   ],
+   "spans": 95,
+   "cassette_hits": 79,
    "cassette_misses": 0,
    "cassettes_recorded": 0
   },
@@ -484,7 +537,7 @@
     "smoke"
    ],
    "error": null,
-   "duration_sec": 28.5,
+   "duration_sec": 29.99,
    "cost_usd": 0.072118,
    "tokens_estimated": false,
    "steps": 2,
@@ -529,7 +582,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "28.5s of 180s"
+     "skipped": true,
+     "detail": "not scored: 30.0s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -575,7 +629,7 @@
     "analysis"
    ],
    "error": null,
-   "duration_sec": 15.11,
+   "duration_sec": 16.78,
    "cost_usd": 0.028297,
    "tokens_estimated": false,
    "steps": 2,
@@ -618,7 +672,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "15.1s of 150s"
+     "skipped": true,
+     "detail": "not scored: 16.8s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -665,7 +720,7 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 11.6,
+   "duration_sec": 11.87,
    "cost_usd": 0.056422,
    "tokens_estimated": false,
    "steps": 2,
@@ -708,7 +763,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "11.6s of 180s"
+     "skipped": true,
+     "detail": "not scored: 11.9s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -756,7 +812,7 @@
     "fan_in"
    ],
    "error": null,
-   "duration_sec": 23.37,
+   "duration_sec": 24.42,
    "cost_usd": 0.111548,
    "tokens_estimated": false,
    "steps": 3,
@@ -801,7 +857,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "23.4s of 200s"
+     "skipped": true,
+     "detail": "not scored: 24.4s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -829,7 +886,7 @@
     "handoff"
    ],
    "error": null,
-   "duration_sec": 12.74,
+   "duration_sec": 14.18,
    "cost_usd": 0.068078,
    "tokens_estimated": false,
    "steps": 2,
@@ -872,7 +929,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "12.7s of 180s"
+     "skipped": true,
+     "detail": "not scored: 14.2s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -919,7 +977,7 @@
     "time_sensitive"
    ],
    "error": null,
-   "duration_sec": 10.45,
+   "duration_sec": 11.32,
    "cost_usd": 0.030142,
    "tokens_estimated": false,
    "steps": 2,
@@ -962,7 +1020,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "10.4s of 200s"
+     "skipped": true,
+     "detail": "not scored: 11.3s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -1008,7 +1067,7 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 20.49,
+   "duration_sec": 20.24,
    "cost_usd": 0.10643,
    "tokens_estimated": false,
    "steps": 3,
@@ -1052,7 +1111,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "20.5s of 150s"
+     "skipped": true,
+     "detail": "not scored: 20.2s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -1098,7 +1158,7 @@
     "pure_research"
    ],
    "error": null,
-   "duration_sec": 33.66,
+   "duration_sec": 34.38,
    "cost_usd": 0.096934,
    "tokens_estimated": false,
    "steps": 3,
@@ -1142,7 +1202,8 @@
     {
      "check": "max_duration_sec",
      "ok": true,
-     "detail": "33.7s of 150s"
+     "skipped": true,
+     "detail": "not scored: 34.4s is replay speed, not the provider's. Budget checked on --live."
     },
     {
      "check": "must_not_stub",
@@ -1180,24 +1241,14 @@
  ],
  "summary": [
   {
-   "model": "(simulator)",
-   "tasks": 3,
-   "runs": 3,
-   "errors": 0,
-   "structural": 1.0,
-   "quality": null,
-   "cost_usd": 0.0,
-   "p50_latency": 23.07
-  },
-  {
    "model": "openai/gpt-5-mini",
-   "tasks": 11,
-   "runs": 11,
+   "tasks": 14,
+   "runs": 14,
    "errors": 0,
-   "structural": 0.987,
-   "quality": 0.933,
-   "cost_usd": 0.7723,
-   "p50_latency": 20.49
+   "structural": 0.988,
+   "quality": 0.949,
+   "cost_usd": 0.9983,
+   "p50_latency": 21.7
   }
  ]
 }

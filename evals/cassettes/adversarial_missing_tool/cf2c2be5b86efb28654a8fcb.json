@@ -1,0 +1,23 @@
+{
+ "attempts": 1,
+ "completion_tokens": 25,
+ "cost_usd": 0.001422,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 5487,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "stop",
+    "message": {
+     "content": "Wrote the timing results and measurement script to sum_1_to_10000000_timing.json.",
+     "tool_calls": []
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 25,
+   "prompt_tokens": 5487
+  }
+ }
+}

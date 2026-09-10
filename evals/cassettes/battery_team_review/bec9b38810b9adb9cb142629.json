@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 188,
+ "cost_usd": 0.00268,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 9216,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"zinc bromine flow battery Redflow residential home ZBM3 cost specs cycle life 'Redflow' 'home' 2023 2024\", \"max_results\": 10}",
+        "name": "web_search"
+       },
+       "id": "call_8skI1NBIMcIbhbJXZ7lbaqqF"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 188,
+   "prompt_tokens": 9216
+  }
+ }
+}

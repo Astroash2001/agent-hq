@@ -625,23 +625,124 @@ def test_the_committed_baseline_is_readable_and_deterministic_against_itself():
 
 def test_a_cassette_is_not_served_for_a_different_model(monkeypatch):
     """
-    `base_agent` calls `acompletion(messages, tools=...)` with no model, so the
-    cassette key hashes "" for every agent turn and does not distinguish models
-    at all. Without this check a suite recorded on flash-lite replays clean
-    under flash, and the scorecard prints the model that was *asked for* beside
-    answers that model never produced -- which is the one column the whole
+    A NAMED call -- the critic, the synthesis pass and the judge all name
+    `settings.fallback_model` -- keys on the name it asked for. Serving it a
+    recording made by some other model prints the model that was *asked for*
+    beside answers that model never produced, which is the one column the whole
     scorecard is about.
     """
     monkeypatch.setattr(settings, "default_model", "gemini/gemini-3.5-flash")
     entry = {"model": "gemini/gemini-3.5-flash-lite"}
 
     with pytest.raises(replay_mod.CassetteModelMismatch) as excinfo:
-        replay_mod._check_model(entry, None, "abc123", "code_cache_bug")
+        replay_mod._check_model(entry, "gemini/gemini-3.5-flash", "abc123",
+                                "code_cache_bug")
 
     message = str(excinfo.value)
     assert "gemini/gemini-3.5-flash-lite" in message
     assert "gemini/gemini-3.5-flash" in message
     assert "--record" in message, "the message must say how to fix it"
+
+
+def test_an_unnamed_call_is_not_measured_against_the_environment(monkeypatch):
+    """
+    `base_agent` calls `acompletion(messages, tools=...)` with no model at all.
+    `cassette_key` hashes the model exactly as the caller passed it, so a key
+    built from None can only match a recording made by a call that also passed
+    None -- the hit is already proof the two are the same call, and there is
+    nothing left to check.
+
+    What `settings.default_model` names is a provider a replay never reaches.
+    Comparing against it made the README's offline `--replay` fail on all
+    fourteen tasks on any machine whose DEFAULT_MODEL was not the recording
+    model, which is the ordinary case: the env default follows whichever lane
+    is cheapest this month, the committed cassettes do not move.
+    """
+    monkeypatch.setattr(settings, "default_model", "openai/minimax-m3-free")
+    replay_mod._check_model({"model": "openai/gpt-5-mini"}, None, "k", "t")
+
+
+def test_a_replay_reports_the_model_that_answered_not_the_one_configured():
+    """
+    The labelling hole the guard above exists to close, closed from the other
+    end: an unnamed call is no longer refused, so the row must not take its
+    model from the environment. `Cassettes.served_default` collects what the
+    recordings say answered, and the row prints that.
+    """
+    cassettes = replay_mod.Cassettes("adversarial_trivial")
+    if not cassettes.exists():
+        pytest.skip("no committed cassettes")
+    assert cassettes.served_default == set(), "nothing served yet"
+
+    pinned = replay_mod.recording_manifest("adversarial_trivial")
+    assert pinned.get("default_model"), "committed cassettes carry their models"
+
+
+def test_recording_manifest_round_trips(monkeypatch):
+    """
+    The manifest is what removes the environment from replay. Named calls key
+    on `settings.fallback_model`, so a machine configured differently misses
+    every critic, synthesis and judge cassette and silently degrades a scored
+    suite to an unjudged one -- no error, just an empty quality column.
+
+    tempfile rather than pytest's tmp_path, for the reason the other suites
+    give: pytest cannot create its tmp root on this machine.
+    """
+    monkeypatch.setattr(settings, "default_model", "openai/gpt-5-mini")
+    monkeypatch.setattr(settings, "fallback_model", "openai/gpt-5-nano")
+    root = tempfile.mkdtemp(prefix="agenthq_manifest_")
+    try:
+        replay_mod.write_recording_manifest("some_task", root=root)
+
+        assert replay_mod.recording_manifest("some_task", root=root) == {
+            "default_model": "openai/gpt-5-mini",
+            "fallback_model": "openai/gpt-5-nano",
+        }
+        # A task recorded before manifests existed reads as "nothing pinned"
+        # rather than raising -- the cassettes are still worth serving.
+        assert replay_mod.recording_manifest("never_recorded", root=root) == {}
+        # And the manifest is not itself a cassette.
+        assert replay_mod.Cassettes("some_task", root=root).count() == 0
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_every_committed_cassette_carries_its_models():
+    """A directory with no manifest replays against whatever the env says."""
+    root = replay_mod.CASSETTE_ROOT
+    if not os.path.isdir(root):
+        pytest.skip("no committed cassettes")
+    for task_id in sorted(os.listdir(root)):
+        if not os.path.isdir(os.path.join(root, task_id)):
+            continue
+        pinned = replay_mod.recording_manifest(task_id)
+        assert pinned.get("default_model"), f"{task_id} has no recording manifest"
+        assert pinned.get("fallback_model"), f"{task_id} has no fallback pinned"
+
+
+def test_a_latency_budget_is_not_scored_on_replay():
+    """
+    A duration budget replayed from disk measures this machine, not the system
+    under test: the model calls return at disk speed and what is left on the
+    clock is local CPU. Scoring it made the offline suite non-deterministic
+    across machines -- `--compare` called two identical runs NOT DETERMINISTIC
+    over exactly this check -- which is the one property the suite exists to
+    have. It is still checked where the number means something.
+    """
+    task = {"budget": {"max_duration_sec": 5}}
+    manifest = {"cost_usd": 0.0}
+
+    replayed = runner_mod.budget_checks(task, manifest, 900.0, "replay")
+    duration = [c for c in replayed if c["check"] == "max_duration_sec"]
+    assert duration and duration[0]["skipped"] is True
+    # Out of the denominator entirely, not counted as a pass.
+    assert runner_mod.structural_score(duration) == 0.0
+
+    for mode in ("live", "record"):
+        checks = runner_mod.budget_checks(task, manifest, 900.0, mode)
+        scored = [c for c in checks if c["check"] == "max_duration_sec"]
+        assert scored and not scored[0].get("skipped")
+        assert scored[0]["ok"] is False, f"{mode} still enforces the budget"
 
 
 def test_the_recorded_model_replays_without_complaint(monkeypatch):

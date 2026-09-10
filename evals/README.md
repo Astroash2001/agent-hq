@@ -60,7 +60,7 @@ score by omitting what it could not satisfy.
 
 | Mode | What happens | Deterministic? |
 |---|---|---|
-| `--replay` (default) | Model exchanges served from `cassettes/`. A miss is a hard error naming the key it wanted — **never** a live call | Yes |
+| `--replay` (default) | Model exchanges served from `cassettes/`, under the models named in each task's `_recording.json`. A miss is a hard error naming the key it wanted — **never** a live call | Yes |
 | `--record` | Calls the real provider and writes cassettes. Needs a key and spends money | No |
 | `--live` | Calls the provider without recording. For poking at a change before committing to a recording | No |
 | *(automatic)* `simulate` | No cassettes exist for a task, so the run falls to the harness's built-in simulator | Yes |
@@ -74,7 +74,36 @@ scheduling, the workspace, the spatial runtime and the contract layer — it sim
 cannot be scored on content, so `quality` shows `—` and the scorecard says why.
 
 A `simulate` row is not a passing quality score and must never be read as one.
-To get a real quality column, record cassettes with a key and commit them.
+To get a real quality column, record cassettes with a key and commit them. All
+fourteen tasks are recorded, so no row falls to `simulate` today.
+
+### `_recording.json`
+
+Written beside a task's cassettes by `--record`, read back by `--replay`:
+
+```json
+{"default_model": "openai/gpt-5-mini", "fallback_model": "openai/gpt-5-nano"}
+```
+
+`cassette_key` hashes the model exactly as the caller passed it. Most calls pass
+nothing and let the default apply, but the critic, the synthesis pass and the
+judge all name `settings.fallback_model` — so that name is in their keys, and a
+machine with a different fallback configured misses precisely those cassettes.
+Nothing errors; the quality column just empties. Pinning both names from disk
+takes the environment out of replay entirely, which is the property the mode
+exists to have.
+
+Two consequences worth knowing:
+
+- **A replay row reports the model the cassettes say answered**, not the one
+  configured. A call that names no model cannot be checked against
+  `settings.default_model` — in replay that setting describes a provider the run
+  never reaches — so the row is labelled from the recording instead. A call that
+  *does* name a model is still refused outright on a mismatch.
+- **`max_duration_sec` is unscored on replay.** Served from disk, what is left
+  on the clock is the machine and not the provider. It is `skipped` — out of the
+  structural denominator, not counted as a pass — and still enforced under
+  `--live` and `--record`.
 
 ### Why a cassette miss is fatal
 

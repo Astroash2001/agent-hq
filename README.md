@@ -148,9 +148,12 @@ python -m evals.runner --suite all --replay      # offline, no key, deterministi
 
 | task | mode | structural | quality | cost |
 |---|---|---|---|---|
-| `adversarial_ambiguous` | replay | 86% | 100% | $0.0702 |
+| `adversarial_ambiguous` | replay | 83% | 100% | $0.0702 |
+| `adversarial_missing_tool` | replay | 100% | 100% | $0.0314 |
 | `adversarial_trivial` | replay | 100% | 50% | $0.0175 |
+| `approach_standup` | replay | 100% | 100% | $0.0508 |
 | `battery_comparison` | replay | 100% | 100% | $0.1146 |
+| `battery_team_review` | replay | 100% | 100% | $0.1438 |
 | `code_cache_bug` | replay | 100% | 100% | $0.0721 |
 | `code_review_fix` | replay | 100% | 83% | $0.0283 |
 | `ev_charging_standards` | replay | 100% | 100% | $0.0564 |
@@ -159,21 +162,32 @@ python -m evals.runner --suite all --replay      # offline, no key, deterministi
 | `india_news_brief` | replay | 100% | 100% | $0.0301 |
 | `solar_efficiency` | replay | 100% | 100% | $0.1064 |
 | `solid_state_batteries` | replay | 100% | 100% | $0.0969 |
-| the other three | simulate | 100% | — | — |
-| **11 on gpt-5-mini** | **replay** | **99%** | **93%** | **$0.7723** |
+| **all 14 on gpt-5-mini** | **replay** | **99%** | **95%** | **$0.9983** |
 
 **structural** is the `expect` block — step count, agents involved, artifacts
 produced — deterministic, no model involved. **quality** is `evals/judge.py`
-scoring each rubric line against the artifact files. Five tasks replay from
-committed cassettes recorded against `gemini-3.5-flash-lite`; the other nine have
-no cassettes yet and fall to the simulator, where they say `unjudged` rather than
-borrowing a score. Two replay runs agreed on all 14 verdicts.
+scoring each rubric line against the artifact files. Every one of the fourteen
+replays from committed cassettes recorded against `openai/gpt-5-mini`, so no row
+falls to the simulator and no row borrows a score. `grid_storage_tradeoffs`
+shows `—` because the judge's reply on that task was not JSON: an unreadable
+grade is reported as no grade rather than a zero, which would blame the run for
+the judge's bad day.
+
+**The replay needs nothing from your environment.** Each task's cassettes carry
+the models they were recorded under, in `_recording.json` beside them, and the
+run resolves both the default and the fallback from there. That matters because
+`cassette_key` hashes the model name a call asked for: the critic, the synthesis
+pass and the judge all name `fallback_model`, so a machine configured
+differently used to miss every one of those keys and quietly turn a scored suite
+into an unjudged one. Two consecutive full replays under a deliberately wrong
+`DEFAULT_MODEL` now come back byte-identical on all 14 verdicts —
+`--compare` prints `DETERMINISTIC`.
 
 **Recording is what makes those rows worth reading, and it is unflattering.** On
-the simulator all fourteen read 100%. Against a real model, `adversarial_ambiguous`
-scores **0%** on quality, `adversarial_trivial` **50%**, and `battery_comparison`
-fails structurally. None of that has been tuned away: a suite you edit to match
-the model measures the edit.
+the simulator all fourteen read 100%. Against a real model `adversarial_trivial`
+scores **50%** on quality, `code_review_fix` **83%**, and `adversarial_ambiguous`
+drops to **83%** structural — the suite's only `pass@k` miss. None of that has
+been tuned away: a suite you edit to match the model measures the edit.
 
 Getting there took three recording sweeps, because two of them proved the
 cassettes were not reproducible at all:
@@ -194,19 +208,34 @@ cassettes were not reproducible at all:
   `acompletion` with no model argument, so every agent turn hashed `""` and the
   key never distinguished models. CI's smoke step was replaying flash-lite
   recordings under flash with 16 hits and 0 misses, printing the wrong name in
-  the model column. A mismatch is refused now.
+  the model column. A call that *names* a model is refused on a mismatch now,
+  and an unnamed one is labelled with the model the cassette says answered —
+  refusing it instead was a fourth fault, and the loudest: it compared against
+  `DEFAULT_MODEL`, which in replay names a provider the run never reaches, so
+  the documented offline command failed on all 14 tasks on any machine whose
+  env had moved on. That is what `_recording.json` fixes.
 
-**The remaining nine tasks need one `--record` sweep**, blocked only on the
-account's daily Gemini quota:
+**Re-recording now costs money.** The free lanes this project had been using —
+`openai/minimax-m3-free` and the `gemini-3.5-flash-lite` fallback — both answer
+`model_requires_purchase` since September 2026, so a sweep names a paid model
+explicitly:
 
 ```bash
-python -m evals.runner --suite all --model gemini/gemini-3.5-flash-lite --record
+DEFAULT_MODEL=openai/gpt-5-mini FALLBACK_MODEL=openai/gpt-5-nano \
+  python -m evals.runner --suite all --model openai/gpt-5-mini --record
 ```
 
-There is no cost column because cost is not measurable: neither
-`gemini-3.5-flash` nor `-flash-lite` has a row in `pricing.py`, which refuses to
-guess, so every figure reads $0.0000. The suite marks that budget check unscored
-rather than passing it, and the server warns at startup.
+The cost column is real USD from `mission.json`, priced by `backend/pricing.py`
+at the model that actually answered. It reads $0.0000 for any model with no row
+there, because `pricing.py` refuses to guess — the suite then marks the budget
+check unscored rather than passing it, and the server warns at startup.
+
+A task's **latency** budget is unscored on replay for the same reason: served
+from disk, what is left on the clock is the machine, not the provider. Scoring
+it was the last thing making the offline suite non-deterministic — the same
+cassettes passed `battery_comparison`'s duration check on one run and failed it
+on another. `--live` and `--record` still enforce it, where the number means
+something.
 
 Those rows were not always green, and the way they went green is the point of
 having them. Five failed on the first scorecard: the fallback planner answered
@@ -336,7 +365,7 @@ OpenAI-compatible gateway. See [[DECISIONS]].
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 439 tests, all passing
+cd backend && python -m pytest -q      # 444 tests, all passing
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, plus `ruff check` and the eval

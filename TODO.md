@@ -363,10 +363,13 @@ at the time -- and both since fixed, which is the point of measuring:
   fanned out to its full 4-step bucket. **Fixed** -- see below.
 - `adversarial_missing_tool` targets the planner-tool-grants gap. Its structural
   row passes (the code bucket already routes execution to `coder`); what it
-  actually measures is the rubric, which is still unjudged.
+  actually measures is the rubric, which now scores 100%.
 
-The quality column is empty until cassettes are recorded, which needs a real key
-and real spend. The scorecard says so in prose rather than printing a number.
+The quality column is filled: all fourteen tasks are recorded against
+`openai/gpt-5-mini` and committed, so the scorecard prints measured numbers
+rather than prose explaining their absence. Thirteen carry a judged score; see
+the Testing section for the one that does not, and for the three faults that
+stood between "the cassettes exist" and "anyone else can replay them".
 
 ### Meetings were a monologue
 
@@ -655,7 +658,7 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**439 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+**449 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
 across 34 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool
@@ -665,12 +668,52 @@ endpoint, attachments, the tool-message wire shape and the recall horizon. CI
 runs the same suite on 3.10 and 3.12, with `ruff check` and the eval smoke
 suite.
 
-The CI eval step is described in the workflow as replaying cassettes, which it
-does not: there are none, so `--replay` finds no recording, `credentials_for`
-clears credentials in simulate mode and the suite runs the simulator. The run is
-deterministic and offline either way, which is what the step is there for — but
-the comment claims a stronger guarantee than the repo currently earns, and will
-only become true once cassettes exist.
+**Done: the CI eval step really does replay now.** It used to describe itself as
+replaying cassettes when there were none, so `--replay` found no recording and
+ran the simulator. All fourteen tasks are recorded against `openai/gpt-5-mini`,
+both smoke tasks among them, and CI replays them with no credential.
+
+Three things had to be fixed before the committed recordings were usable by
+anyone but the machine that made them, and the first was the worst:
+
+- **`--replay` failed on all 14 tasks.** The model guard compared each cassette
+  against `settings.default_model` — which, in a mode that reaches no provider,
+  is this machine's env talking about a lane the run never calls. The env had
+  moved to `minimax-m3-free`; the cassettes had not moved at all. An unnamed
+  call is no longer checked against it, because `cassette_key` hashes the model
+  exactly as the caller passed it: a key built from `None` can only match a
+  recording made by a call that also passed `None`, so the hit is already proof
+  the two are the same call. The labelling hole the guard exists to close is
+  closed from the other end instead — the row prints the model the cassettes
+  say answered, gathered while serving them.
+- **Named calls still keyed on the environment.** The critic, the synthesis pass
+  and the judge all name `settings.fallback_model`, and that name is in the key,
+  so a machine with a different fallback missed exactly those cassettes and
+  turned a scored suite into an unjudged one with no error. Each task now
+  carries `_recording.json` beside its cassettes, naming the default and
+  fallback it was recorded under, and replay pins both from it.
+- **The latency budget made replay non-deterministic.** `max_duration_sec` was
+  scored against wall-clock time on a run served from disk, so it measured the
+  machine: `battery_comparison` passed it on one box and failed it on another
+  from identical cassettes, and `--compare` correctly called two identical runs
+  `NOT DETERMINISTIC`. It is `skipped` on replay now — out of the denominator,
+  not passed — and still enforced on `--live` and `--record`. This is the only
+  reason `adversarial_ambiguous` reads 83% structural rather than 86%: same
+  failure, one fewer check in the denominator.
+
+Two consecutive full replays now compare `DETERMINISTIC` across all 14 tasks
+under a deliberately wrong `DEFAULT_MODEL`.
+
+**Also fixed while in here:** `--suite smoke` used to rewrite the committed
+`scorecard.md`, replacing its fourteen rows with two and taking `previous.json`
+— the baseline the next run's delta column is computed against — with it. Only
+`--suite all` may write the scorecard now; a subset says where its results went
+and leaves the record alone.
+
+Still open: `grid_storage_tradeoffs` has no quality score, because the judge's
+reply on that task was not JSON. Reported as no grade rather than a zero, which
+would blame the run for the judge's bad day — but it is a real gap in the
+scorecard and re-recording that one task is what closes it.
 
 **Not covered:**
 
@@ -847,29 +890,48 @@ pastes that block into the system prompt. Normalised out of the key like the
 date line — contents only, not presence, since an agent that remembered nothing
 was asked a different question.
 
-**Where it stands:** 9 of 14 tasks recorded — 95% structural, 93% quality across
-them. Seven replay clean; `battery_team_review` and `ev_charging_standards` still
-miss and say so. The other five have no cassettes and fall to the simulator,
-marked `unjudged`.
+**Where it stands: all 14 tasks recorded, on `openai/gpt-5-mini`.** `--suite all
+--replay` runs the whole suite offline with no errors -- 99% structural, 95%
+quality, $0.9983 of recorded spend, 21.7s median. Nothing falls to the simulator
+any more, so no row is unjudged for want of a recording.
 
-Two things this does *not* establish, and they matter:
+The three that had never been recorded were the last gap and are now real:
+`adversarial_missing_tool`, `approach_standup` and `battery_team_review`. The
+last of those used to complete 1 of 4 steps; it completes all four and scores
+100% on both columns.
 
-- The recall normalisation changed every key for a prompt carrying hints, so the
-  cassettes recorded before it cannot confirm that fix end to end. The unit
-  tests pin the normalisation; the end-to-end proof needs a re-record.
-- `ev_charging_standards` was recorded partially (its own run scored 71%), so its
-  misses may be the incomplete recording rather than anything in the harness.
+Both open questions from the flash-lite sweep close with it. The recall
+normalisation is confirmed end to end, because every cassette in the suite was
+recorded after it. `ev_charging_standards` replays clean at 100%/100%, so its
+old misses were the partial recording rather than anything in the harness.
 
-Both clear with one sweep, once the daily Gemini quota resets:
+**The free models are gone**, which is what ended the sweep that was running
+against them. `openai/minimax-m3-free` and the `openai/gemini-3.5-flash-lite`
+fallback both answer `model_requires_purchase: this model's serving lanes
+require a credit purchase; the $1 card verification is not enough`. That sweep
+is why three tasks briefly carried *fallback*-model cassettes which
+`_check_model` then refused to replay under the primary -- the guard working,
+not a bug. Re-recording is against a paid model or not at all:
 
 ```bash
-python -m evals.runner --suite all --model gemini/gemini-3.5-flash-lite --record
+DEFAULT_MODEL=openai/gpt-5-mini FALLBACK_MODEL=openai/gpt-5-nano \
+  python -m evals.runner --suite all --model openai/gpt-5-mini --record
 ```
 
-And then the same against `gemini-3.5-flash` itself. That model is throttled to
-near-nothing: a single task took 465s of backoff and scored 50%, which is why
-the suite is recorded on the fallback and the scorecard names which model
-answered.
+**What the recorded suite still shows failing**, none of it introduced by the
+sweep and none of it edited away:
+
+- `adversarial_ambiguous` -- 86% structural, and the suite's only `pass@k` miss.
+- `adversarial_trivial` -- 50% quality.
+- `code_review_fix` -- 83% quality.
+- `grid_storage_tradeoffs` -- unjudged, "reply was not JSON". That is the
+  *judge's* reply, not the mission's: the task scores 100% structural and wrote
+  its artifacts, so it is the judge call that needs looking at, not the run.
+
+One recording-mode caveat worth keeping. `max_duration_sec` is measured on wall
+clock, so a task can fail it while recording -- 231s and 278s against 150s and
+240s budgets on the two new ones -- and pass comfortably on replay. The replay
+scorecard is the one that counts.
 
 ### The container ran uvicorn's reloader
 

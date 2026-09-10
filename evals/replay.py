@@ -29,6 +29,10 @@ logger = logging.getLogger("AgentHQ.Evals.Replay")
 
 CASSETTE_ROOT = os.path.join(os.path.dirname(__file__), "cassettes")
 
+# Written beside a task's cassettes by `--record`, read back by `--replay`.
+# Underscored so it sorts away from the keys and reads as not-a-cassette.
+RECORDING_MANIFEST = "_recording.json"
+
 # `config.date_context()` prepends "Today's date is <weekday, dd Month yyyy>."
 # to every agent system prompt and to the planner's. That is deliberate and
 # correct -- a model asked about the news has no idea what day it is -- but it
@@ -230,6 +234,11 @@ class Cassettes:
         self.hits = 0
         self.misses: List[str] = []
         self.recorded = 0
+        # Models that answered calls which named none -- i.e. whatever the
+        # default resolved to at record time. Observed while serving, so a
+        # replay can report the model that actually produced the answers
+        # instead of the one this machine's environment happens to name.
+        self.served_default: set = set()
 
     def path_for(self, key: str) -> str:
         return os.path.join(self.dir, f"{key}.json")
@@ -240,7 +249,8 @@ class Cassettes:
     def count(self) -> int:
         if not os.path.isdir(self.dir):
             return 0
-        return len([f for f in os.listdir(self.dir) if f.endswith(".json")])
+        return len([f for f in os.listdir(self.dir)
+                    if f.endswith(".json") and f != RECORDING_MANIFEST])
 
     def load(self, key: str) -> Optional[Dict[str, Any]]:
         path = self.path_for(key)
@@ -254,6 +264,43 @@ class Cassettes:
         with open(self.path_for(key), "w", encoding="utf-8") as fh:
             json.dump(entry, fh, indent=1, ensure_ascii=False, sort_keys=True)
         self.recorded += 1
+
+
+def write_recording_manifest(task_id: str, root: str = CASSETTE_ROOT) -> None:
+    """
+    Note the model names this sweep recorded under, beside its cassettes.
+
+    `cassette_key` hashes the model exactly as the caller passed it, so a call
+    that names one -- the critic, the synthesis pass and the judge all name
+    `settings.fallback_model` -- keys on that name. Replay therefore has to ask
+    for the same name to find the recording at all, and a machine whose
+    FALLBACK_MODEL differs misses every one of those keys, silently degrading a
+    scored suite into an unjudged one.
+
+    Two lines of provenance on disk cost nothing and remove the environment
+    from replay entirely, which is what an offline suite is for.
+    """
+    from config import settings
+    os.makedirs(os.path.join(root, task_id), exist_ok=True)
+    path = os.path.join(root, task_id, RECORDING_MANIFEST)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({
+            "default_model": settings.default_model,
+            "fallback_model": settings.fallback_model,
+        }, fh, indent=1, sort_keys=True)
+
+
+def recording_manifest(task_id: str, root: str = CASSETTE_ROOT) -> Dict[str, str]:
+    """The model names `task_id` was recorded under, or {} if it predates them."""
+    path = os.path.join(root, task_id, RECORDING_MANIFEST)
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, str) and v}
 
 
 class CassetteModelMismatch(RuntimeError):
@@ -285,6 +332,22 @@ def _check_model(entry: Dict[str, Any], requested: Optional[str], key: str,
     primary is then correctly refused, because the primary is not what produced
     these answers either.
     """
+    if requested is None:
+        # An unnamed call, and there is nothing here to check. `cassette_key`
+        # hashes the model exactly as the caller passed it, so a key built from
+        # None can only have been recorded by a call that also passed None --
+        # the match is already proof that the two calls are the same call.
+        #
+        # What `settings.default_model` names is a provider this run never
+        # reaches. Comparing against it made the documented offline `--replay`
+        # fail on all fourteen tasks for anyone whose DEFAULT_MODEL was not the
+        # recording model, which is the common case: the env default follows
+        # whichever lane is cheapest this month, the cassettes do not move.
+        #
+        # The labelling hole this guard exists to close stays closed, because
+        # the answer is not that no model is claimed -- it is that the run
+        # reports the model recorded here, gathered below.
+        return
     if not _wrong_model(entry, requested):
         return
     from config import settings
@@ -325,6 +388,8 @@ def make_transport(cassettes: Cassettes, mode: str, real_acompletion):
         if entry is not None:
             if mode != "record":
                 _check_model(entry, model, key, cassettes.task_id)
+                if model is None and entry.get("model"):
+                    cassettes.served_default.add(entry["model"])
             cassettes.hits += 1
             return llm.LLMResult(
                 response=ReplayResponse(entry["response"]),

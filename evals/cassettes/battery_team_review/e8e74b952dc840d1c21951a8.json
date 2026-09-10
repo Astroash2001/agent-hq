@@ -1,0 +1,31 @@
+{
+ "attempts": 1,
+ "completion_tokens": 318,
+ "cost_usd": 0.001901,
+ "fell_back": false,
+ "model": "openai/gpt-5-mini",
+ "prompt_tokens": 5061,
+ "response": {
+  "choices": [
+   {
+    "finish_reason": "tool_calls",
+    "message": {
+     "content": null,
+     "tool_calls": [
+      {
+       "function": {
+        "arguments": "{\"query\":\"BYD Battery-Box LVL LFP specifications BYD B-Box LVL datasheet 2024 2025 BYD energy storage home battery LFP\", \"max_results\":10}",
+        "name": "web_search"
+       },
+       "id": "call_958i8jw4gcAx3NAMliJJdRQQ"
+      }
+     ]
+    }
+   }
+  ],
+  "usage": {
+   "completion_tokens": 318,
+   "prompt_tokens": 5061
+  }
+ }
+}

@@ -77,19 +77,25 @@ def load_tasks(suite: str) -> List[Dict[str, Any]]:
 # --------------------------------------------------------------- isolation
 
 @contextlib.contextmanager
-def isolated_state(model: Optional[str]):
+def isolated_state(model: Optional[str], pin: Optional[Dict[str, str]] = None):
     """
     Run against scratch memory and a scratch mission directory.
 
     Restores everything on the way out, including on a raise -- a suite that
     left `settings.memory_path` pointing at a deleted temp file would poison
     every later run in the same process.
+
+    `pin` carries the model names a replay's cassettes were recorded under, so
+    the run resolves the same names the recording did rather than whatever this
+    machine's environment happens to say. An explicit `--model` still wins for
+    the default: asking for a model by name is a deliberate act.
     """
     scratch = tempfile.mkdtemp(prefix="agenthq_evals_")
     saved = {
         "memory_path": settings.memory_path,
         "missions_path": settings.missions_path,
         "default_model": settings.default_model,
+        "fallback_model": settings.fallback_model,
         "llm_strict": settings.llm_strict,
         "tracing_enabled": settings.tracing_enabled,
     }
@@ -102,6 +108,8 @@ def isolated_state(model: Optional[str]):
     # A failed model call must surface as a failed task, not slide onto the
     # simulator and be scored as though a model answered.
     settings.llm_strict = True
+    for key, value in (pin or {}).items():
+        setattr(settings, key, value)
     if model:
         settings.default_model = model
 
@@ -217,7 +225,7 @@ def structural_checks(task: Dict[str, Any], manifest: Dict[str, Any]) -> List[Di
 
 
 def budget_checks(task: Dict[str, Any], manifest: Dict[str, Any],
-                  duration: float) -> List[Dict[str, Any]]:
+                  duration: float, mode: str = "live") -> List[Dict[str, Any]]:
     budget = task.get("budget") or {}
     checks = []
     if "max_cost_usd" in budget:
@@ -244,9 +252,27 @@ def budget_checks(task: Dict[str, Any], manifest: Dict[str, Any],
             checks.append({"check": "max_cost_usd", "ok": cost <= budget["max_cost_usd"],
                            "detail": f"${cost:.4f} of ${budget['max_cost_usd']:.2f}"})
     if "max_duration_sec" in budget:
-        checks.append({"check": "max_duration_sec",
-                       "ok": duration <= budget["max_duration_sec"],
-                       "detail": f"{duration:.1f}s of {budget['max_duration_sec']}s"})
+        if mode == "replay":
+            # Skipped for the same reason an unpriced cost budget is: a latency
+            # budget replayed from disk is not a measurement of the system under
+            # test. The model calls return at disk speed, so what is left on the
+            # clock is this machine -- its CPU, and whatever else it is running.
+            #
+            # Scoring it made the offline suite non-deterministic across
+            # machines, which is the one property it exists to have:
+            # `battery_comparison` passed this check on one box and failed it on
+            # another from the same cassettes, and `--compare` correctly called
+            # two identical runs NOT DETERMINISTIC over it. Latency is worth
+            # budgeting against a real provider, where the number means
+            # something; `--live` and `--record` still check it.
+            checks.append({
+                "check": "max_duration_sec", "ok": True, "skipped": True,
+                "detail": f"not scored: {duration:.1f}s is replay speed, "
+                          f"not the provider's. Budget checked on --live."})
+        else:
+            checks.append({"check": "max_duration_sec",
+                           "ok": duration <= budget["max_duration_sec"],
+                           "detail": f"{duration:.1f}s of {budget['max_duration_sec']}s"})
     return checks
 
 
@@ -356,11 +382,15 @@ async def run_task(task: Dict[str, Any], mode: str, model: Optional[str],
     if mode == "replay" and not cassettes.exists():
         effective = "simulate"
 
+    # Only on replay. On record these settings are what is being captured, and
+    # on live the caller means the environment they configured.
+    pin = replay_mod.recording_manifest(task_id) if effective == "replay" else {}
+
     started = time.time()
     error = None
     result: Dict[str, Any] = {}
 
-    with isolated_state(model):
+    with isolated_state(model, pin):
         # Keyed off the EFFECTIVE mode. Substituting the dummy key in `record`
         # too -- which is what this did -- meant every `--record` run
         # authenticated as "replay-not-a-real-key" and died on a 400, which is
@@ -397,24 +427,38 @@ async def run_task(task: Dict[str, Any], mode: str, model: Optional[str],
                         task["goal"], (task.get("expect") or {}).get("rubric") or [],
                         mission_dir)
 
+        if effective == "record" and cassettes.recorded:
+            replay_mod.write_recording_manifest(task_id)
+
         manifest = _read_manifest(mission_dir)
 
         checks = (structural_checks(task, manifest)
-                  + budget_checks(task, manifest, duration)
+                  + budget_checks(task, manifest, duration, effective)
                   + must_not_checks(task, mission_dir))
         spans = _count_spans(mission_dir)
         # Copied out before isolated_state deletes the scratch directory.
         artifacts = sorted(manifest.get("artifacts") or [])
 
     structural = structural_score(checks)
+
+    # Naming a model that was never called would be a lie the scorecard then
+    # prints in its own column. In simulate mode nothing reached a provider,
+    # and the row says exactly that. On replay, the cassettes know who answered
+    # -- `settings.default_model` is this machine's env talking about a
+    # provider the run never reached, and printing it beside recorded answers
+    # is the labelling bug `_check_model` was written to prevent.
+    if effective == "simulate":
+        row_model = "(simulator)"
+    elif effective == "replay" and cassettes.served_default:
+        row_model = "+".join(sorted(cassettes.served_default))
+    else:
+        row_model = model or settings.default_model
+
     return {
         "task_id": task_id,
         "run": run_index,
         "mode": effective,
-        # Naming a model that was never called would be a lie the scorecard
-        # then prints in its own column. In simulate mode nothing reached a
-        # provider, and the row says exactly that.
-        "model": "(simulator)" if effective == "simulate" else (model or settings.default_model),
+        "model": row_model,
         "goal": task["goal"],
         "tags": task.get("tags") or [],
         "error": error,
@@ -550,8 +594,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         json.dump(report, fh, indent=2, ensure_ascii=False)
     print(f"\nwrote {path}")
 
+    # Only a full sweep may rewrite the committed scorecard. It is the
+    # repository's record of what the suite scores, and `--suite smoke` -- two
+    # tasks, the set CI runs on every push -- silently replaced its fourteen
+    # rows with two, taking `previous.json` (the baseline the next run's delta
+    # column is computed against) with it. Losing twelve rows should not be the
+    # by-product of running a subset.
     from evals import report as report_mod
-    report_mod.write_scorecard(report)
+    if args.suite in ("all", ""):
+        report_mod.write_scorecard(report)
+    else:
+        print(f"scorecard left alone: --suite {args.suite} is not the full "
+              f"suite. Results are in {path}")
 
     failed = [r for r in report["rows"] if r["error"]]
     if failed:
