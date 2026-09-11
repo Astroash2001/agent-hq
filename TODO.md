@@ -524,6 +524,51 @@ can no longer be configured by accident. See the WP7 section below.
 **Stale** -- hardened in WP7 (allowlist, no metacharacters, jailed cwd, scrubbed
 env). See the WP7 section.
 
+### Agents are a fixed roster of five
+
+**Done.** `foundry.py` hires a specialist when a step declares tools no single
+agent holds. They enter by the street door at (24, 23), take one of the two
+spare bullpen desks, and are dismissed when the mission ends.
+
+The trigger already existed: `regrant_steps` computes exactly this condition
+and gave up on it, which was right while the roster was fixed.
+
+What the foundry adds on top of that is one distinction `regrant_steps` cannot
+draw. From there, a tool nobody was granted and a tool nobody implements look
+identical -- both get ignored as invented -- and they need opposite responses.
+Against `tool_registry.catalogue()` they come apart: the first is hired for,
+the second fails loudly naming what is missing and that an MCP server is the
+fix. Hiring for the second would produce an agent holding a name with no
+function behind it, which is this project's oldest failure in a new costume.
+
+The model writes the contractor's identity and never its tools -- the list is
+`gap.needed` and is not read back from the reply, so a design naming `terminal`
+does not get `terminal`. Tested. With no credential the design is deterministic
+instead, so the feature is not invisible on the no-key path.
+
+Two caps, smaller wins: `max_spawned_agents` (2) and the two spare desks. A
+third hire is refused rather than seated on `DEFAULT_SEAT`, where two
+contractors would stack and read as one agent.
+
+Persisted in a `spawned_agents` table rather than `agents_dir`, and rehired on
+resume -- without which a resumed mission raises "unknown agent" on exactly the
+step the hire was for, and only after a process restart, which is the hardest
+kind of bug to catch.
+
+Still open:
+
+- **A gap rarely fires offline now**, and that is the design working rather than
+  a fault: the four specialists cover most combinations since the catalogue was
+  widened, so the fallback planner's buckets do not produce one. It fires when
+  a planner declares a combination that crosses agents. To watch it happen,
+  narrow an agent's tools in `backend/agents/*.json` and re-run.
+- **No eval task covers it.** The suite cannot score the foundry until the
+  cassettes are re-recorded, so this is verified by unit tests and by hand.
+- **A contractor borrows a sprite.** Hue-rotated with a visitor badge, because
+  the atlas holds five characters and the packs that made them are gigabytes
+  and not in the repo. A real contractor character needs the paid Character
+  Generator and a `build_atlas.py` run.
+
 ### The tool catalogue, and the grant that was not enforced
 
 **Done.** Four tools added, taking the built-ins from six to ten, because the
@@ -701,7 +746,7 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**497 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+**519 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
 across 34 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool

@@ -368,6 +368,22 @@ class Settings(BaseSettings):
     # cap because an aggregate over 50k rows should still be right.
     query_data_max_source_rows: int = 50000
 
+    # --- the foundry: hiring a specialist mid-mission -----------------------
+    # Off by default. A roster that changes itself is a real change in what the
+    # harness does, and it should be switched on deliberately rather than
+    # discovered.
+    foundry_enabled: bool = True
+    # Hard ceiling on contractors per mission. The office also has only two
+    # spare desks (office_map.js `spawnSeats`), and the smaller of the two
+    # wins -- so this cannot quietly seat more people than the room holds.
+    max_spawned_agents: int = 2
+    # The design call writes the contractor's identity, never its tools. Off
+    # falls to the deterministic design, which is also what runs with no key.
+    foundry_design_enabled: bool = True
+    # Empty means settings.fallback_model -- the small one, like the critic.
+    foundry_model: str = ""
+    foundry_max_tokens: int = 400
+
     # --- search_workspace ---------------------------------------------------
     search_workspace_max_results: int = 100
     search_workspace_max_file_bytes: int = 2_000_000

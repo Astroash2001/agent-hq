@@ -170,6 +170,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (payload.at) canvas.agentArrived(agentId, payload.at.x, payload.at.y);
                 break;
 
+            // A specialist hired mid-mission, because no one in the office held
+            // the tools a step declared. {manifest, seat, entrance, tools,
+            // for_step}. The agent does not exist on the floor yet -- this is
+            // what puts it there, at the street door, walking to a spare desk.
+            //
+            // On a replay scrub this still adds them: an office missing an
+            // agent that the rest of the trace then talks about is worse than
+            // one where somebody appears without the walk.
+            case 'agent.spawned': {
+                const m = payload.manifest || {};
+                canvas.addAgent(m, payload.seat, payload.entrance);
+                if (opts.silent && payload.seat) {
+                    canvas.agentArrived(m.id, payload.seat.x, payload.seat.y);
+                }
+                hud.addAgentCard?.(m);
+                hud.addTerminalLog(
+                    `${m.name || m.id} hired for ${payload.for_step || 'a step'} ` +
+                    `— holds ${(payload.tools || []).join(', ') || 'no tools'}`,
+                    'SUCCESS');
+                break;
+            }
+
             // {agent_name, label, station_id, tool, occupied_by, queue_length}
             case 'station.queued':
                 hud.addTerminalLog(

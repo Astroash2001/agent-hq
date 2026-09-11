@@ -640,6 +640,27 @@ const OFFICE_MAP = {
         creative:     { x: 5,    y: 13.8, facing: 'up',   room: 'bullpen' }
     },
 
+    /* Desks nobody permanently sits at, for agents hired mid-mission.
+
+       The bullpen has six workstations in two ranks of three; the four
+       specialists occupy rank one entirely and the left of rank two. These are
+       the two that are left, and they are a real limit rather than a policy
+       one: the office can seat two contractors at once because it has two
+       spare desks. `foundry.py` will not hire a third.
+
+       Same offsets as the seats above -- desk column - 0.2 for the crook of
+       the L, desk row + 1.3 so the baseline draws in front of the desk. */
+    spawnSeats: [
+        { x: 13, y: 13.8, facing: 'up', room: 'bullpen' },
+        { x: 21, y: 13.8, facing: 'up', room: 'bullpen' }
+    ],
+
+    /* Where someone hired mid-mission comes in: the street door in the south
+       shell course, the one opening in the building an outsider could use.
+       Just inside it, so the walk starts on a walkable tile rather than in
+       the doorway the leaves slide across. */
+    entrance: { x: 24.5, y: 22.4 },
+
     /* Work stations. The backend gates tool execution on these -- an agent has
        to walk to the right one before the tool will run -- so their geometry
        has to be the map's, not a second copy that drifts. `office.py` reads

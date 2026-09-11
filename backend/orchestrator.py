@@ -12,6 +12,9 @@ import contracts
 import critic
 import debate
 import llm
+import foundry
+import office as office_mod
+import planner as planner_mod
 import pricing
 import runstore
 import synthesis
@@ -93,10 +96,24 @@ class Orchestrator:
         # read at rest reads zero however broken the scheduler is.
         self._active_steps = 0
         self._peak_active_steps = 0
+        # Contractors hired for the running mission. Held apart from
+        # `self.agents` membership so dismissal knows exactly who to let go
+        # without having to ask each manifest whether it was spawned.
+        self._spawned_ids: set = set()
         self._load_agents()
 
     def _load_agents(self):
-        """Discover and load all agent JSON manifests from the agents directory."""
+        """
+        Discover and load all agent JSON manifests from the agents directory.
+
+        Contractors are not on disk, so a reload drops them. That is correct --
+        they belong to one mission -- but it has to also drop their desks, or
+        the seat stays held by an agent that no longer exists and the office
+        reports itself full for every mission after.
+        """
+        for agent_id in getattr(self, "_spawned_ids", set()):
+            office.release_seat(agent_id)
+        self._spawned_ids = set()
         self.agents.clear()
         agent_files = glob.glob(os.path.join(settings.agents_dir, "*.json"))
 
@@ -420,6 +437,13 @@ class Orchestrator:
             # reason -- a step that has already run cannot change hands now.
             plan = Plan(goal=resumed["goal"], source=resumed["plan"].get("source", "llm"),
                         steps=[PlanStep(**s) for s in resumed["plan"].get("steps", [])])
+            # Contractors back before any step is dispatched. The plan records
+            # each step's agent_id, and a step hired for is assigned to an
+            # agent that exists nowhere on disk -- so a resume without this
+            # raises "unknown agent" on exactly the step the hire was for, and
+            # only when the process had been restarted, which is the hardest
+            # kind of bug to catch.
+            self._rehire_spawned(task_id, store)
             already_completed = set(store.completed_step_ids(task_id))
             restored = self._rehydrate_workspace(workspace)
             logger.info("[%s] resuming: %d/%d steps already done, %d artifact(s) restored",
@@ -440,6 +464,7 @@ class Orchestrator:
             store.start_mission(task_id, user_prompt, workspace.dir or "")
             plan = await planner.plan(user_prompt, self.get_manifests(),
                                       attachments=seeded)
+            await self._staff_plan(plan, user_prompt, task_id)
             self._apply_memory_routing(plan, task_id)
             store.record_plan(task_id, plan)
         self.current_plan = plan
@@ -567,6 +592,10 @@ class Orchestrator:
         for agent in self.agents.values():
             await agent.update_status(AgentStatus.IDLE)
         office.reset()
+        # After office.reset(), which clears the desk assignments this reads
+        # nothing from -- but before the next mission, which must see the
+        # roster it will actually be planned against.
+        self._dismiss_spawned()
 
         return {
             "task_id": task_id,
@@ -585,6 +614,128 @@ class Orchestrator:
         }
 
     # ------------------------------------------------------------------ routing
+
+    async def _staff_plan(self, plan: Plan, goal: str, task_id: str) -> None:
+        """
+        Hire a specialist for any step the roster cannot staff.
+
+        `planner.regrant_steps` has already moved every step it could to
+        somebody who holds the tools it needs. What is left is the set it gave
+        up on -- steps whose declared tools no single agent holds -- and until
+        now those ran anyway, on an agent that could not call the tool and
+        would write a plausible report around the hole.
+
+        Registered into `self.agents` for this mission only, and persisted with
+        the mission rather than into `agents_dir`: a roster that grows by itself
+        is one nobody curated, and the planner would pay to list it forever.
+        """
+        if not settings.foundry_enabled or not plan.steps:
+            return
+
+        agent_tools = {aid: list(a.tools) for aid, a in self.agents.items()}
+        gaps = foundry.find_gaps(plan.steps, agent_tools)
+        if not gaps:
+            return
+
+        hires, refusals = await foundry.hire(
+            goal, gaps,
+            existing_ids=list(self.agents.keys()) + (
+                [self.boss_agent.id] if self.boss_agent else []),
+            mission_id=task_id,
+            seats_available=office.free_seats(),
+        )
+
+        for manifest in hires:
+            seat = office.assign_seat(manifest.id)
+            if seat is None:
+                # The office filled up between the budget check and here. Said
+                # rather than seated on the default tile, where two contractors
+                # would stack and read as one agent.
+                refusals.append(f"no desk free for {manifest.name}; not hired")
+                continue
+
+            agent = BaseAgent(manifest)
+            self.agents[manifest.id] = agent
+            self._spawned_ids.add(manifest.id)
+            runstore.get_store().record_spawned_agent(task_id, manifest)
+
+            await event_bus.emit(Event(
+                type=EventType.AGENT_SPAWNED,
+                agent_id=manifest.id,
+                task_id=task_id,
+                data={
+                    "manifest": manifest.model_dump(),
+                    "seat": {"x": seat[0], "y": seat[1]},
+                    "entrance": {"x": office_mod.ENTRANCE[0], "y": office_mod.ENTRANCE[1]},
+                    "for_step": manifest.spawned_for,
+                    "tools": list(manifest.tools),
+                },
+            ))
+            if self.boss_agent:
+                await self.boss_agent.speak(
+                    f"Nobody here holds {manifest.spawned_reason}. "
+                    f"{manifest.name} is joining us for this one.", task_id=task_id)
+
+            # Walk them in from the street door before the plan dispatches, so
+            # the office shows them arriving rather than appearing at a desk.
+            await office.walk_in(manifest.id, agent_name=manifest.name, task_id=task_id)
+
+        if hires:
+            # Re-run the routing now the roster is bigger. This is what moves
+            # the gap step onto its new specialist -- the hire is pointless
+            # without it, and doing it here rather than in `hire` keeps the
+            # foundry free of any opinion about the plan.
+            planner_mod.regrant_steps(
+                plan.steps,
+                list(self.agents.keys()),
+                {aid: list(a.tools) for aid, a in self.agents.items()},
+            )
+
+        for note in refusals:
+            logger.warning("foundry: %s", note)
+            await event_bus.emit(Event(
+                type=EventType.TERMINAL_LOG,
+                task_id=task_id,
+                data={"level": "ERROR", "message": f"[FOUNDRY] {note}"},
+            ))
+
+    def _rehire_spawned(self, mission_id: str, store) -> None:
+        """
+        Rebuild the contractors a resumed mission had hired.
+
+        Their desks are re-assigned too, in the order they were hired, so an
+        agent resumes at the desk it left rather than at DEFAULT_SEAT with
+        everyone else who has no seat.
+        """
+        for payload in store.get_spawned_agents(mission_id):
+            try:
+                manifest = AgentManifest(**payload)
+            except Exception as exc:                           # noqa: BLE001
+                logger.warning("could not rebuild spawned agent %s: %s",
+                               payload.get("id"), exc)
+                continue
+            if manifest.id in self.agents:
+                continue
+            if office.assign_seat(manifest.id) is None:
+                logger.warning("no desk free to rehire %s on resume", manifest.id)
+            self.agents[manifest.id] = BaseAgent(manifest)
+            self._spawned_ids.add(manifest.id)
+            logger.info("[%s] rehired %s for the resumed mission", mission_id, manifest.id)
+
+    def _dismiss_spawned(self) -> None:
+        """
+        End every contract from the mission that just finished.
+
+        Their desks go back to the pool and they leave `self.agents`, because
+        the next mission's planner is shown that dict and a specialist hired
+        for somebody else's goal is noise in a prompt that is already the
+        largest thing sent.
+        """
+        for agent_id in list(self._spawned_ids):
+            self.agents.pop(agent_id, None)
+            self._agent_locks.pop(agent_id, None)
+            office.release_seat(agent_id)
+        self._spawned_ids.clear()
 
     def _apply_memory_routing(self, plan: Plan, task_id: str):
         """

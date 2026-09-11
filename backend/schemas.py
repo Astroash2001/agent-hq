@@ -45,6 +45,8 @@ class EventType(str, Enum):
     STEP_CRITIQUED = "step.critiqued"
     # Meetings that argue (WP6)
     AGENT_ARGUED = "agent.argued"
+    # An agent hired mid-mission (WP8)
+    AGENT_SPAWNED = "agent.spawned"
 
 
 class DeskPosition(BaseModel):
@@ -64,6 +66,22 @@ class AgentManifest(BaseModel):
     system_prompt: str = Field(..., description="Specialized persona and system instruction")
     tools: List[str] = Field(default_factory=list, description="List of registered tool names")
     desk_position: DeskPosition = Field(default_factory=lambda: DeskPosition(x=100, y=100))
+
+    # --- hired mid-mission ---------------------------------------------------
+    # The five permanent staff are JSON files on disk and leave all of this
+    # empty. A contractor the foundry hires for one mission carries its own
+    # provenance, because a roster where you cannot tell who was hired and why
+    # is a roster nobody can audit.
+    spawned: bool = Field(False, description="Hired mid-mission rather than loaded from disk")
+    spawned_for: str = Field("", description="The step id whose capability gap caused the hire")
+    spawned_reason: str = Field("", description="Which tools nobody held")
+    mission_id: str = Field("", description="The mission this agent belongs to, if spawned")
+    # The permanent five are mapped to their sprite by office_map.js. A spawned
+    # agent has no art of its own -- there are five characters in the atlas and
+    # the source packs are gigabytes -- so it borrows one and is hue-shifted by
+    # `sprite_hue` with a visitor badge drawn over it.
+    sprite: str = Field("", description="Atlas character to draw, if not the static mapping")
+    sprite_hue: int = Field(0, description="Degrees of hue rotation applied to the borrowed sprite")
 
 
 class Event(BaseModel):

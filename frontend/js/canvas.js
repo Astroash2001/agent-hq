@@ -417,6 +417,77 @@ class PixelOfficeCanvas {
         });
     }
 
+    /**
+     * Put a specialist hired mid-mission on the floor, at the street door.
+     *
+     * There are five characters in the atlas and the packs that produced them
+     * are gigabytes and not in this repository, so a contractor has no art of
+     * its own. It borrows one, hue-rotated by `sprite_hue` so two hires never
+     * look alike, and `drawAgent` pins a visitor badge on it -- which is the
+     * part that matters. An agent the office hired for twenty minutes must not
+     * be indistinguishable from permanent staff, or the whole mechanism is
+     * invisible in the one view that exists to show it.
+     */
+    addAgent(manifest, seat, entrance) {
+        if (!manifest || !manifest.id) return null;
+        if (this.agents.find(x => x.id === manifest.id)) return null;
+
+        const door = entrance || { x: 24.5, y: 22.4 };
+        const desk = seat || door;
+        const agent = {
+            id: manifest.id,
+            name: manifest.name || manifest.id,
+            sprite: manifest.sprite || 'bob',
+            hue: manifest.sprite_hue || 0,
+            spawned: true,
+            x: door.x,
+            y: door.y,
+            seat: { x: desk.x, y: desk.y, facing: 'up' },
+            goal: { x: desk.x, y: desk.y, facing: 'up' },
+            goalFor: { x: desk.x, y: desk.y },
+            room: 'bullpen',
+            facing: 'up',
+            state: 'idle',
+            path: null,
+            waypoints: [],
+            walkTimer: 0,
+            walkFrame: 0,
+            idleTimer: 2000 + Math.random() * 6000,
+        };
+        this.agents.push(agent);
+        // Walk in rather than appear. The backend is already blocking for the
+        // travel time it computed, so this is the same arrival, drawn.
+        this.sendTo(agent, agent.seat, false);
+        return agent;
+    }
+
+    /** End every contract: the contractors leave, the permanent staff stay. */
+    removeSpawnedAgents() {
+        this.agents = this.agents.filter(a => !a.spawned);
+    }
+
+    /**
+     * A hue-rotated copy of one character's frames, built once and cached.
+     *
+     * Done on an offscreen canvas rather than with a ctx filter on every draw:
+     * `filter` is re-parsed per call and this runs for every frame of every
+     * walking agent, and it would tint the shadow and the name plate with it.
+     */
+    tintedAtlas(hue) {
+        if (!hue || !this.atlas) return this.atlas;
+        this._tinted = this._tinted || {};
+        if (this._tinted[hue]) return this._tinted[hue];
+
+        const off = document.createElement('canvas');
+        off.width = this.atlas.width;
+        off.height = this.atlas.height;
+        const c = off.getContext('2d');
+        c.filter = `hue-rotate(${hue}deg) saturate(1.15)`;
+        c.drawImage(this.atlas, 0, 0);
+        this._tinted[hue] = off;
+        return off;
+    }
+
     updateAgentStatus(agentId, status) {
         const a = this.agents.find(x => x.id === agentId);
         if (!a) return;
@@ -860,13 +931,14 @@ class PixelOfficeCanvas {
 
     /* ===================== drawing ===================== */
 
-    drawSprite(name, px, py, anchorBottomCentre = true) {
+    drawSprite(name, px, py, anchorBottomCentre = true, source = null) {
         const f = this.frames[name];
         if (!f || !this.atlas) return;
         const w = f.w, h = f.h;
         const dx = anchorBottomCentre ? px - w / 2 : px;
         const dy = anchorBottomCentre ? py - h : py;
-        this.ctx.drawImage(this.atlas, f.x, f.y, w, h, Math.round(dx), Math.round(dy), w, h);
+        const img = source || this.atlas;
+        this.ctx.drawImage(img, f.x, f.y, w, h, Math.round(dx), Math.round(dy), w, h);
     }
 
     draw() {
@@ -1074,7 +1146,24 @@ class PixelOfficeCanvas {
         ctx.fill();
         ctx.restore();
 
-        this.drawSprite(frames[idx], px, py);
+        this.drawSprite(frames[idx], px, py, true,
+                        a.hue ? this.tintedAtlas(a.hue) : null);
+
+        // The visitor badge. Two pixels of lanyard and a pale card on the
+        // chest -- small, but it is the whole point of drawing a contractor
+        // differently: someone hired twenty minutes ago must not look like
+        // staff who have been here all along.
+        if (a.spawned) {
+            ctx.save();
+            ctx.fillStyle = '#e9e3cf';
+            ctx.fillRect(Math.round(px + 1), Math.round(py - 18), 4, 5);
+            ctx.fillStyle = '#8b5cf6';
+            ctx.fillRect(Math.round(px + 1), Math.round(py - 18), 4, 1.5);
+            ctx.strokeStyle = 'rgba(30,30,40,0.55)';
+            ctx.lineWidth = 0.5;
+            ctx.strokeRect(Math.round(px + 1), Math.round(py - 18), 4, 5);
+            ctx.restore();
+        }
 
         if (a.id === this.selectedAgentId) {
             ctx.save();

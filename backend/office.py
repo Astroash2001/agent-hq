@@ -74,6 +74,19 @@ def _station_xy(station_id: str, fallback: Tuple[float, float]) -> Tuple[float, 
 # Where an agent with no desk of its own is parked.
 DEFAULT_SEAT: Tuple[float, float] = (12.0, 15.0)
 
+# The spare desks, for agents hired mid-mission. Two of them, because the
+# bullpen's two ranks of three workstations are four-fifths occupied by the
+# permanent staff -- so the cap on contractors is furniture rather than policy.
+SPAWN_SEATS: List[Tuple[float, float]] = [
+    (seat["x"], seat["y"]) for seat in _LAYOUT.get("spawn_seats", [])
+]
+
+# The street door, just inside. Where a contractor walks in from.
+_ENTRANCE_RAW = _LAYOUT.get("entrance") or {}
+ENTRANCE: Tuple[float, float] = (
+    float(_ENTRANCE_RAW.get("x", 24.5)), float(_ENTRANCE_RAW.get("y", 22.4)),
+)
+
 
 # The stations, placed on furniture that already exists in the map. `tools` is
 # the binding that gates execution; a tool named by no station stays callable
@@ -173,6 +186,10 @@ class OfficeFloor:
                 self._tool_index[tool] = station.id
 
         self._positions: Dict[str, Tuple[float, float]] = dict(SEATS)
+        # Desks handed to agents hired mid-mission. Kept apart from SEATS,
+        # which is the map's own record of where the permanent staff sit and
+        # has to stay that -- a contractor must not leave a desk behind in it.
+        self._assigned: Dict[str, Tuple[float, float]] = {}
         self._locks: Dict[str, asyncio.Semaphore] = {}
         self._waiting: Dict[str, int] = {sid: 0 for sid in self._stations}
         # Several agents can hold a station now, so occupancy is a set.
@@ -181,7 +198,59 @@ class OfficeFloor:
     # ---------------------------------------------------------------- geometry
 
     def seat_of(self, agent_id: str) -> Tuple[float, float]:
+        if agent_id in self._assigned:
+            return self._assigned[agent_id]
         return SEATS.get(agent_id, DEFAULT_SEAT)
+
+    # ------------------------------------------------------ hired mid-mission
+
+    def free_seats(self) -> int:
+        """Spare desks not currently handed out."""
+        return max(0, len(SPAWN_SEATS) - len(self._assigned))
+
+    def assign_seat(self, agent_id: str) -> Optional[Tuple[float, float]]:
+        """
+        Give `agent_id` a spare desk, and start it at the door.
+
+        None when the bullpen is full. The caller must treat that as a refusal
+        to hire rather than seating someone on DEFAULT_SEAT: two contractors
+        parked on the same tile look like one agent, and an office that lies
+        about who is in it is worse than one that says it is full.
+        """
+        if agent_id in self._assigned:
+            return self._assigned[agent_id]
+        taken = set(self._assigned.values())
+        for seat in SPAWN_SEATS:
+            if seat in taken:
+                continue
+            self._assigned[agent_id] = seat
+            # They are not at the desk yet. They are outside the front door,
+            # and `walk_in` is what gets them across the floor.
+            self._positions[agent_id] = ENTRANCE
+            return seat
+        return None
+
+    def release_seat(self, agent_id: str) -> None:
+        """Give the desk back. The contract is over."""
+        self._assigned.pop(agent_id, None)
+        self._positions.pop(agent_id, None)
+
+    async def walk_in(self, agent_id: str, agent_name: str = "",
+                      task_id: Optional[str] = None) -> float:
+        """
+        Walk a newly hired agent from the street door to their desk.
+
+        The same `walk_to` every other move uses, so it is timed over the real
+        route and emits the same AGENT_MOVE the renderer already animates -- a
+        contractor crossing the floor is not a special case, it just starts
+        where nobody else starts.
+        """
+        seat = self._assigned.get(agent_id)
+        if seat is None or not settings.spatial_enabled:
+            return 0.0
+        self._positions[agent_id] = ENTRANCE
+        return await self.walk_to(agent_id, seat, agent_name=agent_name,
+                                  label="desk", task_id=task_id)
 
     def position_of(self, agent_id: str) -> Tuple[float, float]:
         return self._positions.get(agent_id, self.seat_of(agent_id))
@@ -565,7 +634,14 @@ class OfficeFloor:
     # ---------------------------------------------------------------- reporting
 
     def reset(self):
-        """Put everyone back at their desk. Called when a mission finishes."""
+        """
+        Put everyone back at their desk. Called when a mission finishes.
+
+        Contractors' desks are released with it: they were hired for the
+        mission that just ended, and a seat still held afterwards is one the
+        next mission cannot hire into.
+        """
+        self._assigned.clear()
         self._positions = dict(SEATS)
         self._waiting = {sid: 0 for sid in self._stations}
         self._occupant = {sid: set() for sid in self._stations}
@@ -576,7 +652,10 @@ class OfficeFloor:
             "spatial_enabled": settings.spatial_enabled,
             "tile": 16,
             "walk_seconds_per_tile": settings.walk_seconds_per_tile,
-            "seats": {aid: {"x": pos[0], "y": pos[1]} for aid, pos in SEATS.items()},
+            "seats": {aid: {"x": pos[0], "y": pos[1]}
+                      for aid, pos in {**SEATS, **self._assigned}.items()},
+            "spawn_seats": [{"x": x, "y": y} for x, y in SPAWN_SEATS],
+            "entrance": {"x": ENTRANCE[0], "y": ENTRANCE[1]},
             "positions": {aid: {"x": pos[0], "y": pos[1]} for aid, pos in self._positions.items()},
             "stations": [
                 {

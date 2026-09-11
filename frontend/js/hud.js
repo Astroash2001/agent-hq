@@ -90,6 +90,11 @@ class RetroHUD {
         if (typeof OFFICE_MAP !== 'undefined' && OFFICE_MAP.agentSprites[agentId]) {
             return OFFICE_MAP.agentSprites[agentId];
         }
+        // A contractor is in neither list -- it was hired after both were
+        // written -- so its own manifest is the only thing that knows which
+        // character it borrowed. Without this its dock card has no avatar.
+        const registered = this.agents.get(agentId);
+        if (registered && registered.sprite) return registered.sprite;
         const found = DEFAULT_AGENTS.find(a => a.id === agentId);
         return found ? found.sprite : null;
     }
@@ -177,6 +182,50 @@ class RetroHUD {
     spriteFor(id) {
         const found = DEFAULT_AGENTS.find(a => a.id === id);
         return found ? found.sprite : 'Adam';
+    }
+
+    /**
+     * Add one specialist hired mid-mission to the dock, without rebuilding it.
+     *
+     * `registerAgents` clears the dock and starts over, which would throw away
+     * the live state of everyone already working -- and a contractor arrives
+     * in the middle of a mission, which is precisely when that state matters.
+     */
+    addAgentCard(manifest) {
+        if (!this.agentDock || !manifest || !manifest.id) return;
+        if (this.agents.has(manifest.id)) return;
+
+        const agent = {
+            id: manifest.id,
+            name: manifest.name || manifest.id,
+            verb: manifest.plate_verb || 'Contracting',
+            icon: manifest.plate_icon || '🪪',
+            sprite: manifest.sprite || this.spriteFor(manifest.id),
+            state: 'idle',
+            cwd: manifest.cwd || '~/agent-hq',
+            progress: 0,
+            spawned: true
+        };
+        this.agents.set(agent.id, agent);
+        const card = this.buildDockCard(agent);
+        // Marked in the DOM so the stylesheet can set a contractor apart
+        // without the dock having to know what a contractor is.
+        card.dataset.spawned = 'true';
+        card.title = manifest.role
+            ? `${manifest.role} — hired for this mission`
+            : 'Hired for this mission';
+        this.agentDock.appendChild(card);
+        this.applyAvatars();
+    }
+
+    /** End every contract: the dock goes back to the permanent staff. */
+    removeSpawnedCards() {
+        this.agents.forEach((agent, id) => {
+            if (!agent.spawned) return;
+            const card = this.agentDock?.querySelector(`[data-agent-id="${id}"]`);
+            if (card) card.remove();
+            this.agents.delete(id);
+        });
     }
 
     buildDockCard(agent) {

@@ -62,6 +62,19 @@ CREATE TABLE IF NOT EXISTS steps (
 );
 
 CREATE INDEX IF NOT EXISTS idx_steps_mission ON steps(mission_id);
+
+-- Specialists hired mid-mission. They are not on disk in agents_dir, on
+-- purpose -- a contractor belongs to the mission that hired it -- which means
+-- a resume after a restart has nothing to rebuild them from unless they are
+-- recorded here. `steps` already stores each step's agent_id, so without this
+-- a resumed mission knows a step belonged to someone who no longer exists.
+CREATE TABLE IF NOT EXISTS spawned_agents (
+    mission_id    TEXT NOT NULL,
+    agent_id      TEXT NOT NULL,
+    manifest_json TEXT NOT NULL,
+    created_at    REAL,
+    PRIMARY KEY (mission_id, agent_id)
+);
 """
 
 
@@ -234,6 +247,34 @@ class RunStore:
             "error=?, artifact_path=? WHERE mission_id=? AND step_id=?",
             (status, time.time(), int(tokens or 0), float(cost_usd or 0.0),
              (error or "")[:1000], artifact_path or "", mission_id, step_id))
+
+    # ------------------------------------------------------- spawned agents
+
+    def record_spawned_agent(self, mission_id: str, manifest) -> None:
+        """Persist a contractor so a resume can rebuild it."""
+        payload = manifest.model_dump() if hasattr(manifest, "model_dump") else dict(manifest)
+        self._write(
+            "INSERT INTO spawned_agents (mission_id, agent_id, manifest_json, "
+            "created_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(mission_id, agent_id) DO UPDATE SET "
+            "manifest_json=excluded.manifest_json",
+            (mission_id, payload.get("id", ""),
+             json.dumps(payload, ensure_ascii=False), time.time()),
+        )
+
+    def get_spawned_agents(self, mission_id: str) -> List[Dict[str, Any]]:
+        """Every contractor this mission hired, oldest first."""
+        rows = self._read(
+            "SELECT manifest_json FROM spawned_agents WHERE mission_id=? "
+            "ORDER BY created_at ASC", (mission_id,))
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            try:
+                out.append(json.loads(row["manifest_json"]))
+            except (ValueError, TypeError):
+                # One unreadable row must not cost the rest of the roster.
+                logger.warning("unreadable spawned agent row in %s", mission_id)
+        return out
 
     def get_steps(self, mission_id: str) -> List[Dict[str, Any]]:
         rows = self._read(

@@ -470,8 +470,51 @@ Three of these needed a guardrail shape the repo did not have:
   be reached at all. Refusing everything that is not literal arithmetic leaves
   nothing to be clever with.
 
-Adding an agent is a new JSON file in `backend/agents/` plus a desk in
+Adding a permanent agent is a new JSON file in `backend/agents/` plus a desk in
 `office_map.js` — see [[ARCHITECTURE]].
+
+## Hiring mid-mission
+
+When a step declares tools that **no single agent holds**, the office hires a
+contractor for it. They come in through the street door, take one of the two
+spare desks in the bullpen, do the step, and are gone when the mission ends.
+
+`planner.regrant_steps` has always been able to see this coming — it moves a
+step to whoever holds the tools it needs, and when nobody does it says so and
+gives up. `foundry.py` is what to do instead.
+
+Three rules, and the first two are the whole safety argument:
+
+- **A tool must exist.** The catalogue is `tool_registry.catalogue()` — the
+  built-ins plus whatever the connected MCP servers registered. Granting a name
+  with no function behind it does not create a capability; it creates an agent
+  that calls a tool, gets nothing, and writes a confident report around the
+  hole. A step needing `query_postgres` is **not** hired for. It fails, saying
+  what is missing and that an MCP server would fix it.
+- **Exactly what the step declared.** Not a preset, not everything. That is
+  both tighter and more capable than a fixed allowance: nothing is pre-banned,
+  and nobody accumulates a tool they are not using. The permanent five hold
+  theirs for every mission forever; a contractor holds two for one step.
+- **Mission-scoped.** Persisted in the run store so a resume rebuilds them,
+  never written to `agents_dir`. A roster that grows by itself is one nobody
+  curated, and every future planner prompt would pay to list it.
+
+The model writes the contractor's *identity* — name, speciality, how to work.
+It never writes the tool list: that comes from the gap and is not read back
+from the reply, so a design naming `terminal` does not get `terminal`. With no
+credential the design is deterministic instead, because the no-key path is the
+one most likely to be someone's first look at this.
+
+**Two hard caps**, and the smaller wins: `max_spawned_agents` (2), and the two
+spare desks in the bullpen. The office refuses rather than seating two
+contractors on one tile — an office that lies about who is in it is worse than
+one that says it is full.
+
+A contractor is drawn as an existing character hue-rotated and wearing a
+visitor badge, and its dock card has a dashed edge. There are five characters
+in the atlas and the packs that made them are gigabytes; borrowing one is the
+honest option, and the badge is what stops a twenty-minute hire looking like
+permanent staff.
 
 ---
 

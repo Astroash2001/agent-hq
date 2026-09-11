@@ -161,6 +161,21 @@ body { overflow: hidden; }
 
 .dock-card:hover { border-color: var(--frame); }
 
+/* A specialist hired for one mission. Set apart from the permanent staff on
+   purpose: the dashed edge reads as temporary, and the badge repeats what the
+   sprite on the floor is already wearing, so the two views agree about who is
+   staff and who is passing through. */
+.dock-card[data-spawned="true"] {
+    border-style: dashed;
+    border-color: #8b5cf6;
+}
+.dock-card[data-spawned="true"] .dock-name::after {
+    content: "🪪";
+    margin-left: 4px;
+    font-size: 9px;
+    opacity: 0.85;
+}
+
 .dock-card[data-selected="true"] {
     background: var(--row-selected);
     border-color: var(--frame-lit);

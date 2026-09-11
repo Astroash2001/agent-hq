@@ -117,6 +117,11 @@ def build_blocked(m, frames):
     for seat in m.get('seats', {}).values():
         mark(int(seat['x']), int(seat['y']), 0)
 
+    # The spare desks too, for the same reason: a contractor hired mid-mission
+    # has to be able to stand on the seat it is sent to.
+    for seat in m.get('spawnSeats', []):
+        mark(int(seat['x']), int(seat['y']), 0)
+
     # Doorways last, so nothing above can seal one.
     for d in m['doorways']:
         for dy in range(d.get('h', 1)):
@@ -138,6 +143,10 @@ def build(m, frames):
                   for k, v in m['seats'].items()},
         'stations': {k: {'x': v['x'], 'y': v['y'], 'label': v.get('label', k)}
                      for k, v in m.get('stations', {}).items()},
+        # Desks for agents hired mid-mission, and the door they arrive through.
+        'spawn_seats': [{'x': s['x'], 'y': s['y'], 'facing': s.get('facing', 'down')}
+                        for s in m.get('spawnSeats', [])],
+        'entrance': dict(m.get('entrance') or {'x': 24.5, 'y': 22.4}),
         # Rows of "0110" rather than nested lists: 24 short strings instead of
         # 960 integers, and it stays readable in a diff when the map moves.
         'blocked': [''.join(str(c) for c in row) for row in blocked],
@@ -157,8 +166,8 @@ def main():
         f.write('\n')
     print(f'wrote {OUT}')
     walkable = sum(row.count('0') for row in payload['blocked'])
-    print(f'  {len(payload["seats"])} seats, {len(payload["stations"])} stations, '
-          f'{walkable} walkable tiles')
+    print(f'  {len(payload["seats"])} seats, {len(payload["spawn_seats"])} spawn seats, '
+          f'{len(payload["stations"])} stations, {walkable} walkable tiles')
 
 
 if __name__ == '__main__':

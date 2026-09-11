@@ -575,7 +575,12 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
         raw = [
             step("s1", "data_analyst", f"Inspect the data directory and validate the query schema for: {goal}",
                  produces="analysis.md", why="owns the data tooling",
-                 needs=["list_files"]),
+                 # query_data as well as the listing: this bucket exists for
+                 # goals about files and queries, and the step was declaring
+                 # only that it needed to see the directory. A step that
+                 # under-declares what it needs is one `regrant_steps` cannot
+                 # route and the foundry cannot staff.
+                 needs=["list_files", "query_data"]),
             step("s2", "researcher", f"Find the documented conventions and pitfalls relevant to: {goal}",
                  produces="research_notes.md", why="context, independent of the data pass",
                  needs=["web_search"]),
