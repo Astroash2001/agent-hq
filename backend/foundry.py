@@ -14,15 +14,16 @@ instead when it is not: read the gap, hire someone for it, and let the step run.
 
 Three rules, and the first two are the whole safety argument.
 
-**A tool must exist.** The catalogue is `tool_registry.catalogue()` -- the
-built-ins plus whatever the connected MCP servers registered at startup. A
-contractor is granted from it and nothing else. Granting a name with no
-function behind it does not create a capability; it creates an agent that
-calls a tool, gets nothing, and writes a confident report around the hole.
+**A tool must exist.** The catalogue is `tool_registry.catalogue()`, which is
+the authority on what the office can actually do, and a contractor is granted
+from it and nothing else. Granting a name with no function behind it does not
+create a capability; it creates an agent that calls a tool, gets nothing, and
+writes a confident report around the hole.
 This project has already met that failure and named it: *"the agent runs,
 cannot call the tool, and writes a plausible report with an invented number in
 it, which is the worst available outcome."* So a gap naming a tool nobody
-implements is not hired for. It fails, saying what is missing.
+implements is not hired for. It fails, saying what is missing -- which is a
+request to go and build that tool, not something to route around.
 
 **Exactly what the step declared.** Not a preset, not everything -- the tools
 in `needs_tools`, which is what the plan said the work requires. That is both
@@ -59,8 +60,8 @@ _HUES = (200, 45, 300, 120)
 # nobody reading a transcript has to work out which are staff.
 _NAMES = ("Nina", "Omar", "Priya", "Quinn", "Rosa", "Theo")
 
-# What a tool is for, in a couple of words, for the offline fallback role. Only
-# needs to cover the built-ins; an MCP tool falls back to its own name.
+# What a tool is for, in a couple of words, for the offline fallback role.
+# Anything not listed falls back to its own name.
 _CAPABILITY = {
     "web_search": "web research",
     "fetch_url": "page retrieval",
@@ -155,7 +156,7 @@ def _fallback_manifest(gap: Gap, taken: Sequence[str], index: int) -> AgentManif
     works with a key would be invisible there. Deterministic, so the same gap
     hires the same specialist twice.
     """
-    skills = [_CAPABILITY.get(t, t.replace("mcp__", "").replace("__", " ")) for t in gap.needed]
+    skills = [_CAPABILITY.get(t, t.replace("_", " ")) for t in gap.needed]
     role = " & ".join(s.title() for s in skills[:3]) or "Specialist"
     name = _NAMES[index % len(_NAMES)]
     return AgentManifest(
@@ -290,7 +291,7 @@ async def hire(
         if gap.missing:
             refusals.append(
                 f"step {gap.step_id} needs {', '.join(gap.missing)}, which no tool "
-                f"provides. Connect an MCP server that offers it, or change the plan. "
+                f"provides. Add a tool for it in backend/tools/, or change the plan. "
                 f"Hiring someone and granting them a tool that does not exist would "
                 f"produce an agent that invents the answer.")
             continue

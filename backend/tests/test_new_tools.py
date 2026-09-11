@@ -382,8 +382,8 @@ async def test_an_internal_caller_passing_no_grant_is_not_blocked():
 def test_the_catalogue_is_the_authority_on_what_exists():
     """
     Anything choosing tools reads this rather than a hardcoded list, so a tool
-    that does not exist cannot be granted and an MCP tool registered at startup
-    is offered on the same footing as a built-in.
+    that does not exist cannot be granted, and one registered later is offered
+    without those callers changing.
     """
     catalogue = tool_registry.catalogue()
     for name in ("web_search", "fetch_url", "calculate", "query_data",
@@ -399,7 +399,7 @@ def test_risk_is_recorded_so_the_dangerous_tools_are_knowable():
     assert tool_registry.risk_of("calculate") == "read"
     assert tool_registry.risk_of("write_file") == "write"
     # An unknown tool is assumed dangerous rather than safe.
-    assert tool_registry.risk_of("mcp__someone__anything") == "execute"
+    assert tool_registry.risk_of("not_a_registered_tool") == "execute"
 
 
 def test_every_granted_tool_actually_exists():

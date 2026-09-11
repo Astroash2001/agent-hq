@@ -629,7 +629,7 @@ than 0 -- an episode with a broken clock is still evidence.
 
 ---
 
-## Meetings that argue, and MCP (WP6)
+## Meetings that argue (WP6)
 
 ### One turn each, not N ReAct loops
 
@@ -663,50 +663,30 @@ attendee's own role, and are tagged `simulated: true` on `agent.argued` and in
 the text handed to the chair. The rule the repo already follows holds: the
 simulator may stand in, but it must never be mistaken for a reading.
 
-### MCP tools are registered, not special-cased
+### MCP was built in both directions, and then removed
 
-A discovered MCP tool goes into the same `tool_registry` under
-`mcp__<server>__<tool>` and is called through `tool_registry.execute` like any
-other. That is what makes it emit `tool.called` / `tool.result`, be timed, be
-priced, and make the agent walk to a station first. A parallel execution path
-for "remote" tools would have had to reimplement all four, and would have
-drifted from the local one the first time either changed.
+It worked and it is gone. `mcp_client.py` registered other people's tools into
+the same `tool_registry` under `mcp__<server>__<tool>`; `mcp_server.py` served
+this office over stdio so any MCP client could drive it. Both were off by
+default, with the `mcp` package dev-only and imported lazily.
 
-The namespace is not decoration: an MCP server offering `read_file` would
-otherwise silently replace this repo's, which is jailed to the workspace.
+Removed because the property it cost is the one this project guards hardest.
+Turning it on means `npx`, third-party servers and network at runtime, against
+a harness whose selling point is: clone it, run it with no key, replay it
+deterministically. That is a real trade, and the thing being traded away was
+worth more here than an open-ended tool catalogue is. Nobody is pointing this
+at a production data source; it is a harness for watching multi-agent work.
 
-### The `integrations` station takes a fallback coordinate
+What it was the answer to -- "the mission needs a capability that does not
+exist" -- now has a plainer answer: the foundry refuses to hire, and names the
+missing tool. Writing a new tool in `backend/tools/` is about eighty lines and
+a guardrail, and the four added alongside the foundry are the worked examples.
 
-Every other station's position comes from `office_layout.json`, exported from
-`office_map.js`, because a second copy of the geometry drifts. This one is not
-in the map: adding it there means editing the tilemap, which this work package
-does not touch. `_station_xy` already falls back to a literal, so the bench sits
-in the open aisle on the east of the bullpen until the map names it -- at which
-point the export takes over with no code change.
-
-Its tool list is also empty at import, because which MCP tools exist is not
-known until the servers answer. `OfficeFloor.bind_tool` fills it in at startup
-and is idempotent, so a reconnect moves a tool rather than duplicating it.
-
-### `mcp` is dev-optional and imported lazily
-
-MCP needs servers that are not in this repo, so `mcp_enabled` defaults to False
-and the package is pinned in `requirements-dev.txt` only, imported inside the
-connect and serve functions. An install without it works; a server that cannot
-be reached, or a package that is not there, is one logged warning and an office
-that opens anyway.
-
-The tests follow the same line. The registration half runs against an
-in-process stub, because a subprocess would be testing the SDK rather than this
-repo. Two tests do use the real package and are skipped without it: one holds
-the declared tool schemas against the ones the SDK derives, and one drives this
-repo's own `mcp_server` over a real stdio subprocess -- which is the only way to
-find out whether the API this code was written against is the one that shipped.
-It was not: `mcp` 2.x replaced the low-level `Server` decorators with
-`MCPServer.add_tool` and renamed the HTTP transport, and that test is what
-caught it.
-
----
+The general shape survived it. `tool_registry.catalogue()` is still the single
+authority on what exists, `register()` still takes a risk level, and
+`OfficeFloor.bind_tool` still gates a tool onto a station after import -- so a
+tool registered at runtime is still an ordinary tool. That was the part worth
+keeping, and it was never MCP-specific.
 
 ## The panels, and replay (WP8)
 

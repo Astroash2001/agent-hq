@@ -42,14 +42,8 @@ opentelemetry-exporter-otlp-proto-http==1.29.0
 # evals/ reads its task files as YAML. Already present transitively via litellm;
 # pinned here because the eval suite imports it directly.
 PyYAML==6.0.3
+
 # --- Linting ------------------------------------------------------------------
 # Fast Python linter used in CI.
 ruff==0.9.9
 
-# --- MCP ----------------------------------------------------------------------
-# Only needed with MCP_ENABLED and servers configured in backend/mcp_servers.json,
-# or to run `python -m mcp_server` and let an MCP client drive the harness.
-# mcp_client.py and mcp_server.py import it inside the connect/serve functions,
-# so a missing package is a logged warning and the app starts without it -- the
-# test suite covers both halves against an in-process stub instead.
-mcp==2.1.1

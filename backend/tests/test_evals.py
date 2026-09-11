@@ -782,7 +782,8 @@ def test_observers_are_replayed_and_writers_really_run():
     # prompt was found carrying the whole of TODO.md, which changes on every
     # commit.
     for observes in ("web_search", "terminal", "list_files", "read_file",
-                     "code_analysis", "review_artifacts", "mcp__fs__anything"):
+                     "code_analysis", "review_artifacts", "fetch_url",
+                     "query_data", "search_workspace", "a_tool_added_later"):
         assert replay_mod.is_external(observes) is True, observes
 
     # Exists for its side effect -- has to really run, because that effect is

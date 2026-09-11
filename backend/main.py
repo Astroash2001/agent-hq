@@ -75,30 +75,14 @@ event_bus.subscribe_all(on_bus_event)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lifecycle manager for startup and shutdown.
-
-    MCP servers are connected here rather than at import, because connecting is
-    async and because a server that is down must not stop the office opening --
-    `connect_all` logs and moves on, and this guard catches anything it did not.
-    """
+    """Lifecycle manager for startup and shutdown."""
     logger.info("AgentHQ Backend Server starting up...")
     # Before anything runs, say whether the models this office is configured to
     # use can be priced at all. An unpriced model reports $0.0000 everywhere --
     # cost panel, mission.json, eval budgets -- and a harness that sells "you
     # can price a run" reporting every run as free is the worst kind of quiet.
     pricing.warn_if_configured_models_are_unpriced()
-    if settings.mcp_enabled:
-        import mcp_client
-        try:
-            await mcp_client.connect_all(orchestrator.agents)
-        except Exception as e:
-            logger.warning(f"MCP startup failed ({type(e).__name__}: {e}); "
-                           f"continuing without integrations")
     yield
-    if settings.mcp_enabled:
-        import mcp_client
-        await mcp_client.shutdown()
     logger.info("AgentHQ Backend Server shutting down...")
 
 
@@ -223,27 +207,6 @@ async def delete_attachment(name: str):
     if not attachments.discard(name):
         raise HTTPException(status_code=404, detail=f"no staged file '{name}'")
     return {"status": "discarded", "name": name}
-
-
-@app.post("/api/mcp/refresh")
-async def refresh_mcp():
-    """
-    Ask the connected MCP servers what they offer now.
-
-    Tools were listed once at startup and never again, so a server that gained
-    one while the office was running stayed invisible until a restart -- which
-    is the normal case for a server under active development, and exactly when
-    you want to see the new tool.
-
-    Uses the live sessions rather than reconnecting, so this can be called
-    during a mission without dropping anything mid-call.
-    """
-    if not settings.mcp_enabled:
-        raise HTTPException(status_code=409, detail="MCP is disabled")
-    import mcp_client
-    added = await mcp_client.refresh(orchestrator.agents)
-    return {"added": added,
-            "servers": {n: s.tools for n, s in mcp_client.connected_servers().items()}}
 
 
 @app.post("/api/emergency-stop")

@@ -99,7 +99,7 @@ async def test_a_missing_tool_is_refused_with_a_reason(monkeypatch):
     assert hires == []
     assert refusals and "query_postgres" in refusals[0]
     # The refusal has to say what would fix it, or it is just a failure.
-    assert "MCP" in refusals[0]
+    assert "backend/tools/" in refusals[0]
 
 
 @pytest.mark.asyncio

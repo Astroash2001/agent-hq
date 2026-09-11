@@ -49,8 +49,9 @@ class ToolRegistry:
           write   changes state the mission owns (files, decisions)
           execute runs code, or reaches an address chosen at runtime
 
-        MCP tools default to `execute`, because what a third-party server does
-        behind its own tool name is not knowable from here.
+        A tool registered without saying defaults to `read`; one asked about
+        that was never registered is reported `execute`, because guessing
+        "harmless" about something unknown is the wrong way round.
         """
         self._tools[name] = {
             "name": name,
@@ -71,9 +72,9 @@ class ToolRegistry:
         Every registered tool, with its description and risk.
 
         The authority on what exists. Anything choosing tools -- the planner
-        prompt, the agent foundry -- reads this rather than a hardcoded list,
-        so MCP tools registered at startup are offered on the same footing as
-        the built-ins and a tool that does not exist cannot be granted.
+        prompt, the agent foundry -- reads this rather than keeping a list of
+        its own, so a tool that does not exist cannot be granted and one added
+        later is offered without those callers changing.
         """
         return {
             name: {"description": tool["description"], "risk": tool["risk"]}

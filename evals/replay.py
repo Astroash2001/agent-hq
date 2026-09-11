@@ -462,8 +462,9 @@ def is_external(tool_name: str) -> bool:
     """
     Whether this tool's result should be served from a cassette.
 
-    True for everything except the writers, including any `mcp__*` server --
-    somebody else's server promises nothing about repeating an answer.
+    True for everything except the writers. A tool that observes something --
+    the web, the clock, the filesystem, a service -- promises nothing about
+    repeating an answer, so the recording is the only thing that can.
     """
     return tool_name not in SIDE_EFFECT_TOOLS
 

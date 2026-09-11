@@ -340,7 +340,6 @@ bug is yours or mine.
 | `contracts_enabled` | artifacts are filed unchecked, as before |
 | `critic_enabled` | no model judges any artifact; contracts still run |
 | `debate_enabled` | attendees sit silent through a meeting and only the chair thinks, as before |
-| `mcp_enabled` | (default **off**) no MCP servers are connected and no `mcp__*` tools exist |
 
 `max_repair_attempts` (1) is the extra dispatches a rejected step may have.
 Setting it to 0 leaves the checks running and the verdicts emitting, and
@@ -364,7 +363,7 @@ clock that `memory.render_hints` writes into recalled episodes.
 
 Tool calls are keyed on the tool name and its arguments, and **only tools whose
 answer comes from outside the office are served from disk** — `web_search` and
-any `mcp__*` server. Everything else really runs, because a local tool's side
+`fetch_url`. Everything else really runs, because a local tool's side
 effect *is* the mission's output: serving `write_file` a recorded "ok" leaves the
 workspace empty and the run scores as having produced nothing.
 

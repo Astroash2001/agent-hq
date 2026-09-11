@@ -253,18 +253,6 @@ class Settings(BaseSettings):
     # so a step cannot be repaired twice by taking one from each.
     max_repair_attempts: int = 1
 
-    # --- MCP (WP6) -----------------------------------------------------------
-    # Off by default: it needs servers that are not in this repo, and the `mcp`
-    # package is in requirements-dev.txt only and imported lazily, so nothing
-    # about the default install changes. A server that will not connect is a
-    # logged warning, never a failed startup.
-    mcp_enabled: bool = os.getenv("MCP_ENABLED", "false").lower() in ("1", "true", "yes")
-    mcp_config_path: str = os.path.join(os.path.dirname(__file__), "mcp_servers.json")
-    # One MCP tool call. Shorter than llm_timeout on purpose: a tool that has
-    # not answered in half a minute is a tool the agent should route around
-    # while it still has step budget left.
-    mcp_tool_timeout: float = 30.0
-
     # Memory (P6)
     memory_enabled: bool = True
     memory_path: str = os.path.join(os.path.dirname(__file__), "data", "memory.json")
@@ -403,8 +391,7 @@ class Settings(BaseSettings):
     # `python main.py`, run from backend/, happens to have the right one. Run
     # the documented way from the repo root, `python -m evals.runner` loaded no
     # credential at all: every task fell to the simulator, the judge reported
-    # "no model configured", and no cassette could ever be recorded. The same
-    # was true of `python -m mcp_server` from anywhere but backend/.
+    # "no model configured", and no cassette could ever be recorded.
     #
     # backend/.env is listed last because the later file wins, which keeps the
     # behaviour of a run started from backend/ exactly as it was.

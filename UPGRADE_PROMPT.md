@@ -1,5 +1,10 @@
 # AgentHQ — Harness Hardening Brief
 
+> **Historical.** Every work package below was completed. One was later undone:
+> WP6's MCP half was built in both directions and then removed, deliberately —
+> see "MCP was built in both directions, and then removed" in [[DECISIONS]].
+> Do not rebuild it from this brief.
+
 **Paste this whole file as your opening message. Then execute ONE work package per
 session, in the numbered order. Do not attempt more than one WP in a single run.**
 

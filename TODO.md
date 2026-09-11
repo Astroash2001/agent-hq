@@ -407,51 +407,26 @@ and told nobody anything useful.
 
 ### No MCP
 
-**Done, both directions.** `mcp_client.py` reads `backend/mcp_servers.json`
-(stdio or HTTP), lists each server's tools at startup, and registers them into
-the existing `tool_registry` as `mcp__<server>__<tool>`, bound to a new
-`integrations` station -- so they emit the same events, are timed the same way,
-and the agent walks to the bench to use them. `mcp_server.py` serves this
-office's own `run_mission` / `get_mission` / `list_agents` over stdio, so Claude
-Code or any MCP client can drive the harness. `mcp_servers.example.json` and a
-README section show the config.
+**Built in both directions, then removed on purpose.** `mcp_client.py`
+registered other people's tools into `tool_registry` as
+`mcp__<server>__<tool>`; `mcp_server.py` served this office over stdio. Both
+worked, both were off by default, and both are gone.
 
-Off by default (`mcp_enabled`), `mcp` pinned in `requirements-dev.txt` only and
-imported lazily, and an unreachable server is a logged warning that does not
-block startup.
+The reason is a trade, and it is written up in [[DECISIONS]]. Switching MCP on
+means `npx`, third-party servers and network at runtime, against a harness
+whose whole pitch is: clone it, run it with no key, replay it deterministically.
+That property is worth more here than an open-ended catalogue, because nobody
+is pointing this at a production data source.
 
-**Also done: `grant_to` is now per tool as well as per server.** The list form
-is all-or-nothing, and an agent granted a filesystem server got its
-`delete_file` along with its `read_file` — the wrong default for the one server
-type most likely to be pointed at a real disk.
+What survived the removal is the part that was never MCP-specific:
+`tool_registry.catalogue()` as the single authority on what exists,
+`register(..., risk=)`, and `OfficeFloor.bind_tool` for gating a tool onto a
+station after import. A tool registered at runtime is still an ordinary tool.
 
-`grant_to` now takes either shape: `["coder"]` for every tool, or
-`{"coder": ["read_file"], "researcher": "*"}` per tool. Grants are written
-against the server's own tool names, since that is what a server's
-documentation lists, though the prefixed name is accepted too for anyone
-copying out of a log. `_resolve_grants` is separate from `register_server` so
-the rules can be read without a registry or an office in the way. An unknown
-agent or tool name is a logged warning that costs that line, not the server —
-a typo in `mcp_servers.json` should not lose a working integration.
-
-**Also done: tools can be re-listed after startup.** They were listed once at
-connect and never again, so a server that gained one while the office was
-running stayed invisible until a restart — the normal case for a server under
-active development, and exactly when you want to see the new tool.
-`POST /api/mcp/refresh` asks every connected server what it offers now and
-registers anything new.
-
-It re-uses the **live session** rather than reconnecting, so it can be called
-during a mission without dropping whatever is mid-call. That is also the part
-that was easy to get wrong: a first version looked the call wrapper up through
-the registry, which would have handed a newly registered tool a function that
-called itself. The session's own call function is kept on the server record
-instead.
-
-A tool the server has *dropped* stays registered, deliberately. Removing one
-mid-mission turns a step that planned around it into a step calling something
-that no longer exists, which fails worse than calling a tool the server has
-quietly retired.
+The question MCP answered -- "the mission needs a capability nothing provides"
+-- now has a plainer answer: `foundry.py` refuses to hire and names the missing
+tool. Writing one in `backend/tools/` is around eighty lines plus a guardrail,
+and the four added with the foundry are the worked examples.
 
 ### Synthesis is string assembly
 
@@ -537,8 +512,8 @@ What the foundry adds on top of that is one distinction `regrant_steps` cannot
 draw. From there, a tool nobody was granted and a tool nobody implements look
 identical -- both get ignored as invented -- and they need opposite responses.
 Against `tool_registry.catalogue()` they come apart: the first is hired for,
-the second fails loudly naming what is missing and that an MCP server is the
-fix. Hiring for the second would produce an agent holding a name with no
+the second fails loudly, naming what is missing -- which is a request to go
+and write that tool. Hiring for the second would produce an agent holding a name with no
 function behind it, which is this project's oldest failure in a new costume.
 
 The model writes the contractor's identity and never its tools -- the list is
@@ -746,9 +721,9 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**519 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+**490 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
 across 34 files: the original phase tests plus telemetry, contracts, the critic,
-the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
+the run store, resume, the sandbox, semantic memory, debate, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool
 grants, the conclusion and its grounding, station capacity, artifact
 condensing, the exported office grid, routed walk timing, the artifact
@@ -863,7 +838,6 @@ empty because nothing had ever recorded; nothing had ever recorded because:
    all, every task fell to the simulator and the judge reported "no model
    configured". Both env files are now absolute and anchored to `config.py`,
    `backend/.env` last so a run started from `backend/` is unchanged. The same
-   bug silently affected `python -m mcp_server` from anywhere but `backend/`.
 3. The judgement was taken *outside* the cassette transport, though
    `judge.py`'s own docstring says it goes through it. A replayed run therefore
    re-graded live -- money on every replay, and no grade at all in CI.
@@ -924,7 +898,7 @@ simply been moved from the model to the tools.
 
 `tool_registry.execute` is wrapped now, keyed on tool name and arguments. Only
 tools whose answer comes from outside the office are served from disk —
-`web_search` and any `mcp__*` server. **`write_file` must genuinely run on
+`web_search` and `fetch_url`. **`write_file` must genuinely run on
 replay**: its side effect is the artifact the structural checks look for, so
 serving it a recorded "ok" leaves the workspace empty and scores the mission as
 having produced nothing. The rule is "record what the office cannot control",
