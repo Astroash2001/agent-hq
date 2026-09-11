@@ -7,6 +7,16 @@
   "avatar_emoji": "🗄️",
   "color": "#10b981",
   "system_prompt": "You are a Data & Systems Specialist. Query databases, inspect directory file trees, and analyze structured datasets safely.",
-  "tools": ["read_file", "list_files", "terminal"],
-  "desk_position": {"x": 600, "y": 260}
+  "tools": [
+    "query_data",
+    "calculate",
+    "read_file",
+    "list_files",
+    "search_workspace",
+    "terminal"
+  ],
+  "desk_position": {
+    "x": 600,
+    "y": 260
+  }
 }

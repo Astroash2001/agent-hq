@@ -521,9 +521,52 @@ can no longer be configured by accident. See the WP7 section below.
 
 ### `terminal` tool executes shell commands
 
-`tools/terminal.py` is reachable by the `coder` and `data_analyst` agents. Fine
-locally; needs sandboxing or an allowlist before this is exposed to anything
-untrusted.
+**Stale** -- hardened in WP7 (allowlist, no metacharacters, jailed cwd, scrubbed
+env). See the WP7 section.
+
+### The tool catalogue, and the grant that was not enforced
+
+**Done.** Four tools added, taking the built-ins from six to ten, because the
+roster could not do ordinary work: `data_analyst` held `read_file`,
+`list_files` and `terminal` -- no data tool at all -- and nothing anywhere
+could open a URL it had been handed.
+
+- `fetch_url` -- one named page or API as text
+- `query_data` -- read-only SQL over a CSV or JSON file, via stdlib sqlite3
+- `calculate` -- exact arithmetic, so a figure in a report is computed, not recalled
+- `search_workspace` -- matching lines across the mission's files
+
+No new dependency: `httpx` was already one, the rest is standard library.
+
+**The grant check came first, and mattered more than the tools.**
+`tool_registry.execute` never verified the caller held the tool it named. It
+held up only because an agent is *shown* schemas for its own tools -- a habit
+of the model, not a property of the system. That is fine while every manifest
+is hand-written and reviewed, and stops being fine the moment a tool list is
+chosen at runtime. Enforced now, and the refusal names what the agent *does*
+have, so the model corrects instead of retrying synonyms until the step budget
+is gone.
+
+**Two findings while building it, both silent in the way this project cares about:**
+
+- `csv.reader` returns strings, so a numeric column sorted **lexically**:
+  `'80'` above `'120'`. Aggregates were right, because SQLite coerces text for
+  `SUM`, so nothing errored -- `ORDER BY revenue DESC` just put the wrong region
+  at the top of a ranked table. Cells are typed on load now, with leading zeros
+  left as text because `01234` is a postcode more often than it is 1234.
+- The first containment test for `query_data` passed against no containment at
+  all. `file_ops._get_read_allowed_roots` allows `missions_path` *and its
+  parent*, so pointing `missions_path` at a `mkdtemp` directory silently allows
+  the entire system temp directory -- which is where the test had put its
+  "outside" file. The fixture nests the mission dir one level down now.
+
+**Still open: the eval cassettes are stale.** Agent tool lists are in the
+planner prompt, so widening them changed the first planner call's cassette key
+and all 14 tasks now miss. Nothing is broken -- `--replay` fails loudly, which
+is what it is for -- but the suite cannot score until one `--record` sweep is
+paid for. The committed scorecard is the last valid run and is now protected:
+a sweep where every task errors refuses to overwrite it, having done exactly
+that once.
 
 ---
 
@@ -658,7 +701,7 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**449 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+**497 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
 across 34 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, MCP, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool

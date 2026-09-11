@@ -1525,8 +1525,11 @@ class Orchestrator:
         # fails every offline run for a reason the agent cannot fix.
         spec = contracts.infer_spec(
             step.produces, step.description,
+            # fetch_url counts as well: an agent that can open a page it was
+            # given can cite it, and demanding citations only of searchers made
+            # the bar depend on which of two reaching-out tools was granted.
             citations_expected=bool(settings.tavily_api_key)
-            and "web_search" in specialist.tools,
+            and bool({"web_search", "fetch_url"} & set(specialist.tools)),
         )
 
         feedback = ""

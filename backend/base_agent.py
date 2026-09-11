@@ -371,7 +371,12 @@ class BaseAgent:
                         tool_name=tool_name,
                         arguments=tool_args,
                         agent_id=self.id,
-                        task_id=task.id
+                        task_id=task.id,
+                        # The same list the schemas were built from, so what
+                        # the model was offered and what it may run cannot
+                        # drift apart. This is the only path by which a name a
+                        # model chose reaches a tool function.
+                        granted=granted,
                     )
                     tool_span.set(
                         station_id=station.id if station else None,

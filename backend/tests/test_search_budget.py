@@ -51,7 +51,7 @@ async def test_searches_are_capped(researcher, monkeypatch):
 
     executed = []
 
-    async def _exec(tool_name, arguments, agent_id=None, task_id=None):
+    async def _exec(tool_name, arguments, agent_id=None, task_id=None, granted=None):
         executed.append(tool_name)
         return {"success": True, "results": []}
 
@@ -70,7 +70,7 @@ async def test_the_agent_is_told_why_it_was_refused(researcher, monkeypatch):
 
     seen = []
 
-    async def _exec(tool_name, arguments, agent_id=None, task_id=None):
+    async def _exec(tool_name, arguments, agent_id=None, task_id=None, granted=None):
         return {"success": True, "results": []}
 
     monkeypatch.setattr(ba.tool_registry, "execute", _exec)
@@ -111,7 +111,7 @@ async def test_other_tools_are_not_capped(researcher, monkeypatch):
     monkeypatch.setattr(ba.BaseAgent, "_call_llm", _fake)
     executed = []
 
-    async def _exec(tool_name, arguments, agent_id=None, task_id=None):
+    async def _exec(tool_name, arguments, agent_id=None, task_id=None, granted=None):
         executed.append(tool_name)
         return {"success": True}
 

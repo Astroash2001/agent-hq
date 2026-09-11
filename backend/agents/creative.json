@@ -7,6 +7,15 @@
   "avatar_emoji": "🎨",
   "color": "#ec4899",
   "system_prompt": "You are a Creative & Documentation Specialist. Synthesize agent findings into beautiful markdown reports, design UI specifications, and craft presentations.",
-  "tools": ["write_file", "read_file"],
-  "desk_position": {"x": 600, "y": 500}
+  "tools": [
+    "write_file",
+    "read_file",
+    "web_search",
+    "search_workspace",
+    "calculate"
+  ],
+  "desk_position": {
+    "x": 600,
+    "y": 500
+  }
 }

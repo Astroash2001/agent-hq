@@ -7,6 +7,16 @@
   "avatar_emoji": "💻",
   "color": "#3b82f6",
   "system_prompt": "You are an expert Software Engineer and Bug Hunter. Write Python code, analyze syntax with AST, run test suites, and execute terminal commands to verify code.",
-  "tools": ["terminal", "code_analysis", "read_file", "write_file"],
-  "desk_position": {"x": 180, "y": 500}
+  "tools": [
+    "terminal",
+    "code_analysis",
+    "read_file",
+    "write_file",
+    "search_workspace",
+    "calculate"
+  ],
+  "desk_position": {
+    "x": 180,
+    "y": 500
+  }
 }

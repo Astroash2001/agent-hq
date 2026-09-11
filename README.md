@@ -405,7 +405,7 @@ you only need them to regenerate it. See [[STACK]].
 | Telemetry | `backend/tracing.py`, `backend/pricing.py` | One span per unit of work; real token counts, priced per model |
 | Agent engine | `backend/base_agent.py` | ReAct loop: reason → tool call → observe → repeat |
 | Event fabric | `backend/event_bus.py` | In-memory async pub/sub, 200-event rolling history |
-| Tools | `backend/tool_registry.py`, `backend/tools/` | 6 built-in tools, sandboxed, plus any MCP server |
+| Tools | `backend/tool_registry.py`, `backend/tools/` | 10 built-in tools, sandboxed and grant-checked, plus any MCP server |
 | Office renderer | `frontend/js/canvas.js` | Tilemap, A* pathing, depth sort, lighting, doors, labels |
 | Office data | `frontend/js/office_map.js` | The whole floor plan as data — 40×24 tiles |
 | HUD | `frontend/js/hud.js` | Dock, terminal, token gauge, DAG panel, cost panel, mission output |
@@ -421,10 +421,54 @@ Full detail in [[ARCHITECTURE]].
 | ID | Name | Role | Tools |
 |---|---|---|---|
 | `orchestrator` | Boss Dave | Planning & synthesis | — |
-| `researcher` | Alice | Search, RAG & discovery | web_search, read_file |
-| `coder` | Charlie | Code & bug hunting | terminal, code_analysis, read_file, write_file |
-| `data_analyst` | Bob | Data & analytics | read_file, list_files, terminal |
-| `creative` | Eve | Writing & synthesis | write_file, read_file |
+| `researcher` | Alice | Search, RAG & discovery | web_search, fetch_url, read_file, search_workspace, calculate |
+| `coder` | Charlie | Code & bug hunting | terminal, code_analysis, read_file, write_file, search_workspace, calculate |
+| `data_analyst` | Bob | Data & analytics | query_data, calculate, read_file, list_files, search_workspace, terminal |
+| `creative` | Eve | Writing & synthesis | write_file, read_file, web_search, search_workspace, calculate |
+
+`write_file` is granted for the duration of any step that promises an artifact,
+so an agent without it can still file a deliverable.
+
+## The tools
+
+| Tool | Risk | What it does |
+|---|---|---|
+| `web_search` | read | Ranked snippets from the live web (Tavily), or an honest refusal |
+| `fetch_url` | execute | One named http/https page or API as text |
+| `read_file` / `list_files` | read | Jailed to the mission and the repo |
+| `search_workspace` | read | Matching lines across the mission's files, with line numbers |
+| `query_data` | read | Read-only SQL over a CSV or JSON file |
+| `calculate` | read | Exact arithmetic, AST-sandboxed |
+| `write_file` | write | Jailed to the mission workspace |
+| `code_analysis` | execute | AST parse and test execution |
+| `terminal` | execute | Allowlisted commands only, no shell metacharacters |
+| `review_artifacts` / `record_decision` | write | Conference table only |
+| `mcp__<server>__<tool>` | execute | Anything a connected MCP server offers |
+
+**Risk** is metadata on the registry entry, not documentation: it is what lets
+code that hands tools to an agent know which ones are dangerous without keeping
+its own list that drifts. An unknown tool is assumed `execute`.
+
+**A grant is enforced, not assumed.** `tool_registry.execute` refuses a tool
+outside the caller's list. Until that check existed, a grant held only because
+an agent is *shown* schemas for its own tools — a habit of the model rather
+than a property of the system, and one that stops holding the moment a tool
+list is chosen at runtime rather than written by hand.
+
+Three of these needed a guardrail shape the repo did not have:
+
+- `fetch_url` is the first outbound request whose destination an LLM chooses.
+  `web_search` only ever talks to one hardcoded host. So: scheme allowlist,
+  refusal of any name resolving into private address space — checked on every
+  redirect hop, not just the URL given — and a byte ceiling. Without it,
+  `http://169.254.169.254/` reads the cloud metadata service and
+  `http://localhost:8080/` lets an agent drive this server through its own tool.
+- `query_data` is read-only by **SQLite's own authorizer**, not by a keyword
+  scan. Case, comments and whitespace all defeat a blocklist; the authorizer
+  sees parsed operations.
+- `calculate` allowlists **AST node types**, so no name, call or attribute can
+  be reached at all. Refusing everything that is not literal arithmetic leaves
+  nothing to be clever with.
 
 Adding an agent is a new JSON file in `backend/agents/` plus a desk in
 `office_map.js` — see [[ARCHITECTURE]].

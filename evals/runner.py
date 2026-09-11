@@ -601,7 +601,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     # column is computed against) with it. Losing twelve rows should not be the
     # by-product of running a subset.
     from evals import report as report_mod
-    if args.suite in ("all", ""):
+    errored = [r for r in report["rows"] if r["error"]]
+    if args.suite in ("all", "") and len(errored) == len(report["rows"]) and errored:
+        # A sweep where every task errored is not a measurement of the suite,
+        # it is a broken run -- most often cassettes gone stale after a prompt
+        # changed. Writing it replaces every real score with a dash and takes
+        # `previous.json` with it, so the next run has no baseline to diff
+        # either. The results file is still written; only the committed record
+        # is protected.
+        print(f"\nscorecard left alone: all {len(errored)} task(s) errored, "
+              f"which records nothing. Results are in {path}")
+    elif args.suite in ("all", ""):
         report_mod.write_scorecard(report)
     else:
         print(f"scorecard left alone: --suite {args.suite} is not the full "

@@ -83,9 +83,12 @@ STATIONS: List[Station] = [
         id="ops_console",
         label="Ops Console",
         x=_station_xy("ops_console", (19.4, 18.4))[0], y=_station_xy("ops_console", (19.4, 18.4))[1],
-        tools=["terminal", "code_analysis"],
+        tools=["terminal", "code_analysis", "query_data"],
         kind="tool",
-        description="The console rig by the conference wall. Shell and AST work happens here."
+        description=(
+            "The console rig by the conference wall. Shell, AST work and data "
+            "queries happen here."
+        )
     ),
     Station(
         id="research_library",
@@ -95,17 +98,23 @@ STATIONS: List[Station] = [
         # tiles from the nearest bookshelf, beside a potted plant and the end
         # of somebody's desk.
         x=_station_xy("research_library", (8.91, 4.97))[0], y=_station_xy("research_library", (8.91, 4.97))[1],
-        tools=["web_search", "read_file"],
+        tools=["web_search", "read_file", "fetch_url"],
         kind="tool",
-        description="The library shelves on the north wall. Search and reading happens here."
+        description=(
+            "The library shelves on the north wall. Search, reading and fetching "
+            "a page happens here."
+        )
     ),
     Station(
         id="filing_archive",
         label="Filing Archive",
         x=_station_xy("filing_archive", (2.6, 9.4))[0], y=_station_xy("filing_archive", (2.6, 9.4))[1],
-        tools=["write_file", "list_files"],
+        tools=["write_file", "list_files", "search_workspace"],
         kind="tool",
-        description="The cabinets on the west wall. Anything written to disk is filed here."
+        description=(
+            "The cabinets on the west wall. Anything written to disk is filed "
+            "here, and searching the drawers happens here too."
+        )
     ),
     Station(
         id="whiteboard",

@@ -349,6 +349,29 @@ class Settings(BaseSettings):
     # File ops path containment kill switch.
     file_ops_sandbox_enabled: bool = True
 
+    # --- fetch_url: outbound requests to an address the model chooses --------
+    # A guardrail class the harness did not have. Every other outbound call
+    # goes to a host this code names (Tavily, the LLM provider); this one goes
+    # where an agent says. See tools/fetch_url.py for why each of these exists.
+    fetch_url_timeout: float = 15.0
+    fetch_url_max_chars: int = 20000
+    # Every hop is re-checked against the address policy, so this is a cost
+    # bound rather than a safety one.
+    fetch_url_max_redirects: int = 5
+    fetch_url_user_agent: str = "AgentHQ/1.0 (+https://github.com/agent-hq)"
+
+    # --- query_data ---------------------------------------------------------
+    # Rows returned to the agent. Its reply history is re-sent every turn, so
+    # this is a token budget as much as a result cap.
+    query_data_max_rows: int = 200
+    # Rows loaded from the file into the in-memory table. Well above the result
+    # cap because an aggregate over 50k rows should still be right.
+    query_data_max_source_rows: int = 50000
+
+    # --- search_workspace ---------------------------------------------------
+    search_workspace_max_results: int = 100
+    search_workspace_max_file_bytes: int = 2_000_000
+
     # API authentication and network hardening.
     # When api_token is empty, all endpoints remain open (local dev / no-key demo).
     # When set, require it on /ws connect and on POST /api/emergency-stop.

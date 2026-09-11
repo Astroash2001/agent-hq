@@ -11,6 +11,10 @@ from tools.terminal import execute_terminal
 from tools.file_ops import read_file, write_file, list_files
 from tools.web_search import search_web
 from tools.code_analysis import analyze_python_code
+from tools.fetch_url import fetch_url
+from tools.calculate import calculate
+from tools.query_data import query_data
+from tools.search_workspace import search_workspace
 
 logger = logging.getLogger("AgentHQ.ToolRegistry")
 
@@ -30,16 +34,51 @@ class ToolRegistry:
         name: str,
         description: str,
         parameters: Dict[str, Any],
-        function: Callable[..., Any]
+        function: Callable[..., Any],
+        risk: str = "read",
     ):
-        """Register a new tool into the system."""
+        """
+        Register a new tool into the system.
+
+        `risk` says what the tool can do to the world, in one word, and exists
+        for the code that hands tools to an agent a model just invented: a
+        catalogue that does not say which entries are dangerous forces that
+        caller to keep its own list, which will drift. Three values:
+
+          read    observes something and changes nothing
+          write   changes state the mission owns (files, decisions)
+          execute runs code, or reaches an address chosen at runtime
+
+        MCP tools default to `execute`, because what a third-party server does
+        behind its own tool name is not knowable from here.
+        """
         self._tools[name] = {
             "name": name,
             "description": description,
             "parameters": parameters,
-            "function": function
+            "function": function,
+            "risk": risk,
         }
         logger.info(f"Registered tool: {name}")
+
+    def risk_of(self, tool_name: str) -> str:
+        """What `tool_name` can do to the world. Unknown tools are `execute`."""
+        tool = self._tools.get(tool_name)
+        return tool["risk"] if tool else "execute"
+
+    def catalogue(self) -> Dict[str, Dict[str, str]]:
+        """
+        Every registered tool, with its description and risk.
+
+        The authority on what exists. Anything choosing tools -- the planner
+        prompt, the agent foundry -- reads this rather than a hardcoded list,
+        so MCP tools registered at startup are offered on the same footing as
+        the built-ins and a tool that does not exist cannot be granted.
+        """
+        return {
+            name: {"description": tool["description"], "risk": tool["risk"]}
+            for name, tool in sorted(self._tools.items())
+        }
 
     def get_tool_schema(self, tool_name: str) -> Optional[Dict[str, Any]]:
         """Return the tool schema formatted for OpenAI/LiteLLM function calling."""
@@ -70,15 +109,44 @@ class ToolRegistry:
         tool_name: str,
         arguments: Dict[str, Any],
         agent_id: Optional[str] = None,
-        task_id: Optional[str] = None
+        task_id: Optional[str] = None,
+        granted: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Execute a tool, emit live events, and return result payload.
+
+        `granted` is the caller's tool list. When given, a tool outside it is
+        refused here rather than run.
+
+        Until this check existed, a grant was enforced only by omission: an
+        agent is shown schemas for its own tools, so in practice it only calls
+        those. That is a habit of the model, not a property of the system --
+        nothing stopped a reply naming `terminal` from running `terminal`,
+        whatever the manifest said. It held up while every manifest was
+        hand-written and reviewed. It stops holding the moment an agent's tool
+        list is chosen at runtime, which is what the foundry does, so the
+        boundary has to be real before that lands.
+
+        `None` means an internal caller that is not acting on a model's
+        instruction -- the meeting machinery, a test. It is not a way for an
+        agent to opt out: `base_agent` always passes its list.
         """
         if tool_name not in self._tools:
             err_msg = f"Tool '{tool_name}' is not registered in ToolRegistry."
             logger.error(err_msg)
             return {"success": False, "error": err_msg}
+
+        if granted is not None and tool_name not in granted:
+            # Refused, and the reply says what IS available. A bare refusal
+            # gets retried with a synonym until the step's budget is gone --
+            # the failure mode `web_search` documents for filler results.
+            logger.warning("%s called %s without a grant", agent_id or "?", tool_name)
+            return {
+                "success": False,
+                "refused": True,
+                "error": (f"'{tool_name}' is not one of your tools. "
+                          f"You have: {', '.join(sorted(granted)) or 'none'}."),
+            }
 
         tool = self._tools[tool_name]
         start_time = time.time()
@@ -162,7 +230,8 @@ class ToolRegistry:
                 },
                 "required": ["command"]
             },
-            function=execute_terminal
+            function=execute_terminal,
+            risk="execute",
         )
 
         # 2. Web Search
@@ -190,7 +259,8 @@ class ToolRegistry:
                 },
                 "required": ["query"]
             },
-            function=search_web
+            function=search_web,
+            risk="read",
         )
 
         # 3. Read File
@@ -204,7 +274,8 @@ class ToolRegistry:
                 },
                 "required": ["filepath"]
             },
-            function=read_file
+            function=read_file,
+            risk="read",
         )
 
         # 4. Write File
@@ -219,7 +290,8 @@ class ToolRegistry:
                 },
                 "required": ["filepath", "content"]
             },
-            function=write_file
+            function=write_file,
+            risk="write",
         )
 
         # 5. List Files
@@ -233,7 +305,8 @@ class ToolRegistry:
                 },
                 "required": ["directory"]
             },
-            function=list_files
+            function=list_files,
+            risk="read",
         )
 
         # 6. Code Analysis
@@ -247,10 +320,108 @@ class ToolRegistry:
                 },
                 "required": ["code_snippet"]
             },
-            function=analyze_python_code
+            function=analyze_python_code,
+            risk="execute",
         )
 
-        # 7. Conference table. These two only work in the meeting room -- see
+        # 7. Fetch URL
+        self.register(
+            name="fetch_url",
+            description=(
+                "Fetch one web page or JSON API by its exact URL and return its text. "
+                "Use this when you already have a URL -- from web_search, from the "
+                "goal, or from another agent's artifact -- and need what it actually "
+                "says rather than a snippet. web_search finds pages; this one reads "
+                "them. Only public http/https addresses can be fetched."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "Full http/https URL to fetch"},
+                    "max_chars": {"type": "integer",
+                                  "description": "Trim the text to this many characters. Omit for the default."}
+                },
+                "required": ["url"]
+            },
+            function=fetch_url,
+            risk="execute",
+        )
+
+        # 8. Calculate
+        self.register(
+            name="calculate",
+            description=(
+                "Evaluate an arithmetic expression exactly. Use this for every "
+                "calculation that ends up in your deliverable -- totals, differences, "
+                "percentages, unit conversions, growth rates -- rather than working it "
+                "out yourself. Literal numbers and operators only: substitute values "
+                "in, no variables or function names. Example: '(4200 - 3150) / 3150 * 100'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string",
+                                   "description": "Arithmetic expression, e.g. '1250 * 0.87 + 40'"}
+                },
+                "required": ["expression"]
+            },
+            function=calculate,
+            risk="read",
+        )
+
+        # 9. Query Data
+        self.register(
+            name="query_data",
+            description=(
+                "Run a read-only SQL SELECT against a CSV or JSON file. The file "
+                "becomes a table called 'data' whose columns are its headers, "
+                "lowercased with non-alphanumerics replaced by underscores. Use this "
+                "instead of reading a data file and counting by hand: it is exact, and "
+                "it works on files far larger than you can hold. Start with "
+                "'SELECT * FROM data LIMIT 5' to see the columns."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "filepath": {"type": "string", "description": "Path to a .csv, .tsv or .json file"},
+                    "query": {"type": "string",
+                              "description": "A SELECT statement against the table 'data'"},
+                    "max_rows": {"type": "integer",
+                                 "description": "Cap on rows returned. Omit for the default."}
+                },
+                "required": ["filepath", "query"]
+            },
+            function=query_data,
+            risk="read",
+        )
+
+        # 10. Search Workspace
+        self.register(
+            name="search_workspace",
+            description=(
+                "Search the mission's files for a string and return matching lines "
+                "with their file and line number. Use this to find which artifact "
+                "mentions something, instead of reading every file to look -- reading "
+                "whole documents to find one line is the most expensive thing you can "
+                "do. Searches the current mission's directory by default."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Text to find, or a regex if regex=true"},
+                    "directory": {"type": "string",
+                                  "description": "Where to search. Omit for the current mission's files."},
+                    "regex": {"type": "boolean",
+                              "description": "Treat the pattern as a regular expression. Default false."},
+                    "max_results": {"type": "integer", "description": "Cap on matches returned."}
+                },
+                "required": ["pattern"]
+            },
+            function=search_workspace,
+            risk="read",
+        )
+
+        # 11. Conference table. These two only work in the meeting room -- see
         # tools/meeting.py for why they are their own pair rather than reusing
         # read_file / write_file.
         from tools.meeting import TOOLS as MEETING_TOOLS
@@ -259,7 +430,8 @@ class ToolRegistry:
                 name=spec["name"],
                 description=spec["description"],
                 parameters=spec["parameters"],
-                function=spec["function"]
+                function=spec["function"],
+                risk="write",
             )
 
 
