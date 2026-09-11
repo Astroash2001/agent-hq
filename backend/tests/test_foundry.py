@@ -376,3 +376,35 @@ async def test_a_failed_mission_does_not_leave_its_contractor_behind(monkeypatch
     assert hired_id not in orchestrator.agents, "contractor leaked into the roster"
     assert hired_id not in {m["id"] for m in orchestrator.get_manifests()}
     assert office.free_seats() == len(office_mod.SPAWN_SEATS), "desk still held"
+
+
+def test_write_file_on_a_producing_step_is_not_a_gap():
+    """
+    `_run_step` grants write_file to any step that promises an artifact,
+    whoever it is assigned to. Counting it as missing hired a contractor for a
+    capability the assigned specialist was about to be handed anyway.
+
+    A gap is about what the step will actually have, not what the manifest
+    happens to list.
+    """
+    held = {"data_analyst": ["query_data", "read_file"]}
+    producing = PlanStep(id="s1", agent_id="data_analyst", description="Query and write up",
+                         needs_tools=["query_data", "write_file"], produces="report.md")
+    assert foundry.find_gaps([producing], held) == []
+
+    # Still a gap when the step promises nothing -- there is no auto-grant then.
+    bare = PlanStep(id="s2", agent_id="data_analyst", description="Write a note",
+                    needs_tools=["query_data", "write_file"], produces="")
+    gaps = foundry.find_gaps([bare], held)
+    assert len(gaps) == 1 and "write_file" in gaps[0].needed
+
+
+def test_a_producing_step_still_gaps_on_a_tool_nobody_holds():
+    """The write_file exemption must not swallow the rest of the list."""
+    held = {"data_analyst": ["query_data"]}
+    step = PlanStep(id="s1", agent_id="data_analyst", description="Query and fetch",
+                    needs_tools=["query_data", "fetch_url", "write_file"], produces="report.md")
+    gaps = foundry.find_gaps([step], held)
+    assert len(gaps) == 1
+    assert gaps[0].needed == ["fetch_url", "query_data"]
+    assert "write_file" not in gaps[0].needed

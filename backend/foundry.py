@@ -116,6 +116,17 @@ def find_gaps(
         declared = [t for t in (step.needs_tools or [])]
         if not declared:
             continue
+        # `_run_step` grants write_file to any step that promises an artifact,
+        # whoever it is assigned to, so a step declaring it is not short of it.
+        # Counting it here hired a contractor for a capability the assigned
+        # specialist was about to be handed anyway -- a whole agent, a desk and
+        # a design call, for nothing. The grant is the orchestrator's and this
+        # has to know about it, because a gap is about what the step will
+        # actually have, not about what the manifest happens to list.
+        if step.produces:
+            declared = [t for t in declared if t != "write_file"]
+            if not declared:
+                continue
         missing = [t for t in declared if t not in catalogue]
         real = [t for t in declared if t in catalogue]
         if not real and not missing:
