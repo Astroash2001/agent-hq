@@ -305,6 +305,20 @@ class Orchestrator:
             # Back to seeing everything, so the NEXT mission recalls what this
             # one learned. The horizon is per mission, not a global setting.
             memory.thaw()
+            # Contracts end here as well as on the happy path, and this is the
+            # copy that matters. A contractor is in `self.agents`, and
+            # `get_manifests` feeds that straight into the planner prompt as
+            # the roster -- so one hired by a mission that then raised would be
+            # offered to every later mission in the same process, as an agent
+            # nothing on disk knows about.
+            #
+            # Worst where it is hardest to see: an eval sweep runs all fourteen
+            # tasks in one process and the runner catches a failure per task so
+            # the suite continues. One task failing after a hire would re-key
+            # every task after it, and the recording would not replay from a
+            # clean process. Two earlier sweeps were thrown away for faults of
+            # exactly this shape.
+            self._dismiss_spawned()
 
     @staticmethod
     def _rehydrate_workspace(workspace: MissionWorkspace) -> List[str]:

@@ -329,3 +329,50 @@ def test_contractors_do_not_leak_between_missions(store):
         id="t1", name="Nina", role="R", system_prompt="p", tools=["calculate"]))
     assert len(store.get_spawned_agents("m1")) == 1
     assert store.get_spawned_agents("m2") == []
+
+
+# --------------------------------------------------- leaking across missions
+
+@pytest.mark.asyncio
+async def test_a_failed_mission_does_not_leave_its_contractor_behind(monkeypatch):
+    """
+    The one that would have cost a recording sweep.
+
+    A contractor lives in `orchestrator.agents`, and `get_manifests` feeds that
+    dict to the planner as the roster. Dismissal used to sit at the end of the
+    happy path only, so a mission that raised left its hire in the roster --
+    offered to every later mission in the same process as an agent nothing on
+    disk knows about.
+
+    An eval sweep is where that bites: fourteen tasks in one process, with the
+    runner catching a failure per task so the suite continues. One failure
+    after a hire re-keys the planner prompt of every task after it, and the
+    recording then does not replay from a clean process.
+    """
+    from orchestrator import orchestrator
+
+    monkeypatch.setattr(settings, "foundry_design_enabled", False)
+    monkeypatch.setattr(settings, "spatial_enabled", False)
+
+    gaps = foundry.find_gaps(
+        [_step(needs=["query_data", "fetch_url"])], {"researcher": ["web_search"]})
+    hires, _ = await foundry.hire("goal", gaps, existing_ids=list(orchestrator.agents),
+                                  mission_id="mfail", seats_available=2)
+    assert hires
+
+    from base_agent import BaseAgent
+    hired_id = hires[0].id
+    office.assign_seat(hired_id)
+    orchestrator.agents[hired_id] = BaseAgent(hires[0])
+    orchestrator._spawned_ids.add(hired_id)
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("the provider fell over mid-mission")
+
+    monkeypatch.setattr(orchestrator, "_run_mission", _boom)
+    with pytest.raises(RuntimeError):
+        await orchestrator.handle_user_input("anything")
+
+    assert hired_id not in orchestrator.agents, "contractor leaked into the roster"
+    assert hired_id not in {m["id"] for m in orchestrator.get_manifests()}
+    assert office.free_seats() == len(office_mod.SPAWN_SEATS), "desk still held"

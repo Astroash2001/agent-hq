@@ -530,6 +530,20 @@ resume -- without which a resumed mission raises "unknown agent" on exactly the
 step the hire was for, and only after a process restart, which is the hardest
 kind of bug to catch.
 
+**Contracts end on every exit path, not just the happy one.** Dismissal sat at
+the end of `_run_mission`, but the mission has a try/except/finally around it,
+so a mission that raised left its hire in `orchestrator.agents` -- and
+`get_manifests` feeds that dict to the planner as the roster. Every later
+mission in the same process would have been offered an agent nothing on disk
+knows about.
+
+Worst exactly where it is hardest to see: an eval sweep runs fourteen tasks in
+one process and the runner catches a failure per task so the suite continues.
+One failure after a hire re-keys the planner prompt of every task after it, and
+the recording then does not replay from a clean process. Two earlier sweeps
+were thrown away for faults of that shape. Found before the next sweep was
+paid for, and the regression test fails without the fix.
+
 Still open:
 
 - **A gap rarely fires offline now**, and that is the design working rather than
@@ -721,7 +735,7 @@ Current state: 40 × 24 tiles, 213 props, `check_layout.py` clean.
 
 ## Testing
 
-**490 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
+**491 tests pass** in `backend/tests/` (`python -m pytest -q`, Python 3.10.9),
 across 34 files: the original phase tests plus telemetry, contracts, the critic,
 the run store, resume, the sandbox, semantic memory, debate, the eval
 harness, the `dag.update` payload, the token budget, the kill switch, plan tool
