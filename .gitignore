@@ -49,7 +49,6 @@ backend/data/
 # needs a goal that genuinely wants both a data file and a live page.
 !backend/data/ucl_sample_stats.csv
 
-backend/mcp_servers.json
 
 # =============================================================================
 # Python
