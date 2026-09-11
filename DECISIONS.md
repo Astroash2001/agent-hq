@@ -682,11 +682,15 @@ exist" -- now has a plainer answer: the foundry refuses to hire, and names the
 missing tool. Writing a new tool in `backend/tools/` is about eighty lines and
 a guardrail, and the four added alongside the foundry are the worked examples.
 
-The general shape survived it. `tool_registry.catalogue()` is still the single
-authority on what exists, `register()` still takes a risk level, and
-`OfficeFloor.bind_tool` still gates a tool onto a station after import -- so a
-tool registered at runtime is still an ordinary tool. That was the part worth
-keeping, and it was never MCP-specific.
+The general shape survived it: `tool_registry.catalogue()` is still the single
+authority on what exists, and `register()` still takes a risk level. Those were
+never MCP-specific and are what the foundry reads.
+
+`OfficeFloor.bind_tool` did not survive, and was kept one commit too long. It
+existed to gate a runtime-registered tool onto a station, which only MCP ever
+did; with MCP gone it had no caller, and a generic capability with no caller is
+just a thing to keep correct for nothing. Every tool now in the registry exists
+at import and is named in `STATIONS`.
 
 ## The panels, and replay (WP8)
 

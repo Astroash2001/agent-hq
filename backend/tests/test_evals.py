@@ -708,16 +708,30 @@ def test_recording_manifest_round_trips(monkeypatch):
 
 
 def test_every_committed_cassette_carries_its_models():
-    """A directory with no manifest replays against whatever the env says."""
+    """
+    A directory with recordings but no manifest replays against whatever the
+    environment says, which is the bug the manifest exists to prevent.
+
+    Scoped to directories that actually hold cassettes. An empty one -- a task
+    awaiting its first `--record`, or one just cleared before a re-record --
+    has nothing to describe, and asserting over it makes this test fail for the
+    state of the recordings rather than for anything wrong with the code.
+    """
     root = replay_mod.CASSETTE_ROOT
     if not os.path.isdir(root):
         pytest.skip("no committed cassettes")
+    checked = 0
     for task_id in sorted(os.listdir(root)):
         if not os.path.isdir(os.path.join(root, task_id)):
+            continue
+        if replay_mod.Cassettes(task_id).count() == 0:
             continue
         pinned = replay_mod.recording_manifest(task_id)
         assert pinned.get("default_model"), f"{task_id} has no recording manifest"
         assert pinned.get("fallback_model"), f"{task_id} has no fallback pinned"
+        checked += 1
+    if not checked:
+        pytest.skip("no cassettes recorded yet")
 
 
 def test_a_latency_budget_is_not_scored_on_replay():

@@ -1,4 +1,0 @@
-{
- "result_json": "{\"success\": false, \"refused\": true, \"error\": \"Command 'python3 -V' is not in the allowed commands list: ['python', 'pytest', 'git status', 'git diff', 'git log', 'ls', 'dir'].\"}",
- "tool": "terminal"
-}

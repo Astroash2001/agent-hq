@@ -1,4 +1,0 @@
-{
- "result_json": "{\"success\": false, \"refused\": true, \"exit_code\": -1, \"error\": \"Command timed out after 15 seconds and was hard-killed.\", \"stdout\": \"\", \"stderr\": \"Execution timeout after 15s\"}",
- "tool": "terminal"
-}

@@ -310,13 +310,13 @@ class Settings(BaseSettings):
 
     # Paths
     agents_dir: str = os.path.join(os.path.dirname(__file__), "agents")
-    workspace_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
     # --- Sandboxing and hardening (WP7) --------------------------------------
-    # The jail root is the repository root (one level up from backend/).
-    # settings.workspace_root resolves to the parent of the repo (agentic AI/),
-    # which would leak sibling projects to any path check. jail_root restricts
-    # path traversal, subprocess cwd, and file operations to this repository.
+    # The jail root is the repository root (one level up from backend/). An
+    # earlier `workspace_root` pointed one level higher still, at the parent of
+    # the repo, which would have leaked sibling projects into any path check --
+    # it was replaced rather than fixed, and is gone. jail_root restricts path
+    # traversal, subprocess cwd, and file operations to this repository.
     jail_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
     # Terminal tool allowlist and execution caps.

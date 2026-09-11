@@ -73,6 +73,14 @@ OpenAI-compatible gateway. See [[DECISIONS]].
 ### Tests
 
 ```bash
+# Run a whole mission with no browser and no API key, and print what happened:
+# an annotated timeline off the event bus, then a per-subsystem verdict drawn
+# from the events rather than from anything the script assumes.
+cd backend && python scripts/watch_mission.py "your goal here"
+python scripts/watch_mission.py --twice     # the second run shows memory recall
+```
+
+```bash
 pip install -r requirements-dev.txt
 cd backend && python -m pytest -q      # 444 tests, all passing
 ```

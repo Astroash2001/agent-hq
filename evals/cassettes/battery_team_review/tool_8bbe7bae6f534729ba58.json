@@ -1,4 +1,0 @@
-{
- "result_json": "{\"success\": true, \"configured\": true, \"provider\": \"tavily\", \"query\": \"SimpliPhi PHI 3.8kWh battery home LFP SimpliPhi datasheet 2024 specs cycle life warranty round-trip efficiency \\\"SimpliPhi\\\" home battery 2024 2025\", \"count\": 0, \"results\": [], \"note\": \"The search returned no results. Try a broader query once, then answer from your own knowledge.\"}",
- "tool": "web_search"
-}

@@ -1,4 +1,0 @@
-{
- "result_json": "{\"success\": false, \"error\": \"Tool execution failed: read_file() got an unexpected keyword argument 'start'\"}",
- "tool": "read_file"
-}

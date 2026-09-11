@@ -240,11 +240,12 @@ words survive at both ends instead.
   pathfinder has been mostly decorative and nothing surfaced it, because the
   backend was timing straight lines regardless.
 
-  `check_layout.py` reports this now (non-fatal — it describes the map, not a
-  regression). Wiring BFS walk-timing into `office.py` is the easy half and
-  should wait: on today's grid it would fall back on every meeting. The fix is to
-  the map — widen the aisles round the conference table, and move `ops_console`
-  off its island — after which the timing change is a few lines.
+  **Both halves have since landed, and this entry is stale.**
+  `office.travel_seconds` paths over the exported grid and falls back to
+  straight-line only when two points are not connected. The map was opened up
+  too: `check_layout.py` reports **2** walkable regions with 476 of 478 tiles in
+  the largest — not the 7 regions and 324 of 386 described above. Two tiles
+  remain stranded and no route needs them.
 - ~~Station capacity is modelled but the lock is always exclusive~~ — **stale.**
   `_lock_for` is an `asyncio.Semaphore(capacity)` (`office.py:284`), so the
   conference table's capacity of 4 admits four. Now covered by
@@ -418,10 +419,12 @@ whose whole pitch is: clone it, run it with no key, replay it deterministically.
 That property is worth more here than an open-ended catalogue, because nobody
 is pointing this at a production data source.
 
-What survived the removal is the part that was never MCP-specific:
-`tool_registry.catalogue()` as the single authority on what exists,
-`register(..., risk=)`, and `OfficeFloor.bind_tool` for gating a tool onto a
-station after import. A tool registered at runtime is still an ordinary tool.
+What survived is the part that was never MCP-specific:
+`tool_registry.catalogue()` as the single authority on what exists, and
+`register(..., risk=)`. `OfficeFloor.bind_tool` did not -- it gated a
+runtime-registered tool onto a station, which only MCP ever did, so with MCP
+gone it had no caller. Every tool in the registry now exists at import and is
+named in `STATIONS`.
 
 The question MCP answered -- "the mission needs a capability nothing provides"
 -- now has a plainer answer: `foundry.py` refuses to hire and names the missing
@@ -679,8 +682,10 @@ costs more in a pixel-art scene than losing smoothness.
 
 ### Standalone simulation names are hardcoded
 
-`simulateStandaloneTask` in `app.js` hardcodes Alice/Charlie/Bob/Eve and their log
-lines. Adding or renaming an agent leaves the offline demo stale.
+**Stale -- already fixed.** `simulateStandaloneTask` builds its roster from
+`hud.agents`, which is filled from `/api/agents`, and filters the boss out
+because he plans rather than executes. Adding or renaming an agent is picked up
+with no edit, and a contractor hired mid-mission appears in it too.
 
 ### Boss Dave never leaves his desk
 

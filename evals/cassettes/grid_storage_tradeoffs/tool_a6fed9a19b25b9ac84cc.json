@@ -1,4 +1,0 @@
-{
- "result_json": "{\"success\": true, \"directory\": \"backend/data\", \"count\": 5, \"items\": [{\"name\": \"memory.json\", \"is_dir\": false, \"size_bytes\": 621273}, {\"name\": \"missions\", \"is_dir\": true, \"size_bytes\": 0}, {\"name\": \"runs.db\", \"is_dir\": false, \"size_bytes\": 1765376}, {\"name\": \"runs.db-shm\", \"is_dir\": false, \"size_bytes\": 32768}, {\"name\": \"runs.db-wal\", \"is_dir\": false, \"size_bytes\": 53592}]}",
- "tool": "list_files"
-}

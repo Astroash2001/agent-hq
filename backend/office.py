@@ -240,31 +240,6 @@ class OfficeFloor:
     def position_of(self, agent_id: str) -> Tuple[float, float]:
         return self._positions.get(agent_id, self.seat_of(agent_id))
 
-    def bind_tool(self, tool_name: str, station_id: str) -> bool:
-        """
-        Gate a tool on a station after import.
-
-        Every tool in the registry today is named in `STATIONS`, because they
-        all exist at import time. This is for one that does not -- a tool
-        registered while the office is running. Re-binding moves a tool rather
-        than duplicating it, so calling this twice is safe.
-        """
-        station = self._stations.get(station_id)
-        if station is None:
-            logger.warning(f"Cannot bind '{tool_name}': no station '{station_id}'")
-            return False
-
-        previous = self._tool_index.get(tool_name)
-        if previous and previous != station_id:
-            old = self._stations.get(previous)
-            if old and tool_name in old.tools:
-                old.tools.remove(tool_name)
-
-        if tool_name not in station.tools:
-            station.tools.append(tool_name)
-        self._tool_index[tool_name] = station_id
-        return True
-
     def station_for_tool(self, tool_name: str) -> Optional[Station]:
         station_id = self._tool_index.get(tool_name)
         return self._stations.get(station_id) if station_id else None
