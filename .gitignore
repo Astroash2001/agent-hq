@@ -44,6 +44,10 @@ tools/_slices/
 # Episodic memory, rewritten on every mission. memory.py recreates the file
 # and its directory when missing, so there is nothing to seed.
 backend/data/
+# ...except the sample data a mission can be pointed at. Not a secret and not
+# generated: query_data needs something real to query, and the hiring path
+# needs a goal that genuinely wants both a data file and a live page.
+!backend/data/ucl_sample_stats.csv
 
 # MCP server definitions. Local configuration -- it names binaries on YOUR
 # machine and can carry an auth header for a remote server. The committed
