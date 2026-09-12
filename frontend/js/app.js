@@ -322,18 +322,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         failed ? 'ERROR' : 'SUCCESS');
                 }
                 hud.stopMissionMeter();
-                // A replayed mission has no report to show: the briefing lives
-                // in the mission directory, not in the trace, and inventing one
-                // is exactly what a record must not do.
+                hud.showExecutiveMemo(payload.result, payload);
                 if (payload.replay) {
                     hud.addTerminalLog(
-                        'Replay finished. The briefing itself is in the mission directory.',
-                        'INFO');
-                    break;
+                        'Replay playback finished. Report and files rendered.',
+                        'SUCCESS');
+                } else {
+                    if (replay) {
+                        replay.loadMissions(taskId);
+                    }
                 }
-                // The whole payload, not just the text: `artifacts` carries the
-                // produced files and their bodies for the FILES tab.
-                hud.showExecutiveMemo(payload.result, payload);
                 break;
         }
     }

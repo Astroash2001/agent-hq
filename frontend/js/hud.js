@@ -797,6 +797,9 @@ class RetroHUD {
     showExecutiveMemo(markdownText, payload) {
         if (!this.executiveMemoCard || !this.memoBodyContent) return;
         payload = payload || {};
+        if (payload.goal) {
+            this.missionGoal = payload.goal;
+        }
 
         const goalEl = document.getElementById('outGoal');
         if (goalEl) {

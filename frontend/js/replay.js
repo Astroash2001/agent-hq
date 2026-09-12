@@ -94,26 +94,26 @@ class TraceReplay {
         }
     }
 
-    async loadMissions() {
+    async loadMissions(selectedId = null) {
         const select = this.el.select;
         if (!select) return;
         try {
             const res = await fetch('/api/missions?limit=50');
             const data = await res.json();
             const missions = (data.missions || []).filter(m => m.id);
-            select.innerHTML = '<option value="">— pick a past mission —</option>' +
+            select.innerHTML = '<option value="">— Select a past chat / report —</option>' +
                 missions.map(m => {
-                    // `started_at` is epoch seconds from the run store, not a
-                    // formatted string -- the store keeps what it measured.
+                    // `started_at` is epoch seconds from the run store
                     const when = m.started_at
                         ? new Date(m.started_at * 1000).toISOString().replace('T', ' ').slice(0, 16)
                         : '';
-                    const goal = (m.goal || m.id).slice(0, 46);
-                    return `<option value="${m.id}">${when} · ${goal}</option>`;
+                    const goal = (m.goal || m.id).slice(0, 60);
+                    const isSelected = selectedId && m.id === selectedId ? ' selected' : '';
+                    return `<option value="${m.id}"${isSelected}>${when} · ${goal}</option>`;
                 }).join('');
             this.status(missions.length
-                ? `${missions.length} mission(s) on record.`
-                : 'No missions on record yet — run one first.');
+                ? `${missions.length} past chat(s) on record.`
+                : 'No past chats on record yet — run one first.');
         } catch (e) {
             select.innerHTML = '<option value="">— unavailable —</option>';
             this.status('Could not reach the mission history.');
@@ -126,8 +126,7 @@ class TraceReplay {
      * One artifact's text, or '' if it is not there.
      *
      * Never throws: a missing report is a replay that says so, not a replay
-     * that fails to load. A mission killed before it wrote one is exactly the
-     * mission you most want to watch.
+     * that fails to load.
      */
     async fetchArtifact(missionId, name) {
         try {
@@ -142,56 +141,163 @@ class TraceReplay {
     async load(missionId) {
         if (!missionId) return;
         this.stop();
-        this.status('Loading trace…');
-        let mission, spans;
+        this.status('Loading past chat & report…');
+        let mission = {}, spans = [];
         try {
             const [mRes, tRes] = await Promise.all([
                 fetch(`/api/missions/${missionId}`),
                 fetch(`/api/missions/${missionId}/trace`),
             ]);
-            if (!tRes.ok) {
-                this.status('That mission has no trace.jsonl — it ran with tracing off.');
-                return;
-            }
             mission = mRes.ok ? await mRes.json() : {};
-            // The briefing, off disk. The trace records spans, not bodies --
-            // putting artifact text in it would bloat the one file that has to
-            // stay readable when a process is killed mid-write -- so a replay
-            // used to show the work happening and never what the work said.
-            // Fetched rather than synthesised: a replay that fills in blanks is
-            // a story, not a record.
-            mission.report = await this.fetchArtifact(missionId, 'report.md');
-            const text = await tRes.text();
-            spans = text.split('\n').filter(Boolean).map(line => {
-                try { return JSON.parse(line); } catch (e) { return null; }
-            }).filter(Boolean);
+            if (tRes && tRes.ok) {
+                const text = await tRes.text();
+                spans = text.split('\n').filter(Boolean).map(line => {
+                    try { return JSON.parse(line); } catch (e) { return null; }
+                }).filter(Boolean);
+            }
         } catch (e) {
-            this.status(`Could not load that trace: ${e}`);
+            this.status(`Could not load mission: ${e}`);
             return;
         }
 
-        if (!spans.length) {
-            this.status('That trace is empty.');
-            return;
+        // If report wasn't returned by the endpoint, fetch fallback
+        if (!mission.report) {
+            mission.report = await this.fetchArtifact(missionId, 'report.md') ||
+                             await this.fetchArtifact(missionId, 'final_report.md');
+        }
+
+        // Format artifacts if artifact_details not returned
+        if (!mission.artifact_details || !mission.artifact_details.length) {
+            const files = Array.isArray(mission.artifacts) ? mission.artifacts : [];
+            const details = [];
+            for (const f of files) {
+                if (f === 'trace.jsonl' || f === 'INDEX.md' || f === 'README.md') continue;
+                const content = await this.fetchArtifact(missionId, f);
+                if (content) {
+                    details.push({
+                        name: f,
+                        size_chars: content.length,
+                        content: content,
+                        author_name: 'workspace',
+                    });
+                }
+            }
+            mission.artifact_details = details;
         }
 
         this.missionId = missionId;
-        this.events = this.compile(spans, mission);
-        this.duration = this.events.length ? this.events[this.events.length - 1].t : 0;
-        this.active = true;
-        this.cursor = 0;
-        this.clock = 0;
+        const hud = window.retroHUD;
+        const goal = mission.goal || missionId;
+        const steps = (mission.plan && mission.plan.steps) || mission.steps || [];
+        const files = mission.artifact_details || [];
 
-        if (this.el.play) this.el.play.disabled = false;
-        if (this.el.scrub) { this.el.scrub.disabled = false; this.el.scrub.value = '0'; }
-        if (this.el.exit) this.el.exit.style.display = '';
-        if (this.el.card) this.el.card.dataset.active = 'true';
-
+        // Reset office state
         this.reset();
-        this.status(`${spans.length} spans over ${this.duration.toFixed(1)}s. ` +
-                    `Live events are held back while a replay is loaded.`);
-        this.tick(true);
-        this.play();
+
+        // 1. Immediately display report and deliverable files in MISSION OUTPUT
+        if (hud) {
+            hud.setMissionGoal(goal);
+            if (steps.length) {
+                hud.renderPlan(steps, (mission.plan && mission.plan.source) || mission.plan_source || 'past');
+            }
+
+            // 2. Populate terminal with full past chat & activity logs
+            this.renderPastChatLogs(mission, spans);
+
+            const finished = {
+                result: mission.report || '_No report markdown recorded for this mission._',
+                artifacts: files,
+                mission_dir: mission.mission_dir || '',
+                duration_seconds: mission.duration_seconds || 0,
+                steps_completed: steps.filter(s => s.status === 'completed').length,
+                steps_failed: steps.filter(s => s.status === 'failed').length,
+                replay: true,
+                goal: goal,
+            };
+            hud.showExecutiveMemo(finished.result, finished);
+        }
+
+        // 3. Prepare 2D office trace playback if spans are available
+        if (spans.length) {
+            this.events = this.compile(spans, mission);
+            this.duration = this.events.length ? this.events[this.events.length - 1].t : 0;
+            this.active = true;
+            this.cursor = 0;
+            this.clock = 0;
+
+            if (this.el.play) { this.el.play.disabled = false; this.el.play.textContent = '▶ PLAY'; }
+            if (this.el.scrub) { this.el.scrub.disabled = false; this.el.scrub.value = '0'; }
+            if (this.el.exit) this.el.exit.style.display = '';
+            if (this.el.card) this.el.card.dataset.active = 'true';
+            if (this.el.clockEl) this.el.clockEl.textContent = `0.0s / ${this.duration.toFixed(1)}s`;
+
+            this.status(`Report & past chat loaded (${spans.length} trace events). Press ▶ PLAY for visual replay.`);
+        } else {
+            this.active = true;
+            this.events = [];
+            this.duration = 0;
+            if (this.el.play) this.el.play.disabled = true;
+            if (this.el.scrub) { this.el.scrub.disabled = true; this.el.scrub.value = '0'; }
+            if (this.el.exit) this.el.exit.style.display = '';
+            if (this.el.card) this.el.card.dataset.active = 'true';
+            if (this.el.clockEl) this.el.clockEl.textContent = '—';
+            this.status('Report & past chat loaded. (No 2D movement trace for this run).');
+        }
+    }
+
+    renderPastChatLogs(mission, spans) {
+        const hud = window.retroHUD;
+        if (!hud || !hud.terminalLogs) return;
+
+        hud.terminalLogs.innerHTML = '';
+        hud.addTerminalLog(`=== PAST CHAT & MISSION LOG: ${mission.id} ===`, 'SUCCESS');
+        if (mission.goal) {
+            hud.addTerminalLog(`Task: "${mission.goal}"`, 'ANALYSIS');
+        }
+
+        const steps = (mission.plan && mission.plan.steps) || mission.steps || [];
+        if (steps.length) {
+            hud.addTerminalLog(`Plan: ${steps.length} step(s) (${(mission.plan && mission.plan.source) || mission.plan_source || 'planner'})`, 'INFO');
+        }
+
+        if (spans && spans.length) {
+            const sorted = [...spans].sort((a, b) => (a.t_start - b.t_start) || (a.seq - b.seq));
+            for (const span of sorted) {
+                const a = span.attrs || {};
+                const agentId = a.agent_id || '';
+                const agentName = this.agentName(agentId);
+
+                if (span.kind === 'step') {
+                    hud.addTerminalLog(`${agentName} started step ${a.step_id || span.name}`, 'ANALYSIS');
+                    if (a.verdict) {
+                        const score = (a.quality !== undefined && a.quality !== null) ? ` (${Math.round(a.quality * 100)}%)` : '';
+                        hud.addTerminalLog(`Step ${a.step_id || span.name} review: ${a.verdict}${score}`, a.verdict === 'accept' ? 'SUCCESS' : 'ANALYSIS');
+                    }
+                } else if (span.kind === 'debate') {
+                    const said = a.position || '';
+                    if (said) {
+                        hud.addTerminalLog(`${agentName}: "${said}"`, 'INFO');
+                    }
+                } else if (span.kind === 'tool') {
+                    hud.addTerminalLog(`${agentName} executed tool ${span.name}`, span.status === 'error' ? 'ERROR' : 'SUCCESS');
+                } else if (span.kind === 'mission') {
+                    if (span.status === 'ok') {
+                        const dur = span.duration_sec ? ` in ${span.duration_sec.toFixed(1)}s` : '';
+                        hud.addTerminalLog(`Mission completed${dur}`, 'SUCCESS');
+                    } else if (span.status === 'error') {
+                        hud.addTerminalLog(`Mission failed: ${span.error || 'unknown error'}`, 'ERROR');
+                    }
+                }
+            }
+        } else {
+            for (const step of steps) {
+                const name = this.agentName(step.agent_id);
+                hud.addTerminalLog(`${name}: ${step.description || step.id} [${step.status || 'done'}]`, 'INFO');
+            }
+            if (mission.status === 'completed') {
+                hud.addTerminalLog(`Mission completed in ${mission.duration_seconds || 0}s`, 'SUCCESS');
+            }
+        }
     }
 
     /**
@@ -345,16 +451,15 @@ class TraceReplay {
                     // is the FIRST one in start order, so at this point no step
                     // has been walked yet and every tally would read zero.
                     finished = {
-                        // The real briefing when the mission left one on disk,
-                        // and an explicit note when it did not -- an empty memo
-                        // reads as "the mission concluded nothing", which is a
-                        // different claim from "this was never written".
                         result: (mission && mission.report) ||
                             '_This mission left no `report.md` on disk, so the '
                             + 'replay has no briefing to show. The steps and '
                             + 'their costs below are from the trace._',
                         duration_seconds: Number(span.duration_sec || 0).toFixed(2),
                         steps_completed: 0, steps_failed: 0, replay: true,
+                        artifacts: (mission && mission.artifact_details) || [],
+                        mission_dir: (mission && mission.mission_dir) || '',
+                        goal: (mission && mission.goal) || '',
                     };
                     at(end, 'task.completed', null, finished);
                     break;

@@ -136,18 +136,18 @@
             <!-- 5. TRACE REPLAY -- drive the office from a past mission's
                  trace.jsonl instead of the live socket. -->
             <section class="hud-card replay-card" id="replayCard"
-                     aria-label="Trace replay">
+                     aria-label="Past chats, reports, and trace replay">
                 <div class="hud-card-header">
                     <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">⏮</span> TRACE REPLAY
+                        <span class="header-icon" aria-hidden="true">⏮</span> PAST CHATS &amp; REPLAY
                     </div>
                     <div class="metric" id="replayClock">—</div>
                 </div>
 
                 <div class="replay-row">
                     <select id="replayMission" class="replay-select"
-                            aria-label="Mission to replay">
-                        <option value="">Loading missions…</option>
+                            aria-label="Select a past chat or mission">
+                        <option value="">— Select a past chat / report —</option>
                     </select>
                     <button class="hud-icon-btn" id="replayRefreshBtn"
                             title="Refresh mission list" aria-label="Refresh mission list">⟳</button>
@@ -170,7 +170,7 @@
                        min="0" max="1000" value="0" step="1" disabled
                        aria-label="Scrub through the trace">
                 <div class="replay-status" id="replayStatus">
-                    Pick a past mission to replay it through the office.
+                    Select a past chat / mission above to view its report, files, and conversation.
                 </div>
             </section>
 
