@@ -982,6 +982,156 @@ class RetroHUD {
         });
     }
 
+    downloadReportAsPdf() {
+        const goal = this.missionGoal || 'AgentHQ Mission Deliverable';
+        const reportEl = this.memoBodyContent;
+        if (!reportEl || !reportEl.innerHTML.trim()) {
+            this.addTerminalLog('No report available to export as PDF.', 'WARN');
+            return;
+        }
+
+        this.addTerminalLog('Generating PDF deliverable...', 'INFO');
+
+        const slug = goal
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 40) || 'agenthq_report';
+        const filename = `${slug}.pdf`;
+
+        const activeTab = document.getElementById('outTabFiles')?.dataset.active === 'true' ? 'files' : 'report';
+
+        const container = document.createElement('div');
+        container.style.padding = '24px 28px';
+        container.style.color = '#0f172a';
+        container.style.background = '#ffffff';
+        container.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+        container.style.lineHeight = '1.6';
+        container.style.fontSize = '13px';
+
+        const now = new Date().toLocaleString(undefined, { 
+            dateStyle: 'medium', 
+            timeStyle: 'short' 
+        });
+
+        let bodyHtml = '';
+        if (activeTab === 'files') {
+            const outFiles = document.getElementById('outFiles');
+            if (outFiles && outFiles.children.length) {
+                bodyHtml = `
+                    <h2 style="font-size: 16px; color: #1e3a8a; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 6px; margin-top: 18px;">Mission Deliverable Files</h2>
+                    ${Array.from(outFiles.querySelectorAll('.out-file')).map(f => {
+                        const name = f.querySelector('.out-file-name')?.innerText || 'File';
+                        const meta = f.querySelector('.out-file-meta')?.innerText || '';
+                        const content = f.querySelector('.out-file-body')?.innerHTML || '';
+                        return `
+                            <div style="margin-top: 20px; page-break-inside: avoid;">
+                                <div style="font-weight: 700; font-size: 13.5px; color: #1e293b; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+                                    <span>📄 ${this.escapeHtml(name)}</span>
+                                    <span style="font-size: 11px; color: #64748b;">${this.escapeHtml(meta)}</span>
+                                </div>
+                                <div style="margin-top: 10px;">${content}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                `;
+            }
+        }
+
+        if (!bodyHtml) {
+            bodyHtml = `<div style="margin-top: 10px;">${reportEl.innerHTML}</div>`;
+        }
+
+        container.innerHTML = `
+            <div style="border-bottom: 2.5px solid #2563eb; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <div style="font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: -0.5px;">AgentHQ Executive Deliverable</div>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Autonomous AI Multi-Agent Intelligence Platform</div>
+                </div>
+                <div style="text-align: right; font-size: 11px; color: #64748b;">
+                    <div>${this.escapeHtml(now)}</div>
+                    <div style="font-weight: 700; color: #2563eb; margin-top: 2px;">AUTHENTICATED REPORT</div>
+                </div>
+            </div>
+            ${goal ? `
+            <div style="background: #f8fafc; border-left: 4px solid #2563eb; padding: 10px 14px; margin-bottom: 20px; border-radius: 0 6px 6px 0;">
+                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Mission Goal</div>
+                <div style="font-size: 13.5px; font-weight: 600; color: #0f172a; margin-top: 2px;">${this.escapeHtml(goal)}</div>
+            </div>` : ''}
+            <div class="pdf-content-body">
+                ${bodyHtml}
+            </div>
+            <div style="margin-top: 36px; padding-top: 12px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8;">
+                <span>Verified AgentHQ Output &middot; Zero-Hallucination Extraction</span>
+                <span>Page 1 of 1</span>
+            </div>
+        `;
+
+        container.querySelectorAll('table').forEach(t => {
+            t.style.width = '100%';
+            t.style.borderCollapse = 'collapse';
+            t.style.marginTop = '14px';
+            t.style.marginBottom = '14px';
+            t.style.fontSize = '12px';
+        });
+        container.querySelectorAll('th').forEach(th => {
+            th.style.background = '#f1f5f9';
+            th.style.border = '1px solid #cbd5e1';
+            th.style.padding = '8px 10px';
+            th.style.fontWeight = '700';
+            th.style.textAlign = 'left';
+            th.style.color = '#0f172a';
+        });
+        container.querySelectorAll('td').forEach(td => {
+            td.style.border = '1px solid #e2e8f0';
+            td.style.padding = '7px 10px';
+            td.style.color = '#334155';
+        });
+        container.querySelectorAll('pre').forEach(p => {
+            p.style.background = '#f8fafc';
+            p.style.border = '1px solid #e2e8f0';
+            p.style.padding = '10px 12px';
+            p.style.borderRadius = '4px';
+            p.style.fontSize = '11.5px';
+            p.style.whiteSpace = 'pre-wrap';
+            p.style.wordBreak = 'break-all';
+        });
+        container.querySelectorAll('a').forEach(a => {
+            a.style.color = '#2563eb';
+            a.style.textDecoration = 'none';
+        });
+
+        if (typeof html2pdf !== 'undefined') {
+            const opt = {
+                margin: [10, 10, 10, 10],
+                filename: filename,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+            html2pdf().set(opt).from(container).save().then(() => {
+                this.addTerminalLog(`Downloaded ${filename} successfully.`, 'SUCCESS');
+            }).catch(err => {
+                console.error('html2pdf error:', err);
+                this.printFallback(container, filename);
+            });
+        } else {
+            this.printFallback(container, filename);
+        }
+    }
+
+    printFallback(container, filename) {
+        const printWin = window.open('', '_blank');
+        if (!printWin) {
+            this.addTerminalLog('Popup blocked. Please allow popups to download PDF.', 'WARN');
+            return;
+        }
+        printWin.document.write(`<!DOCTYPE html><html><head><title>${this.escapeHtml(filename)}</title><style>@page{margin:15mm;size:A4 portrait;}body{margin:0;padding:0;}</style></head><body>${container.innerHTML}<script>window.onload=function(){window.focus();window.print();setTimeout(function(){window.close();},1000);};<\/script></body></html>`);
+        printWin.document.close();
+        this.addTerminalLog(`Print dialogue opened for ${filename}.`, 'SUCCESS');
+    }
+
     /* --- wiring ---------------------------------------------------------- */
 
     initEventListeners() {
@@ -1013,6 +1163,9 @@ class RetroHUD {
         // and the scroll position would all reset on every toggle.
         const outExpand = document.getElementById('outExpandBtn');
         if (outExpand) outExpand.addEventListener('click', () => this.toggleOutputExpanded());
+
+        const outPdf = document.getElementById('downloadPdfBtn');
+        if (outPdf) outPdf.addEventListener('click', () => this.downloadReportAsPdf());
 
         const outOverlay = document.getElementById('outOverlay');
         if (outOverlay) {

@@ -1128,3 +1128,13 @@ body { overflow: hidden; }
     border-bottom: 1px solid var(--frame-dim);
     margin-bottom: 8px;
 }
+
+.memo-card[data-expanded="true"] .hud-icon-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+#downloadPdfBtn:hover {
+    color: var(--amber-bright, #f59e0b);
+    border-color: var(--amber-bright, #f59e0b);
+}
