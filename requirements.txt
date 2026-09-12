@@ -9,6 +9,7 @@
 # serves the event stream over a WebSocket at /ws.
 fastapi==0.128.8
 uvicorn==0.46.0
+python-multipart>=0.0.9
 
 # uvicorn does not ship a WebSocket implementation by default; without this the
 # /ws endpoint fails the handshake and the office never receives events.
