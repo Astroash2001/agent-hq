@@ -66,6 +66,10 @@ _PRICES: Dict[str, Tuple[float, float]] = {
     # If a provider ever starts charging for one, delete the row rather than
     # guessing a rate -- an unpriced model is visible, a wrong one is not.
     "minimax-m3-free": (0.0, 0.0),
+    "deepseek-v4-flash": (0.0, 0.0),
+    "deepseek-v4.1-flash": (0.0, 0.0),
+    "gpt-5.6-luna": (0.0, 0.0),
+    "qwen3.8-27b": (0.0, 0.0),
 
     # --- Groq ---
     # Groq bills the open-weight models it hosts, so the key is the model

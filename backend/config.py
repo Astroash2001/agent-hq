@@ -14,11 +14,9 @@ class Settings(BaseSettings):
     port: int = 8080
 
     # LLM Settings
-    # Default model: gemini/gemini-2.5-flash or gemini-2.0-flash via LiteLLM
-    default_model: str = "gemini/gemini-2.5-flash"
-    # Tried once by llm.py after the primary has exhausted its retries. This
-    # was dead config until then -- declared here and read by nothing.
-    fallback_model: str = "gemini/gemini-2.5-flash-lite"
+    # Default model on Experiential Labs gateway
+    default_model: str = "openai/deepseek-v4-flash"
+    fallback_model: str = "openai/gpt-5.6-luna"
     temperature: float = 0.2
     # Output ceiling per call. 2048 suited a non-reasoning model; a reasoning
     # model spends this budget on thinking BEFORE it emits any text, so a hard
