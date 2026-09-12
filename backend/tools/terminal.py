@@ -18,7 +18,7 @@ import shlex
 import shutil
 from typing import Any, Dict, List, Optional
 
-from config import settings
+from config import settings  # type: ignore
 
 # ----------------------------------------------------------------- metacharacters
 # Metacharacters that enable command chaining, pipeline execution, file redirection,

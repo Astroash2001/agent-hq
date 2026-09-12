@@ -27,9 +27,9 @@ from schemas import Artifact, Event, EventType
 logger = logging.getLogger("AgentHQ.Workspace")
 
 # How much of an upstream artifact is pasted into a downstream agent's prompt.
-# Long enough to carry the substance, short enough that a four-step fan-in does
-# not blow past the context window.
-MAX_INJECTED_CHARS = 2400
+# Generous enough to carry substantial tables, JSON data and findings without truncation,
+# while safely fitting within modern LLM context windows.
+MAX_INJECTED_CHARS = 12000
 
 # How the budget splits between the start and the end of a long artifact. Not
 # 100/0, which is what a plain `body[:limit]` is: a report puts its findings and
@@ -253,9 +253,17 @@ class MissionWorkspace:
             artifact = self.artifacts.get(name)
             if not artifact:
                 continue
+            is_truncated = len(artifact.content) > MAX_INJECTED_CHARS
             body = condense(artifact.content, MAX_INJECTED_CHARS)
+            prefix = ""
+            if is_truncated:
+                prefix = (
+                    f"⚠️ [NOTE: Upstream artifact '{name}' has {len(artifact.content):,} characters and was partially "
+                    f"condensed for this prompt snippet. The complete file exists in your workspace as '{name}'. "
+                    f"Use your 'read_file' tool to inspect the complete file on disk before extracting or transforming data!]\n\n"
+                )
             blocks.append(
-                f"--- {name} (from {artifact.author_name}) ---\n{body}"
+                f"--- {name} (from {artifact.author_name}) ---\n{prefix}{body}"
             )
         if not blocks:
             return ""

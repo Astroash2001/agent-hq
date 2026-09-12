@@ -118,7 +118,8 @@ class BaseAgent:
         context: str = "",
         hints: str = "",
         goal: str = "",
-        extra_tools: Optional[List[str]] = None
+        extra_tools: Optional[List[str]] = None,
+        produces: Optional[str] = None
     ) -> str:
         """
         Execute the ReAct Loop for the assigned task.
@@ -162,7 +163,14 @@ class BaseAgent:
         # training cutoff and cannot tell current information from stale --
         # observed: a news brief headed "Today" citing an article three weeks
         # old, because nothing in the conversation said what today was.
-        system_prompt = f"{date_context()}\n\n{self.manifest.system_prompt}"
+        system_prompt = (
+            f"{date_context()}\n\n"
+            f"{self.manifest.system_prompt}\n\n"
+            "DATA INTEGRITY & EXTRACTION DIRECTIVE:\n"
+            "- When extracting or transforming data from upstream files, web pages, or APIs, extract real, complete information.\n"
+            "- Never populate requested attributes (such as addresses, numbers, descriptions, names, or contact info) with 'null', 'None', or 'N/A' placeholders if the upstream source contains the data.\n"
+            "- If an upstream artifact snippet indicates it was partially condensed or truncated, use 'read_file' to inspect the complete file on disk before writing your deliverable."
+        )
         if hints:
             system_prompt = f"{system_prompt}\n\n{hints}"
 
@@ -279,6 +287,18 @@ class BaseAgent:
             if thought_text:
                 await self.speak(thought_text[:70], task_id=task.id)
 
+            if response_data.get("truncated"):
+                logger.warning("[%s] turn truncated by token ceiling during reasoning", self.name)
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your previous turn exceeded the token limit during internal reasoning before producing "
+                        "any text or tool calls. Do NOT use lengthy internal reasoning. Produce your deliverable "
+                        "directly or call write_file immediately."
+                    )
+                })
+                continue
+
             tool_calls = response_data.get("tool_calls", [])
 
             # Warn the agent before its budget runs out.
@@ -312,6 +332,23 @@ class BaseAgent:
                 tool_name = tool_call.get("name")
                 tool_args = tool_call.get("arguments", {})
                 tools_used.append(tool_name)
+
+                # Late-turn tool gating: force write_file on final turns when a deliverable is promised
+                if remaining <= 1 and produces and "write_file" in granted and tool_name in (
+                    "web_search", "fetch_url", "read_file", "search_workspace", "calculate"
+                ):
+                    _append_tool_exchange(
+                        messages, _call_id(step, call_index), tool_name,
+                        tool_args,
+                        {
+                            "success": False,
+                            "error": (
+                                f"Turn limit reached. Further exploration ({tool_name}) is disabled. "
+                                f"Write and file your deliverable to '{produces}' now using write_file."
+                            ),
+                        })
+                    logger.info("[%s] exploratory tool '%s' blocked on final turn; write_file required", self.name, tool_name)
+                    continue
 
                 # Hard ceiling on searches per task.
                 #
@@ -479,7 +516,8 @@ class BaseAgent:
                 # A truncated turn is otherwise invisible: the model returns no
                 # content and no tool call, the loop treats that as "done", and
                 # the step files a stub. Say so instead.
-                if choice.finish_reason == "length" and not content:
+                truncated = bool(choice.finish_reason == "length" and not content and not tool_calls_extracted)
+                if truncated:
                     logger.warning(
                         "[%s] reply hit the %s-token ceiling before producing text "
                         "(reasoning consumed the budget); raise MAX_TOKENS",
@@ -488,8 +526,9 @@ class BaseAgent:
                                      task_id=task.id)
 
                 return {
+                    "truncated": truncated,
                     "content": content,
-                    "thought": content[:60] if content else "Executing tool...",
+                    "thought": content[:60] if content else ("Token ceiling reached" if truncated else "Executing tool..."),
                     "tool_calls": tool_calls_extracted,
                     "prompt_tokens": result.prompt_tokens,
                     "completion_tokens": result.completion_tokens,

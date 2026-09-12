@@ -3,6 +3,7 @@ import glob
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
@@ -20,7 +21,7 @@ import runstore
 import synthesis
 import tracing
 from base_agent import BaseAgent
-from config import settings
+from config import llm_configured, settings
 from event_bus import event_bus
 from memory import memory
 from office import office
@@ -237,7 +238,8 @@ class Orchestrator:
             task_id = resume_from
             user_prompt = resumed["goal"]
         else:
-            task_id = f"task_{uuid.uuid4().hex[:8]}"
+            slug = self._slugify_goal(user_prompt)
+            task_id = f"task_{slug}_{uuid.uuid4().hex[:6]}"
 
         workspace = MissionWorkspace(task_id)
         self.workspaces[task_id] = workspace
@@ -478,8 +480,8 @@ class Orchestrator:
             store.start_mission(task_id, user_prompt, workspace.dir or "")
             plan = await planner.plan(user_prompt, self.get_manifests(),
                                       attachments=seeded)
-            await self._staff_plan(plan, user_prompt, task_id)
             self._apply_memory_routing(plan, task_id)
+            await self._staff_plan(plan, user_prompt, task_id)
             store.record_plan(task_id, plan)
         self.current_plan = plan
 
@@ -594,6 +596,7 @@ class Orchestrator:
                 "tokens_estimated": telemetry["tokens_estimated"],
             }
         ))
+        self._update_missions_index()
 
         if self.boss_agent:
             await self.boss_agent.update_status(AgentStatus.IDLE)
@@ -763,9 +766,26 @@ class Orchestrator:
         if not settings.memory_enabled:
             return
 
-        candidates = list(self.agents.keys())
         for step in plan.steps:
-            suggestion = memory.suggest_agent(step.description, candidates, step.agent_id)
+            # Never take work from a specialist hired specifically for this step.
+            if step.agent_id in getattr(self, "_spawned_ids", set()):
+                continue
+
+            # A step can only be rerouted to someone who actually holds the tools
+            # it declared it needs. `_run_step` grants write_file to any step
+            # producing an artifact, so write_file is not a blocker then.
+            needed = set(step.needs_tools or [])
+            if step.produces:
+                needed.discard("write_file")
+
+            valid_candidates = [
+                aid for aid, a in self.agents.items()
+                if not needed or needed <= set(a.tools)
+            ]
+            if len(valid_candidates) <= 1:
+                continue
+
+            suggestion = memory.suggest_agent(step.description, valid_candidates, step.agent_id)
             if not suggestion:
                 continue
             new_id, new_score, old_score = suggestion
@@ -1549,9 +1569,14 @@ class Orchestrator:
             file_ops.bind_workspace(
                 workspace, step.agent_id, specialist.name, step.id)
             try:
-                return await specialist.run(
-                    subtask, context=context, hints=hints, goal=goal,
-                    extra_tools=grant)
+                try:
+                    return await specialist.run(
+                        subtask, context=context, hints=hints, goal=goal,
+                        extra_tools=grant, produces=step.produces)
+                except TypeError:
+                    return await specialist.run(
+                        subtask, context=context, hints=hints, goal=goal,
+                        extra_tools=grant)
             finally:
                 file_ops.bind_workspace(None)
 
@@ -1612,6 +1637,94 @@ class Orchestrator:
             step_id=step.id
         )
         return result_text
+
+    async def _recover_missing_artifact(
+        self,
+        workspace: MissionWorkspace,
+        step: PlanStep,
+        specialist,
+        goal: str,
+        failures: List[str]
+    ) -> Optional[str]:
+        """
+        Synthesize a promised deliverable if the specialist ran out of turns or failed contracts.
+
+        Reads the available workspace artifacts and calls the primary model to produce
+        the full file directly, preventing 39-byte stubs or blank files from breaking
+        the mission outcome.
+        """
+        if not step.produces or not llm_configured():
+            return None
+
+        # Check if there is context to synthesize from
+        context = workspace.render_context(step.consumes) if step.consumes else ""
+        if not context:
+            context = workspace.render_context(workspace.names())
+        if not context.strip():
+            return None
+
+        produces_lower = step.produces.lower()
+        if produces_lower.endswith(".json"):
+            format_instruction = (
+                f"Generate the full, complete JSON file for '{step.produces}'. Extract real data values "
+                f"from the workspace documents and do not emit null placeholders for requested attributes. "
+                f"Output valid JSON only, without markdown fence or prose."
+            )
+            system_role = "You are a precise data extraction specialist generating clean, complete JSON."
+        elif produces_lower.endswith(".csv"):
+            format_instruction = (
+                f"Generate the full, complete CSV file for '{step.produces}'. Output valid CSV with "
+                f"header row and real data rows, without placeholder N/As or empty fields."
+            )
+            system_role = "You are a precise data extraction specialist generating clean, complete CSV."
+        else:
+            format_instruction = (
+                f"Generate the full, complete Markdown deliverable for '{step.produces}'. "
+                f"Do not summarize or apologize. Output the final file contents directly and completely."
+            )
+            system_role = "You are an executive technical synthesizer writing a finalized deliverable file from research findings."
+
+        prompt = (
+            f"Mission Goal: {goal}\n"
+            f"Deliverable Filename: {step.produces}\n"
+            f"Task Requirement:\n{step.description}\n\n"
+            f"Prior Contract / Quality Failures to Address:\n"
+            + "\n".join(f"- {f}" for f in failures) + "\n\n"
+            f"Available Workspace Documents:\n{context}\n\n"
+            f"Instructions:\n"
+            f"{format_instruction}"
+        )
+
+        try:
+            logger.info("[%s] attempting artifact recovery for '%s'", specialist.name, step.produces)
+            result = await llm.acompletion(
+                messages=[
+                    {"role": "system", "content": system_role},
+                    {"role": "user", "content": prompt}
+                ],
+                model=settings.default_model,
+                temperature=0.2,
+                max_tokens=settings.max_tokens,
+            )
+            text = (result.response.choices[0].message.content or "").strip()
+            if produces_lower.endswith(".json") and text.startswith("```"):
+                text = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", text)
+                text = re.sub(r"\n?```$", "", text).strip()
+
+            if text and len(text) > 40:
+                await workspace.put(
+                    name=step.produces,
+                    content=text,
+                    author_id=step.agent_id,
+                    author_name=specialist.name,
+                    step_id=step.id
+                )
+                logger.info("[%s] successfully recovered artifact '%s' (%d chars)", specialist.name, step.produces, len(text))
+                return text
+        except Exception as exc:
+            logger.warning("[%s] artifact recovery failed: %s", specialist.name, exc)
+
+        return None
 
     async def _emit_critique(
         self,
@@ -1746,6 +1859,12 @@ class Orchestrator:
                 if can_repair:
                     feedback = check.as_guidance()
                     continue
+                if step.produces:
+                    recovered = await self._recover_missing_artifact(
+                        workspace, step, specialist, goal, check.failures)
+                    if recovered:
+                        artifact_text = recovered
+                        verdict = "accept"
                 break
 
             critique = await critic.critique(goal, step.description, artifact_text)
@@ -1812,6 +1931,87 @@ class Orchestrator:
         }
 
     # ---------------------------------------------------------------- synthesis
+
+    @staticmethod
+    def _slugify_goal(prompt: str, max_words: int = 4) -> str:
+        """Convert a user goal prompt into a clean, human-readable slug for folder naming."""
+        filler = {
+            "create", "make", "a", "an", "the", "me", "please", "for", "and", "or",
+            "to", "in", "of", "with", "from", "give", "tell", "about", "this", "is",
+            "there", "find", "get", "run", "do", "now", "so", "that", "on", "across",
+            "complete", "report", "build", "all", "time", "definitive", "using", "by"
+        }
+        cleaned = re.sub(r"https?://\S+", "", prompt)
+        words = re.findall(r"[A-Za-z0-9]+", cleaned.lower())
+        filtered = [w for w in words if w not in filler and len(w) > 1]
+        selected = filtered[:max_words] if filtered else words[:max_words]
+        slug = "_".join(selected) if selected else "mission"
+        return slug[:28].strip("_")
+
+    def _update_missions_index(self) -> None:
+        """Maintain a human-readable Markdown index of all missions in backend/data/missions/INDEX.md."""
+        try:
+            missions_dir = settings.missions_path
+            if not os.path.exists(missions_dir):
+                return
+
+            rows = []
+            for entry in sorted(os.listdir(missions_dir), key=lambda x: os.path.getmtime(os.path.join(missions_dir, x)), reverse=True):
+                full_path = os.path.join(missions_dir, entry)
+                if not os.path.isdir(full_path):
+                    continue
+
+                m_json = os.path.join(full_path, "mission.json")
+                goal = "Unknown Goal"
+                outcome = "unknown"
+
+                if os.path.exists(m_json):
+                    try:
+                        with open(m_json, "r", encoding="utf-8") as f:
+                            m_data = json.load(f)
+                            goal = m_data.get("goal", "").strip() or goal
+                            outcome = m_data.get("outcome", "unknown")
+                    except Exception:
+                        pass
+
+                files = [f for f in os.listdir(full_path) if not f.startswith(".")]
+                deliverables = [
+                    f for f in files
+                    if f not in ("mission.json", "trace.jsonl", "report.md")
+                    and not f.endswith(".tmp")
+                ]
+
+                if deliverables:
+                    links = "<br>".join(f"[`{d}`](./{entry}/{d})" for d in deliverables[:4])
+                    if len(deliverables) > 4:
+                        links += f"<br>*(+{len(deliverables) - 4} more)*"
+                else:
+                    links = f"[`report.md`](./{entry}/report.md)"
+
+                status_badge = "✅ Completed" if outcome == "completed" else f"⚠️ {outcome.title()}"
+                mtime_str = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(full_path)))
+                clean_goal = (goal[:90] + "...") if len(goal) > 90 else goal
+
+                rows.append(
+                    f"| {mtime_str} | [`{entry}`](./{entry}/) | {clean_goal} | {links} | {status_badge} |"
+                )
+
+            table_content = (
+                "# 📂 AgentHQ Missions Catalog\n\n"
+                "Auto-updated mission index. Click on any folder or deliverable link to inspect deliverables directly.\n\n"
+                "| Timestamp | Mission Folder | Task Objective / Goal | Primary Deliverables | Status |\n"
+                "| :--- | :--- | :--- | :--- | :---: |\n"
+                + "\n".join(rows) + "\n"
+            )
+
+            index_path = os.path.join(missions_dir, "INDEX.md")
+            readme_path = os.path.join(missions_dir, "README.md")
+            with open(index_path, "w", encoding="utf-8") as f:
+                f.write(table_content)
+            with open(readme_path, "w", encoding="utf-8") as f:
+                f.write(table_content)
+        except Exception as exc:
+            logger.warning("Failed to update missions index: %s", exc)
 
     async def _draw_conclusion(
         self,

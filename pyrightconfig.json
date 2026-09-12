@@ -1,0 +1,23 @@
+{
+  "include": [
+    "backend"
+  ],
+  "exclude": [
+    "tools",
+    "evals",
+    "furniture",
+    "**/__pycache__",
+    "backend/data"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "backend",
+      "extraPaths": [
+        ".",
+        "C:/Users/avina/RAG-DOC-Q-A/venv/Lib/site-packages"
+      ]
+    }
+  ],
+  "venvPath": "C:/Users/avina/RAG-DOC-Q-A",
+  "venv": "venv"
+}

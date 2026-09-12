@@ -14,10 +14,10 @@ Path traversal attempts ('..'), symlink escapes, and arbitrary absolute paths
 outside the sandbox boundaries are refused outright.
 """
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
-from config import settings
-from workspace import _safe_name
+from config import settings  # type: ignore
+from workspace import _safe_name  # type: ignore
 
 # Set by the orchestrator for the duration of a mission.
 _active_workspace = None
@@ -38,7 +38,7 @@ def bind_workspace(
 
 # ----------------------------------------------------------------- containment helpers
 
-def _is_contained(target_path: str, allowed_roots: List[Optional[str]]) -> bool:
+def _is_contained(target_path: str, allowed_roots: Sequence[Optional[str]]) -> bool:
     """
     Check whether target_path resolves strictly within one of the allowed_roots.
 
@@ -86,6 +86,48 @@ def _get_unbound_write_allowed_roots() -> List[str]:
     return roots
 
 
+def resolve_read_path(filepath: str) -> str:
+    """
+    Robustly locate an existing file across permitted sandbox roots.
+    Tries workspace, CWD, repo root, and data directories.
+    """
+    if not filepath or not str(filepath).strip():
+        return ""
+    cleaned = filepath.strip().replace("\\", "/")
+    if cleaned.startswith("./"):
+        cleaned = cleaned[2:]
+
+    candidates = []
+    # 1. Active workspace directory
+    if _active_workspace is not None and getattr(_active_workspace, "dir", None):
+        candidates.append(os.path.join(_active_workspace.dir, cleaned))
+    # 2. Raw path as given
+    candidates.append(cleaned)
+    # 3. Path from repo root
+    candidates.append(os.path.join(settings.jail_root, cleaned))
+    # 4. If path starts with backend/, try stripping it
+    if cleaned.startswith("backend/"):
+        sub = cleaned[len("backend/"):]
+        candidates.append(sub)
+        candidates.append(os.path.join(settings.jail_root, sub))
+    # 5. If path doesn't start with backend/, try adding backend/
+    else:
+        candidates.append(os.path.join("backend", cleaned))
+        candidates.append(os.path.join(settings.jail_root, "backend", cleaned))
+    # 6. Check data/ directory for bare filename
+    base = os.path.basename(cleaned)
+    candidates.append(os.path.join("data", base))
+    candidates.append(os.path.join(settings.jail_root, "backend", "data", base))
+
+    for c in candidates:
+        if os.path.isfile(c):
+            return os.path.abspath(c)
+
+    if _active_workspace is not None and getattr(_active_workspace, "dir", None):
+        return os.path.join(_active_workspace.dir, cleaned)
+    return cleaned
+
+
 # ----------------------------------------------------------------- tools
 
 async def read_file(filepath: str) -> Dict[str, Any]:
@@ -97,20 +139,7 @@ async def read_file(filepath: str) -> Dict[str, Any]:
     if not filepath or not str(filepath).strip():
         return {"success": False, "refused": True, "error": "File path cannot be empty."}
 
-    # Resolve candidate path: if relative and active workspace exists, prefer workspace
-    candidate = filepath
-    if not os.path.isabs(filepath):
-        if _active_workspace is not None and getattr(_active_workspace, "dir", None):
-            ws_path = os.path.join(_active_workspace.dir, filepath)
-            if os.path.exists(ws_path):
-                candidate = ws_path
-            elif not os.path.exists(filepath):
-                # Check repo root
-                repo_path = os.path.join(settings.jail_root, filepath)
-                if os.path.exists(repo_path):
-                    candidate = repo_path
-                else:
-                    candidate = ws_path
+    candidate = resolve_read_path(filepath)
 
     allowed_roots = _get_read_allowed_roots()
     if not _is_contained(candidate, allowed_roots):

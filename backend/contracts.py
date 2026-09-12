@@ -17,6 +17,9 @@ expensive judgement lives in `critic.py`; this layer is the cheap one that runs
 on every artifact, and it has to stay fast enough that running it is never a
 decision.
 """
+import csv
+import io
+import json
 import re
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -43,6 +46,11 @@ _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+\S", re.M)
 _REPORT_HINTS = ("report", "briefing", "summary", "recommendation", "brief")
 _NOTES_HINTS = ("notes", "scratch", "draft", "log")
 
+_PLACEHOLDERS = {
+    "", "null", "none", "n/a", "na", "tbd", "unknown", "undefined",
+    "not available", "not fetched", "not provided", "-"
+}
+
 
 @dataclass
 class ArtifactSpec:
@@ -55,6 +63,11 @@ class ArtifactSpec:
     # from `required_sections`, which names specific headings -- this only asks
     # that the artifact has any heading at all.
     require_heading: bool = False
+    # Format and key validations
+    filename: str = ""
+    expected_format: str = "text"   # text | json | csv | markdown
+    expected_keys: List[str] = field(default_factory=list)
+    optional_keys: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -96,7 +109,16 @@ def infer_spec(
     """
     name = (filename or "").lower()
     text = (description or "").lower()
-    spec = ArtifactSpec()
+    spec = ArtifactSpec(filename=filename or "")
+
+    if name.endswith(".json"):
+        spec.expected_format = "json"
+        spec.min_chars = 10
+    elif name.endswith(".csv"):
+        spec.expected_format = "csv"
+        spec.min_chars = 20
+    elif name.endswith(".md") or name.endswith(".markdown"):
+        spec.expected_format = "markdown"
 
     if any(hint in name for hint in _REPORT_HINTS):
         # The mission's deliverable. Longer, and structured.
@@ -109,6 +131,20 @@ def infer_spec(
     if citations_expected and ("research" in name or "research" in text
                                or "source" in text or "cite" in text):
         spec.require_citations = True
+
+    # Extract requested schema keys from description (e.g. record: {city, store_name, address, phone...})
+    m = re.search(r"\{([^}]+)\}", description or "")
+    if m:
+        raw_items = [x.strip() for x in m.group(1).split(",")]
+        for item in raw_items:
+            clean = re.sub(r"\(.*?\)", "", item).strip().lower().replace(" ", "_")
+            if not clean:
+                continue
+            item_lower = item.lower()
+            if any(opt in item_lower for opt in ["optional", "if present", "if available", "if known"]):
+                spec.optional_keys.append(clean)
+            else:
+                spec.expected_keys.append(clean)
 
     return spec
 
@@ -167,6 +203,101 @@ def check(artifact: Optional[str], spec: ArtifactSpec) -> CheckResult:
             "No sources are cited. Include the URLs you used, so a reader can "
             "check the claims."
         )
+
+    # ------------------------------------------------------------------- Structured data checks
+
+    # 1. JSON Data Integrity & Completeness
+    if spec.expected_format == "json" or (spec.filename and spec.filename.lower().endswith(".json")):
+        cleaned = body
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", cleaned)
+            cleaned = re.sub(r"\n?```$", "", cleaned).strip()
+        try:
+            parsed = json.loads(cleaned)
+        except Exception:
+            parsed = None
+
+        if parsed is None:
+            major = True
+            failures.append(
+                "The file is not valid JSON. Format the deliverable as valid JSON syntax."
+            )
+        elif isinstance(parsed, list):
+            if len(parsed) == 0:
+                major = True
+                failures.append(
+                    "The JSON file contains an empty list []. Extract and include the requested records."
+                )
+            else:
+                # Check for dropped/placeholder fields in list of dicts
+                dict_records = [r for r in parsed if isinstance(r, dict)]
+                if dict_records:
+                    # Check required keys from spec or key substantive fields
+                    keys_to_check = set(spec.expected_keys)
+                    for r in dict_records:
+                        keys_to_check.update(r.keys())
+
+                    substantive = {"address", "store_name", "city", "name", "content", "summary", "text", "description", "details"}
+                    for k in keys_to_check:
+                        if k in spec.optional_keys:
+                            continue
+                        null_count = sum(
+                            1 for r in dict_records
+                            if r.get(k) is None or str(r.get(k)).strip().lower() in _PLACEHOLDERS
+                        )
+                        ratio = null_count / len(dict_records)
+                        # Flag if over 50% of records have null/placeholder for a substantive or expected key
+                        if (k in spec.expected_keys or k in substantive) and ratio > 0.50:
+                            major = True
+                            failures.append(
+                                f"Incomplete data extraction: {null_count}/{len(dict_records)} records have "
+                                f"null or placeholder values for field '{k}' ({ratio:.0%}). Extract real values "
+                                f"from source files; do not emit placeholder nulls."
+                            )
+
+    # 2. CSV Data Integrity & Completeness
+    elif spec.expected_format == "csv" or (spec.filename and spec.filename.lower().endswith(".csv")):
+        try:
+            reader = list(csv.reader(io.StringIO(body)))
+            if len(reader) <= 1:
+                major = True
+                failures.append(
+                    "The CSV file contains no data rows (only header or empty). Populate real data rows."
+                )
+            else:
+                headers = [h.strip().lower() for h in reader[0]]
+                data_rows = reader[1:]
+                substantive_csv = {"address", "store_name", "city", "name", "content", "summary", "text", "description"}
+                for idx, col_name in enumerate(headers):
+                    if col_name in spec.optional_keys:
+                        continue
+                    na_count = sum(
+                        1 for row in data_rows
+                        if idx >= len(row) or row[idx].strip().lower() in _PLACEHOLDERS
+                    )
+                    ratio = na_count / len(data_rows)
+                    if (col_name in spec.expected_keys or col_name in substantive_csv) and ratio > 0.60:
+                        major = True
+                        failures.append(
+                            f"CSV column '{col_name}' is predominantly empty or N/A ({na_count}/{len(data_rows)} rows, "
+                            f"{ratio:.0%}). Extract and populate real data from source files."
+                        )
+        except Exception:
+            pass
+
+    # 3. Markdown Completeness (Check for pervasive N/A placeholders)
+    elif spec.expected_format == "markdown" or (spec.filename and spec.filename.lower().endswith(".md")):
+        # Look for repetitive placeholder occurrences like: ' — N/A — ', 'Address: N/A', '| N/A |', 'Data unavailable'
+        na_matches = re.findall(
+            r"(?:—\s*N/A\b|:\s*N/A\b|\|\s*N/A\s*\||\|\s*null\s*\||Address:\s*N/A|Data unavailable\b|unavailable\s*—)",
+            body, re.I
+        )
+        if len(na_matches) >= 3:
+            major = True
+            failures.append(
+                f"The deliverable contains {len(na_matches)} placeholder 'N/A' or 'data unavailable' entries for substantive fields. "
+                f"Extract complete real data from source files rather than emitting placeholder text."
+            )
 
     if not failures:
         return CheckResult(ok=True, severity="none")

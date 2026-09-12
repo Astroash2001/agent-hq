@@ -44,8 +44,10 @@ Shape: {"verdict": "accept" | "revise", "score": 0.0-1.0, "reasons": ["..."], \
 - "accept" means a colleague could build on this as it stands. Ordinary work \
 that answers the brief is an accept -- you are not grading it against an ideal.
 - "revise" is for work that is missing something the instruction explicitly \
-asked for, is a placeholder rather than real content, or states conclusions it \
-does not support.
+asked for, is a placeholder rather than real content, states conclusions it \
+does not support, or contains pervasive 'null', 'None', or 'N/A' values where \
+actual data (such as addresses, metrics, contact info, prices, or descriptions) \
+was requested. Never accept lazy placeholder extraction where data is dropped.
 - `score` is your confidence in the work, 0 to 1.
 - `reasons` are short, specific and concrete. Quote the artifact where useful.
 - `guidance` is a direct instruction to the specialist saying what to change. \

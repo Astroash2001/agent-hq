@@ -22,9 +22,9 @@ does not have to fetch and parse pages itself.
 import logging
 from typing import Any, Dict, List
 
-import httpx
+import httpx  # type: ignore
 
-from config import settings
+from config import settings  # type: ignore
 
 logger = logging.getLogger("AgentHQ.WebSearch")
 

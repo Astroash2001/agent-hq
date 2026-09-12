@@ -20,8 +20,8 @@ import os
 import re
 from typing import Any, Dict, List
 
-from config import settings
-from tools.file_ops import _get_read_allowed_roots, _is_contained
+from config import settings  # type: ignore
+from tools.file_ops import _get_read_allowed_roots, _is_contained  # type: ignore
 
 logger = logging.getLogger("AgentHQ.SearchWorkspace")
 

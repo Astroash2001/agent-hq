@@ -33,8 +33,8 @@ import re
 import sqlite3
 from typing import Any, Dict, List, Optional
 
-from config import settings
-from tools.file_ops import _get_read_allowed_roots, _is_contained
+from config import settings  # type: ignore
+from tools.file_ops import _get_read_allowed_roots, _is_contained, resolve_read_path  # type: ignore
 
 logger = logging.getLogger("AgentHQ.QueryData")
 
@@ -179,14 +179,16 @@ async def query_data(
     if not sql:
         return _refuse("No query given.")
 
+    resolved = resolve_read_path(path)
+    if not os.path.isfile(resolved):
+        return {"success": False, "error": f"No such file: {path}"}
+
+    path = resolved
     if getattr(settings, "file_ops_sandbox_enabled", True):
         if not _is_contained(path, _get_read_allowed_roots()):
             return _refuse(
                 f"'{path}' is outside the mission workspace and the repository, "
                 f"so it cannot be read.")
-
-    if not os.path.isfile(path):
-        return {"success": False, "error": f"No such file: {path}"}
 
     extension = os.path.splitext(path)[1].lower()
     max_rows = max_rows or settings.query_data_max_rows

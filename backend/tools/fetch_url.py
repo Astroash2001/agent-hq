@@ -29,9 +29,9 @@ import socket
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
-import httpx
+import httpx  # type: ignore
 
-from config import settings
+from config import settings  # type: ignore
 
 logger = logging.getLogger("AgentHQ.FetchURL")
 

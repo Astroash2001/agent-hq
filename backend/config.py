@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Observed on gpt-5.5: a research turn carrying three tool results burned
     # the whole 2048 on reasoning and produced nothing, which the agent loop
     # then filed as a 39-byte stub.
-    max_tokens: int = 8000
+    max_tokens: int = 16000
     # Per-call ceiling. Was hardcoded at 12s in base_agent.py, which suited a
     # fast non-thinking model. Reasoning models think before answering and a
     # 12s cap cuts them off mid-thought -- and the failure is silent, because

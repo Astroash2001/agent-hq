@@ -153,3 +153,65 @@ def test_the_check_is_pure():
     second = check(body, spec)
     assert (first.ok, first.failures, first.severity) == (
         second.ok, second.failures, second.severity)
+
+
+# -------------------------------------------------------- structured data tests
+
+def test_json_with_null_addresses_is_rejected():
+    """Regression test: Charlie emitting records with null address when address was requested."""
+    import json
+    spec = infer_spec(
+        "parsed_stores.json",
+        "For each store produce a record: {city, store_name, address, phone (if present)}"
+    )
+    records = [
+        {"city": "Ahmedabad", "store_name": "Shivranjani", "address": None, "phone": None},
+        {"city": "Bengaluru", "store_name": "Koramangala", "address": None, "phone": None},
+    ]
+    result = check(json.dumps(records), spec)
+    assert result.ok is False
+    assert result.severity == "major"
+    assert any("address" in f and "null" in f for f in result.failures)
+
+
+def test_json_with_real_addresses_passes():
+    import json
+    spec = infer_spec(
+        "parsed_stores.json",
+        "For each store produce a record: {city, store_name, address, phone (if present)}"
+    )
+    records = [
+        {"city": "Ahmedabad", "store_name": "Shivranjani", "address": "123 Main St", "phone": None},
+        {"city": "Bengaluru", "store_name": "Koramangala", "address": "456 100ft Rd", "phone": None},
+    ]
+    result = check(json.dumps(records), spec)
+    assert result.ok is True
+
+
+def test_csv_with_predominantly_na_column_is_rejected():
+    spec = infer_spec("bluestone_stores.csv", "produce CSV with columns city,store_name,address,phone")
+    csv_body = (
+        "city,store_name,address,phone\n"
+        "Bengaluru,Koramangala,N/A,N/A\n"
+        "Bengaluru,Jayanagar,N/A,N/A\n"
+    )
+    result = check(csv_body, spec)
+    assert result.ok is False
+    assert result.severity == "major"
+    assert any("address" in f for f in result.failures)
+
+
+def test_markdown_with_pervasive_na_placeholders_is_rejected():
+    spec = infer_spec("bluestone_stores.md", "list stores by city")
+    md_body = (
+        "# Stores\n\n"
+        "- Koramangala — N/A — N/A\n"
+        "- Jayanagar — N/A — N/A\n"
+        "- Indiranagar — N/A — N/A\n"
+        "- Marathahalli — N/A — N/A\n"
+    )
+    result = check(md_body, spec)
+    assert result.ok is False
+    assert result.severity == "major"
+    assert any("N/A" in f for f in result.failures)
+
