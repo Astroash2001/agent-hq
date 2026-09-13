@@ -549,3 +549,124 @@ def test_every_granted_tool_actually_exists():
             manifest = json.load(fh)
         for tool in manifest.get("tools") or []:
             assert tool in catalogue, f"{manifest['id']} was granted unknown tool {tool}"
+
+
+# ------------------------------------------------- read_file pagination
+
+@pytest.fixture
+def paging_dir(monkeypatch):
+    """A mission directory nested inside its own scratch root, as above."""
+    root = tempfile.mkdtemp(prefix="agenthq_readfile_")
+    path = os.path.join(root, "missions")
+    os.makedirs(path)
+    monkeypatch.setattr(settings, "missions_path", path)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_a_small_file_reads_whole_and_says_it_is_whole(paging_dir):
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "small.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("hello world")
+
+    result = await read_file(path)
+    assert result["success"] is True
+    assert result["content"] == "hello world"
+    assert result["truncated"] is False
+    assert result["total_chars"] == 11
+    assert result["chars_returned"] == 11
+    assert "next_offset" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_large_file_admits_the_cut(paging_dir):
+    """
+    The bug this exists for: `content[:8000]` with nothing in the reply saying
+    a cut had happened, so a 45,000-character page arrived as 8,000 characters
+    that looked complete. That is how an agent extracts 65 of 365 records and
+    reports finishing.
+    """
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "big.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("X" * 45000)
+
+    result = await read_file(path)
+    assert result["success"] is True
+    assert result["truncated"] is True
+    assert result["total_chars"] == 45000
+    assert result["chars_returned"] == settings.read_file_max_chars
+    assert result["next_offset"] == settings.read_file_max_chars
+    # The hint has to say what to DO, not merely that something was cut.
+    assert "offset=" in result["hint"]
+    assert "query_data" in result["hint"]
+
+
+@pytest.mark.asyncio
+async def test_paging_reassembles_the_whole_file(paging_dir):
+    from tools.file_ops import read_file
+    body = "".join(chr(97 + (i % 26)) for i in range(20000))
+    path = os.path.join(paging_dir, "seq.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(body)
+
+    collected, offset, guard = "", 0, 0
+    while True:
+        guard += 1
+        assert guard < 50, "pagination did not terminate"
+        page = await read_file(path, offset=offset)
+        collected += page["content"]
+        if not page["truncated"]:
+            break
+        offset = page["next_offset"]
+
+    assert collected == body, "paged content does not reassemble to the original"
+
+
+@pytest.mark.asyncio
+async def test_reading_past_the_end_says_so_rather_than_returning_nothing(paging_dir):
+    """
+    An agent that reads "" decides for itself what it means, and what it
+    decides is usually that the file is empty. The same lesson as fetch_url.
+    """
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "short.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("only a little")
+
+    result = await read_file(path, offset=9999)
+    assert result["success"] is True
+    assert result["end_of_content"] is True
+    assert result["chars_returned"] == 0
+    assert "past the end" in result["hint"]
+    assert str(result["total_chars"]) in result["hint"]
+
+
+@pytest.mark.asyncio
+async def test_max_chars_is_honoured_and_capped(paging_dir):
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "big.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("Y" * 30000)
+
+    small = await read_file(path, max_chars=100)
+    assert small["chars_returned"] == 100
+    assert small["next_offset"] == 100
+
+    # Above the configured ceiling, the ceiling wins -- the cap is a token
+    # budget, so a caller must not be able to talk its way past it.
+    huge = await read_file(path, max_chars=999999)
+    assert huge["chars_returned"] == settings.read_file_max_chars
+
+
+@pytest.mark.asyncio
+async def test_read_file_still_refuses_outside_the_jail(paging_dir, outside_file):
+    """Pagination must not have opened a way round containment."""
+    from tools.file_ops import read_file
+    result = await read_file(outside_file)
+    assert result["success"] is False
+    assert result.get("refused") is True

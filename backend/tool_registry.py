@@ -267,11 +267,26 @@ class ToolRegistry:
         # 3. Read File
         self.register(
             name="read_file",
-            description="Read text content from a file path in the workspace.",
+            description=(
+                "Read text content from a file path in the workspace. Large files "
+                "are returned one chunk at a time: when the reply says "
+                "truncated=true it also gives next_offset, and you call read_file "
+                "again with that offset to continue. Do not treat a truncated "
+                "chunk as the whole file. For a CSV or JSON file, prefer "
+                "query_data -- one SQL query over the whole file is exact and "
+                "costs one turn, where paging costs a turn per chunk and every "
+                "chunk stays in your history afterwards."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "filepath": {"type": "string", "description": "Absolute or relative file path to read"}
+                    "filepath": {"type": "string", "description": "Absolute or relative file path to read"},
+                    "offset": {"type": "integer",
+                               "description": "Character index to start from. Use next_offset "
+                                              "from a truncated reply to continue. Default 0."},
+                    "max_chars": {"type": "integer",
+                                  "description": "Characters to return in this chunk. "
+                                                 "Omit for the default."}
                 },
                 "required": ["filepath"]
             },

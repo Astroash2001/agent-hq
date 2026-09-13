@@ -128,13 +128,89 @@ def resolve_read_path(filepath: str) -> str:
     return cleaned
 
 
+# ------------------------------------------------------------------ paging
+
+def _paged(content: str, filepath: str, max_chars: int, offset: int) -> dict:
+    """
+    One slice of a file, and enough metadata to ask for the next one.
+
+    `read_file` used to end with `content[:8000]` and a comment about context
+    safety. Nothing in the reply said a cut had happened, so a 45,000-character
+    page arrived as 8,000 characters that looked complete -- which is how an
+    agent extracts 65 of 365 records and reports finishing. The cap is still
+    there, because an agent's history is re-sent on every remaining turn of a
+    step; what is new is that the reply says so and says what to do about it.
+
+    Shared with `_read_file_unconstrained` so the kill-switch path cannot drift
+    back to a silent truncation.
+    """
+    limit = max_chars if max_chars and max_chars > 0 else settings.read_file_max_chars
+    limit = max(1, min(int(limit), settings.read_file_max_chars))
+    start = max(0, int(offset or 0))
+
+    total = len(content)
+
+    # Asking past the end is answered, not left as an empty string. The same
+    # lesson as fetch_url: an agent that reads "" decides for itself what it
+    # means, and what it decides is usually that the file is empty.
+    if total and start >= total:
+        return {
+            "success": True,
+            "filepath": filepath,
+            "total_chars": total,
+            "size_bytes": total,
+            "offset": start,
+            "chars_returned": 0,
+            "truncated": False,
+            "end_of_content": True,
+            "content": "",
+            "hint": (f"Offset {start} is at or past the end of {filepath}, which is "
+                     f"{total} characters long. Nothing further to read."),
+        }
+
+    end = min(start + limit, total)
+    chunk = content[start:end]
+    truncated = end < total
+
+    result = {
+        "success": True,
+        "filepath": filepath,
+        # Kept under its old name as well as the accurate one: callers and
+        # tests written against `size_bytes` still work, and it always meant
+        # the whole file rather than the slice.
+        "total_chars": total,
+        "size_bytes": total,
+        "offset": start,
+        "chars_returned": len(chunk),
+        "truncated": truncated,
+        "content": chunk,
+    }
+    if truncated:
+        result["next_offset"] = end
+        result["hint"] = (
+            f"Content truncated ({end}/{total} chars). Call read_file with "
+            f"offset={end} to read the next chunk, or use query_data for a CSV "
+            f"or JSON file, or process the whole file with a Python script via "
+            f"terminal -- paging a large file one chunk at a time costs a turn "
+            f"per chunk and every chunk stays in your history afterwards."
+        )
+    return result
+
+
 # ----------------------------------------------------------------- tools
 
-async def read_file(filepath: str) -> Dict[str, Any]:
-    """Read contents of a text file within the sandbox jail."""
+async def read_file(filepath: str, max_chars: int = 0, offset: int = 0) -> Dict[str, Any]:
+    """
+    Read a text file within the sandbox jail, one slice at a time.
+
+    `filepath` alone behaves as it always did for any file that fits: the whole
+    content, under `content`. A file that does not fit now says so, in
+    `truncated`, `next_offset` and `hint`, instead of arriving short and
+    looking whole.
+    """
     # Kill switch bypass
     if not getattr(settings, "file_ops_sandbox_enabled", True):
-        return await _read_file_unconstrained(filepath)
+        return await _read_file_unconstrained(filepath, max_chars=max_chars, offset=offset)
 
     if not filepath or not str(filepath).strip():
         return {"success": False, "refused": True, "error": "File path cannot be empty."}
@@ -156,12 +232,7 @@ async def read_file(filepath: str) -> Dict[str, Any]:
         with open(candidate, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
 
-        return {
-            "success": True,
-            "filepath": filepath,
-            "size_bytes": len(content),
-            "content": content[:8000],  # Cap length for LLM context safety
-        }
+        return _paged(content, filepath, max_chars, offset)
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -288,18 +359,16 @@ async def list_files(directory: str = ".") -> Dict[str, Any]:
 
 # ----------------------------------------------------------------- unconstrained fallbacks
 
-async def _read_file_unconstrained(filepath: str) -> Dict[str, Any]:
+async def _read_file_unconstrained(filepath: str, max_chars: int = 0,
+                                   offset: int = 0) -> Dict[str, Any]:
     try:
         if not os.path.exists(filepath):
             return {"success": False, "error": f"File not found: {filepath}"}
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
-        return {
-            "success": True,
-            "filepath": filepath,
-            "size_bytes": len(content),
-            "content": content[:8000],
-        }
+        # Same slicer as the jailed path. Turning the sandbox off relaxes where
+        # a file may be read from, not whether a truncation is admitted.
+        return _paged(content, filepath, max_chars, offset)
     except Exception as e:
         return {"success": False, "error": str(e)}
 

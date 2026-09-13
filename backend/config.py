@@ -370,6 +370,13 @@ class Settings(BaseSettings):
     foundry_model: str = ""
     foundry_max_tokens: int = 400
 
+    # --- read_file ----------------------------------------------------------
+    # Characters returned in one read. The agent's history is re-sent on every
+    # remaining turn of a step, so this is a token budget as much as a cap --
+    # but it is paired with offset/next_offset now, so a file larger than this
+    # is paged rather than silently halved.
+    read_file_max_chars: int = 8000
+
     # --- search_workspace ---------------------------------------------------
     search_workspace_max_results: int = 100
     search_workspace_max_file_bytes: int = 2_000_000
