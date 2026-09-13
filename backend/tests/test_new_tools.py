@@ -601,9 +601,10 @@ async def test_a_large_file_admits_the_cut(paging_dir):
     assert result["total_chars"] == 45000
     assert result["chars_returned"] == settings.read_file_max_chars
     assert result["next_offset"] == settings.read_file_max_chars
-    # The hint has to say what to DO, not merely that something was cut.
+    # The hint has to say what to DO, not merely that something was cut. This
+    # is a .txt, so the alternative named is a script rather than SQL.
     assert "offset=" in result["hint"]
-    assert "query_data" in result["hint"]
+    assert "terminal" in result["hint"]
 
 
 @pytest.mark.asyncio
@@ -619,7 +620,10 @@ async def test_paging_reassembles_the_whole_file(paging_dir):
         guard += 1
         assert guard < 50, "pagination did not terminate"
         page = await read_file(path, offset=offset)
-        collected += page["content"]
+        # `content` carries a truncation banner after the slice, so a caller
+        # reassembling the file takes the first `chars_returned` characters --
+        # the metadata describes the real slice precisely so that this works.
+        collected += page["content"][:page["chars_returned"]]
         if not page["truncated"]:
             break
         offset = page["next_offset"]
@@ -670,3 +674,83 @@ async def test_read_file_still_refuses_outside_the_jail(paging_dir, outside_file
     result = await read_file(outside_file)
     assert result["success"] is False
     assert result.get("refused") is True
+
+
+@pytest.mark.asyncio
+async def test_a_truncated_csv_is_told_to_query_not_to_page(paging_dir):
+    """
+    Pagination alone does not make a large file readable, it only makes the
+    failure loud. An agent has `max_agent_steps` turns for the whole step, and
+    every chunk it reads stays in its history for the rest of them -- so paging
+    a big file spends the budget and ends with the whole file in the prompt
+    anyway. The agent then reports what it managed to read, which is the
+    65-of-365 failure arriving by a different route.
+
+    So the hint carries the arithmetic and the file's shape, which is what the
+    agent needs to write one SQL query instead of six reads.
+    """
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "stores.csv")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("store_id,name,city,pincode\n")
+        for i in range(365):
+            fh.write(f"{i},Store {i},City{i % 40},4{i:05d}\n")
+
+    result = await read_file(path)
+    hint = result["hint"]
+
+    assert result["truncated"] is True
+    # The numbers, done rather than left to the model.
+    assert f"{result['total_chars']:,}" in hint
+    assert str(settings.max_agent_steps) in hint
+    # The shape, so the next call can be the right one.
+    assert "store_id" in hint and "pincode" in hint
+    assert "rows" in hint
+    # The redirect, stated as a redirect.
+    assert "query_data" in hint
+    assert "Do not page" in hint
+    # And it is in the content as well: a hint in a sibling field is one an
+    # agent can skim past, and skimming past it is the whole failure.
+    assert "[TRUNCATED]" in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_a_truncated_plain_file_is_pointed_at_a_script(paging_dir):
+    """No SQL over a .txt, so the alternative named is the one that exists."""
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "notes.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("lorem ipsum " * 4000)
+
+    hint = (await read_file(path))["hint"]
+    assert "terminal" in hint
+    assert "offset=" in hint
+    assert "query_data" not in hint
+
+
+@pytest.mark.asyncio
+async def test_the_paged_content_still_reassembles_despite_the_banner(paging_dir):
+    """
+    The truncation banner is appended to `content`, so paging must strip it or
+    a reassembled file would be salted with warnings. `chars_returned` and
+    `next_offset` describe the real slice, which is what makes that possible.
+    """
+    from tools.file_ops import read_file
+    body = "".join(chr(97 + (i % 26)) for i in range(20000))
+    path = os.path.join(paging_dir, "seq.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(body)
+
+    collected, offset, guard = "", 0, 0
+    while True:
+        guard += 1
+        assert guard < 50
+        page = await read_file(path, offset=offset)
+        # The real slice is the first `chars_returned` characters; the rest is
+        # the banner. A caller that trusts the metadata reassembles exactly.
+        collected += page["content"][:page["chars_returned"]]
+        if not page["truncated"]:
+            break
+        offset = page["next_offset"]
+
+    assert collected == body

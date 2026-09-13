@@ -130,6 +130,76 @@ def resolve_read_path(filepath: str) -> str:
 
 # ------------------------------------------------------------------ paging
 
+# Formats `query_data` can run SQL over. A truncated read of one of these is
+# the case where paging is not merely expensive but the wrong tool entirely.
+_QUERYABLE = (".csv", ".tsv", ".json")
+
+
+def _shape_of(content: str, filepath: str) -> str:
+    """
+    What a structured file looks like, for an agent deciding how to read it.
+
+    Returned instead of nothing when a read is truncated, because the agent's
+    next move depends on facts it cannot get from the first 8,000 characters:
+    how many rows there are, and what the columns are called. With those it can
+    write one SQL query. Without them it pages, and paging is what loses the
+    other 300 records.
+    """
+    suffix = os.path.splitext(filepath)[1].lower()
+    if suffix not in _QUERYABLE:
+        return ""
+
+    lines = content.count("\n") + 1
+    if suffix in (".csv", ".tsv"):
+        header = content.split("\n", 1)[0].strip()
+        sep = "\t" if suffix == ".tsv" else ","
+        columns = [c.strip().strip('"') for c in header.split(sep)][:20]
+        return (f" It is a {suffix.lstrip('.')} file with about {lines:,} rows "
+                f"and these columns: {', '.join(columns)}.")
+    return f" It is a JSON file of about {lines:,} lines."
+
+
+def _truncation_hint(filepath: str, content: str, end: int, total: int,
+                     limit: int) -> str:
+    """
+    What to do about a file that did not fit, with the arithmetic done.
+
+    "Content truncated, call again with an offset" is true and not enough. An
+    agent has `max_agent_steps` turns for the whole step -- eight -- and every
+    chunk it reads stays in its history for all the remaining ones. Paging a
+    45,000-character file is six of those eight turns, and at the end of it the
+    prompt holds all 45,000 characters anyway. The agent that does this runs
+    out of budget and reports what it managed to read, which is the 65-of-365
+    failure arriving by a different route.
+
+    So the numbers are spelled out rather than left for the model to work out,
+    and the alternative is named with the file's own shape attached, so the
+    next call can be the right one instead of the next chunk.
+    """
+    remaining = total - end
+    calls = max(1, -(-remaining // max(1, limit)))      # ceil
+    shape = _shape_of(content, filepath)
+    suffix = os.path.splitext(filepath)[1].lower()
+
+    base = (f"Content truncated: {end:,} of {total:,} characters shown. "
+            f"Reading the rest by paging would take {calls} more call(s) of "
+            f"your {settings.max_agent_steps}-turn budget, and every chunk "
+            f"stays in your history afterwards.")
+
+    if suffix in _QUERYABLE:
+        return (base + shape +
+                f" Do not page through it. Use query_data to run SQL over the "
+                f"whole file in one call -- it reads every row, returns only "
+                f"what you ask for, and is exact. Page with "
+                f"read_file(offset={end}) only if you genuinely need the raw "
+                f"text rather than the data.")
+
+    return (base + f" To continue anyway, call read_file with offset={end}. To "
+            f"process the whole file instead, write a script and run it with "
+            f"terminal -- that reads all {total:,} characters without any of "
+            f"them entering your history.")
+
+
 def _paged(content: str, filepath: str, max_chars: int, offset: int) -> dict:
     """
     One slice of a file, and enough metadata to ask for the next one.
@@ -187,13 +257,11 @@ def _paged(content: str, filepath: str, max_chars: int, offset: int) -> dict:
     }
     if truncated:
         result["next_offset"] = end
-        result["hint"] = (
-            f"Content truncated ({end}/{total} chars). Call read_file with "
-            f"offset={end} to read the next chunk, or use query_data for a CSV "
-            f"or JSON file, or process the whole file with a Python script via "
-            f"terminal -- paging a large file one chunk at a time costs a turn "
-            f"per chunk and every chunk stays in your history afterwards."
-        )
+        result["hint"] = _truncation_hint(filepath, content, end, total, limit)
+        # Said in the content too. A hint in a sibling field is one an agent
+        # can skim past; the whole failure this guards against is an agent
+        # treating a partial read as a complete one.
+        result["content"] = chunk + f"\n\n[TRUNCATED] {result['hint']}"
     return result
 
 
