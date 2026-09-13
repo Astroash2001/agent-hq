@@ -408,3 +408,28 @@ def test_a_producing_step_still_gaps_on_a_tool_nobody_holds():
     assert len(gaps) == 1
     assert gaps[0].needed == ["fetch_url", "query_data"]
     assert "write_file" not in gaps[0].needed
+
+
+def test_the_planner_is_told_that_hiring_exists():
+    """
+    The foundry was unreachable through the LLM planner, and the reason was one
+    line in its own prompt: "The agent you pick must hold every tool you name."
+
+    That forbids the only thing that triggers a hire -- a step declaring tools
+    no single agent holds. So a planner facing an impossible combination did
+    the locally sensible thing and rewrote the goal into something the roster
+    could manage: an observed run answered a 30,000-row scouting brief with a
+    one-step feasibility memo assigned to the boss, reported "all steps
+    completed", and queried nothing.
+
+    Measured before and after on the same goal: 1 hire in 3 runs became 3 in 3.
+    The earlier rate was not variance, it was the model disobeying that line.
+    """
+    from planner import PLANNER_SYSTEM_PROMPT as prompt
+
+    assert "must hold every tool you name" not in prompt, (
+        "the instruction that makes the foundry unreachable is back")
+    # The replacement has to say the three things the planner needs to know.
+    assert "what the WORK needs" in prompt
+    assert "hired" in prompt
+    assert "Never shrink a goal" in prompt

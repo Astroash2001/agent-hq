@@ -44,11 +44,16 @@ parallel, so do not chain steps that do not actually depend on each other.
 - `description` is an instruction addressed to that specialist, concrete enough \
 to act on without seeing the original goal.
 - `rationale` is one short clause explaining why this specialist.
-- `needs_tools` lists the tools this step cannot be done without, chosen from the \
-tools listed against the agents below. Leave it empty when the step is reasoning \
-or writing and needs no tool. Name a tool only when the work is impossible \
-without it -- measuring a runtime needs `terminal`, reporting a current fact needs \
-`web_search`. The agent you pick must hold every tool you name.
+- `needs_tools` lists the tools this step cannot be done without. Leave it \
+empty when the step is reasoning or writing and needs no tool. Name a tool \
+only when the work is impossible without it -- measuring a runtime needs \
+`terminal`, reporting a current fact needs `web_search`.
+- Name what the WORK needs, not what your chosen agent happens to hold. \
+Prefer an agent who already holds the whole set. If NO single agent holds it, \
+name the tools anyway and pick the closest agent: a specialist holding exactly \
+that set is hired for the step and the step is reassigned to them \
+automatically. Never shrink a goal because the roster looks short of it, and \
+never hand an agent work it cannot do without saying so in `needs_tools`.
 - Use at most %d steps. Prefer fewer. A trivial goal is one step.
 
 MEETINGS
