@@ -754,3 +754,142 @@ async def test_the_paged_content_still_reassembles_despite_the_banner(paging_dir
         offset = page["next_offset"]
 
     assert collected == body
+
+
+# ----------------------------------------- large data, end of the line
+
+@pytest.mark.asyncio
+async def test_query_data_refuses_rather_than_answering_from_half_a_file(data_dir, monkeypatch):
+    """
+    The worst bug of the set, and it lived in the tool recommended as the cure.
+
+    read_file's truncation hint tells an agent to use query_data because it
+    "reads every row and is exact". Above the source-row cap it did not: a
+    COUNT over the first 50,000 rows of a 60,000-row file came back clean,
+    plausible and wrong, with truncated=False. A wrong number presented as an
+    exact one is worse than the silent truncation it was meant to replace.
+
+    Refused rather than flagged: a flag beside a number is something an agent
+    can carry into its report without repeating.
+    """
+    monkeypatch.setattr(settings, "query_data_max_source_rows", 500)
+    path = os.path.join(data_dir, "big.csv")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("id,amount\n")
+        for i in range(600):
+            fh.write(f"{i},10\n")
+
+    result = await query_data(filepath=path, query="SELECT COUNT(*), SUM(amount) FROM data")
+    assert result["success"] is False
+    assert result["refused"] is True
+    assert "500" in result["error"]
+    # The refusal has to say what to do instead, or it is only a failure.
+    assert "terminal" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_a_file_inside_the_cap_is_still_exact(data_dir, monkeypatch):
+    """The guard must not have made the ordinary case refuse."""
+    monkeypatch.setattr(settings, "query_data_max_source_rows", 500)
+    path = os.path.join(data_dir, "ok.csv")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("id,amount\n")
+        for i in range(400):
+            fh.write(f"{i},10\n")
+
+    result = await query_data(filepath=path, query="SELECT COUNT(*), SUM(amount) FROM data")
+    assert result["success"] is True
+    assert result["rows"] == [[400, 4000]]
+
+
+@pytest.mark.asyncio
+async def test_read_file_memory_does_not_grow_with_the_file(paging_dir):
+    """
+    `f.read()` then a slice meant returning 8,000 characters of a 50MB log held
+    52 million of them in RAM first. Fast enough to look fine -- 0.13s -- and
+    scaling with the wrong number, so the first multi-gigabyte file an agent
+    points at takes the process out.
+
+    Measured across two sizes, because the property is not "peak is small" but
+    "peak does not grow with the file". One measurement cannot tell a bounded
+    read from a fast machine, and the first version of this test asserted peak
+    < filesize/2, which a whole-file read would pass on a small enough fixture.
+    """
+    import tracemalloc
+    from tools.file_ops import read_file
+
+    peaks = {}
+    for lines_in_file in (20000, 80000):            # ~2MB and ~8MB
+        path = os.path.join(paging_dir, f"huge_{lines_in_file}.log")
+        with open(path, "w", encoding="utf-8") as fh:
+            for _ in range(lines_in_file):
+                fh.write("x" * 99 + "\n")
+
+        tracemalloc.start()
+        result = await read_file(path)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        assert result["chars_returned"] == settings.read_file_max_chars
+        assert result["total_chars"] == lines_in_file * 100
+        peaks[lines_in_file] = peak
+
+    # Four times the file, nothing like four times the memory. A whole-file
+    # read would grow in step with it.
+    assert peaks[80000] < peaks[20000] * 2, (
+        f"peak went {peaks[20000]:,} -> {peaks[80000]:,} bytes for a 4x larger "
+        f"file -- memory is still tracking the file rather than the slice")
+@pytest.mark.asyncio
+async def test_character_counts_stay_exact_for_multibyte_text(paging_dir):
+    """
+    `total_chars` is what the truncation hint does its arithmetic with, so it
+    has to be characters. os.path.getsize would be bytes, which is a different
+    number the moment a file holds one non-ASCII character -- and streaming
+    makes reaching for it tempting.
+    """
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "uni.csv")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("name,city\n")
+        for i in range(3000):
+            fh.write(f"Ünïcodé {i},Münchén\n")
+
+    with open(path, encoding="utf-8") as fh:
+        body = fh.read()
+
+    result = await read_file(path)
+    assert result["total_chars"] == len(body)
+    assert result["total_chars"] != os.path.getsize(path), (
+        "the fixture must contain multibyte text for this test to mean anything")
+
+    # And paging still reassembles it exactly.
+    collected, offset, guard = "", 0, 0
+    while True:
+        guard += 1
+        assert guard < 100
+        page = await read_file(path, offset=offset)
+        collected += page["content"][:page["chars_returned"]]
+        if not page["truncated"]:
+            break
+        offset = page["next_offset"]
+    assert collected == body
+
+
+@pytest.mark.asyncio
+async def test_the_hint_reads_columns_from_the_head_not_the_slice(paging_dir):
+    """
+    A CSV's columns are on line one whatever offset the call asked for, so the
+    shape in the hint is taken from the file's head rather than the window.
+    """
+    from tools.file_ops import read_file
+    path = os.path.join(paging_dir, "stores.csv")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("store_id,name,city,pincode\n")
+        # Comfortably past offset + max_chars, or the read is not truncated at
+        # all and the test asserts nothing.
+        for i in range(2000):
+            fh.write(f"{i},Store {i},City{i % 30},4{i:05d}\n")
+
+    deep = await read_file(path, offset=5000)
+    assert deep["truncated"] is True
+    assert "store_id" in deep["hint"] and "pincode" in deep["hint"]

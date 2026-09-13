@@ -111,11 +111,16 @@ def _rows_from_csv(path: str, max_rows: int) -> tuple:
         except StopIteration:
             return [], []
         rows = []
+        overflowed = False
         for index, row in enumerate(reader):
+            # One past the cap, so "there are more" is a fact rather than an
+            # assumption. Stopping AT the cap cannot tell a file of exactly
+            # max_rows from one of ten million.
             if index >= max_rows:
+                overflowed = True
                 break
             rows.append([_coerce(cell) for cell in row])
-    return header, rows
+    return header, rows, overflowed
 
 
 def _rows_from_json(path: str, max_rows: int) -> tuple:
@@ -133,6 +138,7 @@ def _rows_from_json(path: str, max_rows: int) -> tuple:
     if not isinstance(payload, list):
         raise ValueError("JSON must be a list of objects, or an object containing one.")
 
+    overflowed = len(payload) > max_rows
     records = [r for r in payload[:max_rows] if isinstance(r, dict)]
     if not records:
         raise ValueError("No object rows found in the JSON.")
@@ -143,7 +149,7 @@ def _rows_from_json(path: str, max_rows: int) -> tuple:
             if key not in header:
                 header.append(key)
     rows = [[_scalar(record.get(key)) for key in header] for record in records]
-    return header, rows
+    return header, rows, overflowed
 
 
 def _scalar(value: Any) -> Any:
@@ -196,9 +202,11 @@ async def query_data(
 
     try:
         if extension in (".csv", ".tsv", ".txt"):
-            header, rows = _rows_from_csv(path, settings.query_data_max_source_rows)
+            header, rows, overflowed = _rows_from_csv(
+                path, settings.query_data_max_source_rows)
         elif extension == ".json":
-            header, rows = _rows_from_json(path, settings.query_data_max_source_rows)
+            header, rows, overflowed = _rows_from_json(
+                path, settings.query_data_max_source_rows)
         else:
             return _refuse(
                 f"Cannot query '{extension or 'a file with no extension'}'. "
@@ -208,6 +216,24 @@ async def query_data(
 
     if not header:
         return {"success": False, "error": f"{os.path.basename(path)} has no columns."}
+
+    # The whole value of this tool is that its answer is exact. Loading part of
+    # the file and answering anyway is worse than not answering: a COUNT over
+    # the first 50,000 rows of a 60,000-row file comes back clean, plausible
+    # and wrong, and nothing in the reply says which. That is the failure this
+    # tool was recommended over paging to avoid -- it had it too.
+    #
+    # Refused rather than flagged. A flag beside a number is something an agent
+    # can carry into its report without repeating; a refusal it cannot.
+    if overflowed:
+        return _refuse(
+            f"{os.path.basename(path)} has more than "
+            f"{settings.query_data_max_source_rows:,} rows, which is this "
+            f"tool's load limit. Any answer over a partly-loaded file would be "
+            f"wrong without saying so, so nothing was run. Either filter the "
+            f"file down first (a script through `terminal` can split or "
+            f"pre-aggregate it), or raise query_data_max_source_rows if the "
+            f"whole file genuinely has to be in memory at once.")
 
     columns = [_safe_column(name, i) for i, name in enumerate(header)]
     # Duplicate names after cleaning would make the CREATE fail on a file the

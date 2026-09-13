@@ -134,6 +134,10 @@ def resolve_read_path(filepath: str) -> str:
 # the case where paging is not merely expensive but the wrong tool entirely.
 _QUERYABLE = (".csv", ".tsv", ".json")
 
+# Enough of a file to name its columns and estimate its shape for the
+# truncation hint, without keeping the file.
+_HEAD_CHARS = 64 * 1024
+
 
 def _shape_of(content: str, filepath: str) -> str:
     """
@@ -198,6 +202,94 @@ def _truncation_hint(filepath: str, content: str, end: int, total: int,
             f"process the whole file instead, write a script and run it with "
             f"terminal -- that reads all {total:,} characters without any of "
             f"them entering your history.")
+
+
+def _read_slice(path: str, offset: int, limit: int) -> tuple:
+    """
+    `limit` characters from `offset`, plus the file's true length, in memory
+    proportional to the slice rather than to the file.
+
+    The obvious implementation is `f.read()` and then a slice, and it was the
+    implementation: returning 8,000 characters of a 50MB log meant holding
+    52 million of them in RAM first. Fast enough to look fine -- 0.13s -- and
+    it scales with the wrong number, so the first multi-gigabyte file an agent
+    points at takes the process out.
+
+    Streaming keeps the exact character count, which matters more than it
+    sounds: `total_chars` is what the truncation hint does its arithmetic with,
+    and os.path.getsize is bytes, which is a different number the moment a file
+    holds one non-ASCII character.
+
+    The head is also collected, because a truncated read of a CSV reports its
+    columns and that means reading the first line whatever the offset is.
+    """
+    # 256KB. The peak is a transient of the decoder working on one block, so
+    # it is set by this and not by the file: measured flat at ~6.4MB with 1MB
+    # blocks across 6MB, 24MB and 60MB files, and a quarter of that here. Small
+    # enough to be cheap, large enough that a 60MB file is still one pass.
+    chunk_size = 256 * 1024
+    total = 0
+    collected = []
+    collected_len = 0
+    head = []
+    head_len = 0
+
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        while True:
+            block = fh.read(chunk_size)
+            if not block:
+                break
+            block_start = total
+            total += len(block)
+
+            if head_len < _HEAD_CHARS:
+                head.append(block[:_HEAD_CHARS - head_len])
+                head_len += len(head[-1])
+
+            # Only the part of this block that falls inside the window is kept.
+            if collected_len < limit:
+                start = max(0, offset - block_start)
+                if start < len(block):
+                    take = block[start:start + (limit - collected_len)]
+                    collected.append(take)
+                    collected_len += len(take)
+
+    return "".join(collected), total, "".join(head)
+
+
+def _paged_stream(path: str, filepath: str, max_chars: int, offset: int) -> dict:
+    """`_paged`, fed by `_read_slice` so the whole file is never resident."""
+    limit = max_chars if max_chars and max_chars > 0 else settings.read_file_max_chars
+    limit = max(1, min(int(limit), settings.read_file_max_chars))
+    start = max(0, int(offset or 0))
+
+    chunk, total, head = _read_slice(path, start, limit)
+
+    if total and start >= total:
+        return {
+            "success": True, "filepath": filepath,
+            "total_chars": total, "size_bytes": total,
+            "offset": start, "chars_returned": 0,
+            "truncated": False, "end_of_content": True, "content": "",
+            "hint": (f"Offset {start} is at or past the end of {filepath}, which "
+                     f"is {total} characters long. Nothing further to read."),
+        }
+
+    end = min(start + limit, total)
+    truncated = end < total
+    result = {
+        "success": True, "filepath": filepath,
+        "total_chars": total, "size_bytes": total,
+        "offset": start, "chars_returned": len(chunk),
+        "truncated": truncated, "content": chunk,
+    }
+    if truncated:
+        # The head, not the slice: a CSV's columns are on line one whatever
+        # offset this call asked for.
+        result["next_offset"] = end
+        result["hint"] = _truncation_hint(filepath, head, end, total, limit)
+        result["content"] = chunk + f"\n\n[TRUNCATED] {result['hint']}"
+    return result
 
 
 def _paged(content: str, filepath: str, max_chars: int, offset: int) -> dict:
@@ -297,10 +389,9 @@ async def read_file(filepath: str, max_chars: int = 0, offset: int = 0) -> Dict[
         if not os.path.exists(candidate):
             return {"success": False, "error": f"File not found: {filepath}"}
 
-        with open(candidate, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-
-        return _paged(content, filepath, max_chars, offset)
+        # Streamed rather than read whole: this returns at most `max_chars`,
+        # and the memory it uses should track that rather than the file.
+        return _paged_stream(candidate, filepath, max_chars, offset)
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -432,11 +523,9 @@ async def _read_file_unconstrained(filepath: str, max_chars: int = 0,
     try:
         if not os.path.exists(filepath):
             return {"success": False, "error": f"File not found: {filepath}"}
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
         # Same slicer as the jailed path. Turning the sandbox off relaxes where
         # a file may be read from, not whether a truncation is admitted.
-        return _paged(content, filepath, max_chars, offset)
+        return _paged_stream(filepath, filepath, max_chars, offset)
     except Exception as e:
         return {"success": False, "error": str(e)}
 
