@@ -131,21 +131,41 @@ def _to_text(body: str, content_type: str) -> str:
     return _BLANK_LINES.sub("\n\n", text).strip()
 
 
-async def fetch_url(url: str, max_chars: int = 0) -> Dict[str, Any]:
+try:
+    from bs4 import BeautifulSoup  # type: ignore
+    _BS4_AVAILABLE = True
+except ImportError:
+    _BS4_AVAILABLE = False
+
+from tools.file_ops import write_file
+
+
+async def fetch_url(
+    url: str,
+    max_chars: int = 0,
+    offset: int = 0,
+    save_as: str = "",
+    selector: str = "",
+) -> Dict[str, Any]:
     """
-    Fetch one URL and return its text.
+    Fetch one URL and return its text, page through it, or save it directly.
 
     Never raises: every failure comes back as a result the agent can read and
     act on, for the reason `web_search` documents at length -- a tool that
     throws, or that returns something which merely reads like a page, gets
     called again with different wording until the step's budget is gone.
+
+    Parameters:
+        url: Full http/https URL to fetch.
+        max_chars: Maximum characters to return in text (capped at config limit).
+        offset: Character index to start slice from (for paging large documents).
+        save_as: Workspace filename to save complete raw or selected content into,
+                 bypassing LLM prompt token limits.
+        selector: Optional CSS selector to extract specific HTML elements.
     """
     refusal = _check_url(url)
     if refusal:
         return refusal
-
-    limit = max_chars if max_chars and max_chars > 0 else settings.fetch_url_max_chars
-    limit = min(limit, settings.fetch_url_max_chars)
 
     visited: List[str] = []
     current = url.strip()
@@ -176,6 +196,7 @@ async def fetch_url(url: str, max_chars: int = 0) -> Dict[str, Any]:
                     continue
 
                 content_type = response.headers.get("content-type", "")
+                content_type_clean = content_type.split(";")[0].strip()
                 if response.status_code >= 400:
                     return {
                         "success": False,
@@ -185,19 +206,122 @@ async def fetch_url(url: str, max_chars: int = 0) -> Dict[str, Any]:
                     }
 
                 body = response.text
-                text = _to_text(body, content_type)
-                truncated = len(text) > limit
-                return {
+                is_html = "html" in content_type.lower() or body.lstrip().startswith("<")
+
+                # Targeted CSS selector extraction
+                matched_elements = []
+                if selector and selector.strip():
+                    sel = selector.strip()
+                    if _BS4_AVAILABLE and is_html:
+                        try:
+                            soup = BeautifulSoup(body, "html.parser")
+                            matched_elements = soup.select(sel)
+                            if matched_elements:
+                                items = [
+                                    el.get_text(separator=" ", strip=True)
+                                    for el in matched_elements
+                                    if el.get_text(separator=" ", strip=True)
+                                ]
+                                text = "\n\n".join(items) if items else f"Selector '{sel}' matched {len(matched_elements)} element(s) without text."
+                            else:
+                                text = f"No elements matched CSS selector '{sel}'."
+                        except Exception as exc:
+                            logger.warning("CSS selector '%s' failed on %s: %s", sel, current, exc)
+                            text = _to_text(body, content_type)
+                    else:
+                        text = _to_text(body, content_type)
+                else:
+                    text = _to_text(body, content_type)
+
+                # Direct workspace file staging to prevent LLM context bloat
+                if save_as and save_as.strip():
+                    save_target = save_as.strip()
+                    if selector and matched_elements and save_target.lower().endswith((".html", ".htm")):
+                        content_to_save = "\n\n".join(str(el) for el in matched_elements)
+                    elif selector:
+                        content_to_save = text
+                    else:
+                        content_to_save = body
+
+                    file_res = await write_file(filepath=save_target, content=content_to_save)
+                    if not file_res.get("success"):
+                        return {
+                            "success": False,
+                            "url": current,
+                            "error": f"Failed to save content to '{save_target}': {file_res.get('error', 'write refused')}",
+                        }
+
+                    saved_name = file_res.get("filepath", save_target)
+                    bytes_saved = file_res.get("bytes_written", len(content_to_save))
+                    preview_len = min(500, len(text))
+                    preview = text[:preview_len]
+
+                    return {
+                        "success": True,
+                        "url": current,
+                        "final_url": current,
+                        "status": response.status_code,
+                        "content_type": content_type_clean,
+                        "saved_to": saved_name,
+                        "bytes_saved": bytes_saved,
+                        "chars": len(text),
+                        "total_chars": len(text),
+                        "truncated": False,
+                        "preview": preview,
+                        "redirects": visited[:-1],
+                        "text": (
+                            f"Successfully saved {bytes_saved} bytes to '{saved_name}' in workspace. "
+                            f"Total extracted text length: {len(text)} characters.\n\n"
+                            f"--- CONTENT PREVIEW (first {preview_len} chars) ---\n"
+                            f"{preview}\n\n"
+                            f"Guidance: The full page/data is stored safely on disk. Use query_data, read_file, "
+                            f"or write a Python script to process all records without context window truncation."
+                        ),
+                    }
+
+                # Paginated text output for prompt consumption
+                offset_val = max(0, int(offset or 0))
+                limit = max_chars if max_chars and max_chars > 0 else settings.fetch_url_max_chars
+                limit = min(limit, settings.fetch_url_max_chars)
+
+                total_chars = len(text)
+                slice_end = min(offset_val + limit, total_chars)
+                text_slice = text[offset_val:slice_end]
+                truncated = slice_end < total_chars
+                next_offset = slice_end if truncated else None
+
+                if truncated:
+                    hint = (
+                        f"Content truncated ({slice_end}/{total_chars} characters shown). "
+                        f"To read further, call fetch_url with offset={next_offset}, or use "
+                        f"save_as='page.html' to save the complete response directly to the workspace."
+                    )
+                    final_text = (
+                        text_slice
+                        + f"\n\n[...content truncated at {slice_end}/{total_chars} chars. Call fetch_url with offset={next_offset} or save_as='page.html' to save full content to workspace]"
+                    )
+                else:
+                    hint = ""
+                    final_text = text_slice
+
+                result: Dict[str, Any] = {
                     "success": True,
                     "url": current,
                     "final_url": current,
                     "status": response.status_code,
-                    "content_type": content_type.split(";")[0].strip(),
-                    "chars": len(text),
+                    "content_type": content_type_clean,
+                    "chars": len(text_slice),
+                    "total_chars": total_chars,
+                    "offset": offset_val,
                     "truncated": truncated,
                     "redirects": visited[:-1],
-                    "text": text[:limit] + ("\n\n[truncated]" if truncated else ""),
+                    "text": final_text,
                 }
+                if truncated:
+                    result["next_offset"] = next_offset
+                    result["hint"] = hint
+
+                return result
 
         return {
             "success": False,

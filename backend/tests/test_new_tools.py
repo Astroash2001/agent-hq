@@ -20,9 +20,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from config import settings                            # noqa: E402
 from tool_registry import tool_registry                # noqa: E402
 from tools.calculate import calculate                  # noqa: E402
-from tools.fetch_url import _check_url, _is_public_address, _to_text   # noqa: E402
+from tools.fetch_url import _check_url, _is_public_address, _to_text, fetch_url   # noqa: E402
+from tools.file_ops import bind_workspace              # noqa: E402
 from tools.query_data import query_data                # noqa: E402
 from tools.search_workspace import search_workspace    # noqa: E402
+from workspace import MissionWorkspace                 # noqa: E402
 
 
 # --------------------------------------------------------------- fetch_url
@@ -87,6 +89,133 @@ def test_html_becomes_readable_text():
     # as prose, which is what a naive tag-strip produces.
     assert "color:red" not in text
     assert "var x" not in text
+
+
+class _FakeResponse:
+    def __init__(self, text: str, status_code: int = 200, content_type: str = "text/html"):
+        self.text = text
+        self.status_code = status_code
+        self.headers = {"content-type": content_type}
+
+
+@pytest.mark.asyncio
+async def test_fetch_url_offset_and_pagination(monkeypatch):
+    sample_text = "<html><body>" + ("Alpha Beta Gamma Delta. " * 30) + "</body></html>"
+
+    async def _mock_get(*args, **kwargs):
+        return _FakeResponse(sample_text)
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _mock_get)
+
+    # 1. First slice (offset 0, max_chars 50)
+    res1 = await fetch_url("https://93.184.216.34/test", max_chars=50, offset=0)
+    assert res1["success"] is True
+    assert res1["truncated"] is True
+    assert res1["offset"] == 0
+    assert res1["next_offset"] == 50
+    assert res1["total_chars"] > 50
+    assert "offset=50" in res1["hint"]
+    assert "[...content truncated at 50/" in res1["text"]
+
+    # 2. Second slice (offset 50, max_chars 50)
+    res2 = await fetch_url("https://93.184.216.34/test", max_chars=50, offset=50)
+    assert res2["success"] is True
+    assert res2["offset"] == 50
+    assert res2["next_offset"] == 100
+
+    # 3. Final slice reaching the end
+    res3 = await fetch_url("https://93.184.216.34/test", max_chars=2000, offset=0)
+    assert res3["success"] is True
+    assert res3["truncated"] is False
+    assert "next_offset" not in res3
+
+
+@pytest.mark.asyncio
+async def test_fetch_url_selector_extraction(monkeypatch):
+    html = """
+    <html><body>
+        <div class="store">Store Alpha - Mumbai</div>
+        <div class="store">Store Beta - Delhi</div>
+        <footer class="footer">Ignored footer text</footer>
+    </body></html>
+    """
+    async def _mock_get(*args, **kwargs):
+        return _FakeResponse(html)
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _mock_get)
+
+    res = await fetch_url("https://93.184.216.34/stores", selector="div.store")
+    assert res["success"] is True
+    assert "Store Alpha - Mumbai" in res["text"]
+    assert "Store Beta - Delhi" in res["text"]
+    assert "Ignored footer text" not in res["text"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_url_save_as_workspace(monkeypatch):
+    html = "<html><body><h1>Huge Catalog</h1><p>Store directory with 500 entries</p></body></html>"
+
+    async def _mock_get(*args, **kwargs):
+        return _FakeResponse(html)
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _mock_get)
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        ws = MissionWorkspace("test_mission_fetch")
+        ws.dir = temp_dir
+        bind_workspace(ws, "agent1", "Agent", "step1")
+
+        res = await fetch_url("https://93.184.216.34/directory", save_as="raw_catalog.html")
+        assert res["success"] is True
+        assert res["saved_to"] == "raw_catalog.html"
+        assert res["bytes_saved"] == len(html)
+        assert res["truncated"] is False
+        assert "Huge Catalog" in res["preview"]
+
+        saved_path = os.path.join(temp_dir, "raw_catalog.html")
+        assert os.path.exists(saved_path)
+        with open(saved_path, "r", encoding="utf-8") as f:
+            assert f.read() == html
+    finally:
+        bind_workspace(None)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_fetch_url_selector_with_save_as(monkeypatch):
+    html = """
+    <html><body>
+        <div class="store-record">Store 1: Bangalore</div>
+        <div class="store-record">Store 2: Chennai</div>
+        <div class="nav">Home | About</div>
+    </body></html>
+    """
+    async def _mock_get(*args, **kwargs):
+        return _FakeResponse(html)
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _mock_get)
+
+    temp_dir = tempfile.mkdtemp()
+    try:
+        ws = MissionWorkspace("test_mission_fetch2")
+        ws.dir = temp_dir
+        bind_workspace(ws, "agent1", "Agent", "step1")
+
+        res = await fetch_url("https://93.184.216.34/stores", selector="div.store-record", save_as="stores.txt")
+        assert res["success"] is True
+        assert res["saved_to"] == "stores.txt"
+
+        saved_path = os.path.join(temp_dir, "stores.txt")
+        assert os.path.exists(saved_path)
+        with open(saved_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            assert "Store 1: Bangalore" in content
+            assert "Store 2: Chennai" in content
+            assert "Home | About" not in content
+    finally:
+        bind_workspace(None)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # --------------------------------------------------------------- calculate
@@ -391,6 +520,12 @@ def test_the_catalogue_is_the_authority_on_what_exists():
         assert name in catalogue, name
         assert catalogue[name]["description"]
         assert catalogue[name]["risk"] in ("read", "write", "execute")
+    fetch_schema = tool_registry.get_tool_schema("fetch_url")
+    assert fetch_schema is not None
+    fetch_params = fetch_schema["function"]["parameters"]["properties"]
+    assert "offset" in fetch_params
+    assert "save_as" in fetch_params
+    assert "selector" in fetch_params
 
 
 def test_risk_is_recorded_so_the_dangerous_tools_are_knowable():

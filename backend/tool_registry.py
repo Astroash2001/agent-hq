@@ -329,18 +329,27 @@ class ToolRegistry:
         self.register(
             name="fetch_url",
             description=(
-                "Fetch one web page or JSON API by its exact URL and return its text. "
+                "Fetch one web page or JSON API by its exact URL and return its text or save it directly. "
                 "Use this when you already have a URL -- from web_search, from the "
                 "goal, or from another agent's artifact -- and need what it actually "
-                "says rather than a snippet. web_search finds pages; this one reads "
-                "them. Only public http/https addresses can be fetched."
+                "says rather than a snippet. Only public http/https addresses can be fetched. "
+                "For large pages or full datasets, use 'save_as' to write the complete response directly "
+                "to the workspace so you can parse all records (via Python/regex/query_data) without "
+                "context window truncation. Use 'offset' to page through sections, or 'selector' to "
+                "extract specific CSS elements."
             ),
             parameters={
                 "type": "object",
                 "properties": {
                     "url": {"type": "string", "description": "Full http/https URL to fetch"},
                     "max_chars": {"type": "integer",
-                                  "description": "Trim the text to this many characters. Omit for the default."}
+                                  "description": "Trim the text to this many characters. Omit for the default."},
+                    "offset": {"type": "integer",
+                               "description": "Character index to start slice from. Use with max_chars to page through long content."},
+                    "save_as": {"type": "string",
+                                "description": "Optional workspace filename (e.g. 'page.html') to save the complete page directly to disk, avoiding context truncation."},
+                    "selector": {"type": "string",
+                                 "description": "Optional CSS selector (e.g. 'div.store-list', 'table') to extract only matching HTML elements."}
                 },
                 "required": ["url"]
             },

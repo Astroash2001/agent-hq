@@ -45,9 +45,15 @@ Shape: {"verdict": "accept" | "revise", "score": 0.0-1.0, "reasons": ["..."], \
 that answers the brief is an accept -- you are not grading it against an ideal.
 - "revise" is for work that is missing something the instruction explicitly \
 asked for, is a placeholder rather than real content, states conclusions it \
-does not support, or contains pervasive 'null', 'None', or 'N/A' values where \
+does not support, contains pervasive 'null', 'None', or 'N/A' values where \
 actual data (such as addresses, metrics, contact info, prices, or descriptions) \
-was requested. Never accept lazy placeholder extraction where data is dropped.
+was requested, or is an incomplete/truncated extraction when the goal or \
+instruction requested a complete list, all items, or a specific total count \
+(e.g., extracting only 50 or 60 records when hundreds exist or when the source \
+page was truncated). If data was truncated during fetch, instruct the agent \
+to use fetch_url with save_as or offset/query_data to extract the full dataset. \
+Never accept lazy placeholder extraction or truncated subsets where complete data \
+was expected.
 - `score` is your confidence in the work, 0 to 1.
 - `reasons` are short, specific and concrete. Quote the artifact where useful.
 - `guidance` is a direct instruction to the specialist saying what to change. \
