@@ -1,0 +1,8 @@
+Dear analytics team,
+
+The attached export covers the full competition. Note that squad
+numbers are zero-padded and must be treated as labels, not numbers.
+Ratings are to two decimals.
+
+Regards,
+The data desk

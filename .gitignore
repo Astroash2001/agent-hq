@@ -48,6 +48,16 @@ backend/data/
 # generated: query_data needs something real to query, and the hiring path
 # needs a goal that genuinely wants both a data file and a live page.
 !backend/data/ucl_sample_stats.csv
+# The edge-case fixture set: the generator, the memo and the independently
+# computed answers, added with `git add -f`. The 1.8MB CSV is NOT committed --
+# the generator is seeded, so `python backend/data/make_edge_fixtures.py`
+# rebuilds it and the truth file byte for byte, and a fixture that can be
+# rebuilt is not worth a megabyte of history.
+#
+# These are force-added rather than un-ignored by pattern: `backend/data/` is
+# excluded as a DIRECTORY, and git does not descend into one of those, so a
+# `!` rule for a file inside it never matches. The same reason
+# ucl_sample_stats.csv above needed -f.
 
 
 # =============================================================================

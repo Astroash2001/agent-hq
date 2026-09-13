@@ -1,0 +1,16 @@
+{
+  "total_rows": 30000,
+  "total_goals": 111520,
+  "total_minutes": 22384626,
+  "distinct_clubs": 10,
+  "top_club_by_goals": "Liverpool",
+  "top_club_goals": 16508,
+  "forwards": 7500,
+  "forward_avg_rating": 7.4983,
+  "players_over_900_minutes": 11493,
+  "best_goals_per90_player": "\u00dcn\u00efcod\u00e9 Pl\u00e5yer 9971",
+  "best_goals_per90": 1.7901,
+  "best_goals_per90_goals": 18,
+  "best_goals_per90_minutes": 905,
+  "squad_no_is_text": "00001"
+}
