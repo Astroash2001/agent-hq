@@ -208,34 +208,89 @@ async def fetch_url(
                 body = response.text
                 is_html = "html" in content_type.lower() or body.lstrip().startswith("<")
 
-                # Targeted CSS selector extraction
+                # Targeted CSS selector extraction.
+                #
+                # `selector_applied` is tracked rather than inferred from the
+                # text, because every way a selector could fail used to end
+                # with `text` holding a sentence ABOUT the failure -- and a
+                # sentence is indistinguishable from content once it is written
+                # to a file or handed to the next turn. Saving "No elements
+                # matched '.store'" into stores.html and reporting
+                # "Successfully saved 51 bytes" is this repo's oldest bug
+                # wearing a CSS selector.
                 matched_elements = []
+                selector_applied = False
+                selector_note = ""
                 if selector and selector.strip():
                     sel = selector.strip()
-                    if _BS4_AVAILABLE and is_html:
+                    if not _BS4_AVAILABLE:
+                        selector_note = (
+                            f"Selector '{sel}' was NOT applied: beautifulsoup4 is not "
+                            f"installed, so the whole page text is returned instead.")
+                        text = _to_text(body, content_type)
+                    elif not is_html:
+                        selector_note = (
+                            f"Selector '{sel}' was NOT applied: this response is "
+                            f"{content_type_clean or 'not HTML'}, so the body is "
+                            f"returned as-is.")
+                        text = _to_text(body, content_type)
+                    else:
                         try:
                             soup = BeautifulSoup(body, "html.parser")
                             matched_elements = soup.select(sel)
-                            if matched_elements:
-                                items = [
-                                    el.get_text(separator=" ", strip=True)
-                                    for el in matched_elements
-                                    if el.get_text(separator=" ", strip=True)
-                                ]
-                                text = "\n\n".join(items) if items else f"Selector '{sel}' matched {len(matched_elements)} element(s) without text."
-                            else:
-                                text = f"No elements matched CSS selector '{sel}'."
-                        except Exception as exc:
-                            logger.warning("CSS selector '%s' failed on %s: %s", sel, current, exc)
+                        except Exception as exc:              # noqa: BLE001
+                            logger.warning("CSS selector %r failed on %s: %s",
+                                           sel, current, exc)
+                            matched_elements = []
+                            selector_note = (
+                                f"Selector '{sel}' is not valid CSS ({exc}); the whole "
+                                f"page text is returned instead.")
                             text = _to_text(body, content_type)
-                    else:
-                        text = _to_text(body, content_type)
+                        else:
+                            items = [
+                                el.get_text(separator=" ", strip=True)
+                                for el in matched_elements
+                                if el.get_text(separator=" ", strip=True)
+                            ]
+                            if items:
+                                selector_applied = True
+                                text = "\n\n".join(items)
+                            elif matched_elements:
+                                selector_note = (
+                                    f"Selector '{sel}' matched {len(matched_elements)} "
+                                    f"element(s), but none of them contain any text.")
+                                text = ""
+                            else:
+                                selector_note = (
+                                    f"Selector '{sel}' matched no elements on this page.")
+                                text = ""
                 else:
                     text = _to_text(body, content_type)
 
                 # Direct workspace file staging to prevent LLM context bloat
                 if save_as and save_as.strip():
                     save_target = save_as.strip()
+
+                    # A selector that did not apply must never be written to
+                    # disk. The content in `text` is then a sentence about the
+                    # failure, and saving it under the name the agent chose for
+                    # its data -- then reporting "Successfully saved 51 bytes"
+                    # -- hands the next step an error message where it expects
+                    # records. Refusing is the honest outcome: the agent still
+                    # has the note, and can fix the selector or drop it.
+                    if selector and selector.strip() and not selector_applied:
+                        return {
+                            "success": False,
+                            "url": current,
+                            "status": response.status_code,
+                            "content_type": content_type_clean,
+                            "selector_applied": False,
+                            "error": (
+                                f"Nothing was saved to '{save_target}': {selector_note} "
+                                f"Fix the selector, or omit it to save the whole page."
+                            ),
+                        }
+
                     if selector and matched_elements and save_target.lower().endswith((".html", ".htm")):
                         content_to_save = "\n\n".join(str(el) for el in matched_elements)
                     elif selector:
@@ -264,6 +319,7 @@ async def fetch_url(
                         "content_type": content_type_clean,
                         "saved_to": saved_name,
                         "bytes_saved": bytes_saved,
+                        "selector_applied": selector_applied,
                         "chars": len(text),
                         "total_chars": len(text),
                         "truncated": False,
@@ -285,6 +341,33 @@ async def fetch_url(
                 limit = min(limit, settings.fetch_url_max_chars)
 
                 total_chars = len(text)
+
+                # Asking past the end used to return success with an empty
+                # string and no explanation -- the silent result this whole
+                # tool exists to stop, reached by the pagination that was added
+                # to stop it. Said plainly instead, and never with empty text:
+                # an agent that reads "" decides for itself what it means.
+                if total_chars and offset_val >= total_chars:
+                    return {
+                        "success": True,
+                        "url": current,
+                        "final_url": current,
+                        "status": response.status_code,
+                        "content_type": content_type_clean,
+                        "chars": 0,
+                        "total_chars": total_chars,
+                        "offset": offset_val,
+                        "truncated": False,
+                        "end_of_content": True,
+                        "selector_applied": selector_applied,
+                        "redirects": visited[:-1],
+                        "text": (
+                            f"End of content: offset {offset_val} is at or past the end "
+                            f"of this document, which is {total_chars} characters long. "
+                            f"Nothing further to read here."
+                        ),
+                    }
+
                 slice_end = min(offset_val + limit, total_chars)
                 text_slice = text[offset_val:slice_end]
                 truncated = slice_end < total_chars
@@ -314,9 +397,16 @@ async def fetch_url(
                     "total_chars": total_chars,
                     "offset": offset_val,
                     "truncated": truncated,
+                    "selector_applied": selector_applied,
                     "redirects": visited[:-1],
                     "text": final_text,
                 }
+                if selector_note:
+                    # Said in `text` as well as in a field: a caller reading
+                    # only the prose must not think a selector was applied when
+                    # it silently was not.
+                    result["selector_note"] = selector_note
+                    result["text"] = f"[{selector_note}]" + "\n\n" + result["text"]
                 if truncated:
                     result["next_offset"] = next_offset
                     result["hint"] = hint
