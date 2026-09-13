@@ -893,3 +893,81 @@ async def test_the_hint_reads_columns_from_the_head_not_the_slice(paging_dir):
     deep = await read_file(path, offset=5000)
     assert deep["truncated"] is True
     assert "store_id" in deep["hint"] and "pincode" in deep["hint"]
+
+
+@pytest.mark.asyncio
+async def test_prose_is_not_queried_as_a_table(data_dir):
+    """
+    A letter opening "Dear team," became the columns `dear_team` and `col_1`,
+    and every SELECT over it succeeded, returning tidy nonsense. `.txt` is
+    accepted because data exports use it, and that is what let a letter in.
+
+    Width is the test, not column count: "Dear team," has a trailing comma and
+    splits into two fields, so a check on the header alone passes. What
+    separates data from prose is that data is rectangular.
+    """
+    path = os.path.join(data_dir, "letter.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("Dear team,\nRevenue was good this quarter.\nRegards\n")
+
+    result = await query_data(filepath=path, query="SELECT * FROM data")
+    assert result["success"] is False
+    assert result["refused"] is True
+    assert "does not look like delimited data" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_a_csv_saved_as_txt_is_still_queryable(data_dir):
+    """The counterpart: the reason .txt is accepted at all must keep working."""
+    path = os.path.join(data_dir, "export.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("region,units\nNorth,120\nSouth,80\n")
+
+    result = await query_data(filepath=path, query="SELECT SUM(units) FROM data")
+    assert result["success"] is True
+    assert result["rows"] == [[200]]
+
+
+@pytest.mark.asyncio
+async def test_search_skips_binaries_but_not_extensionless_text(data_dir):
+    """
+    TEXT_EXTENSIONS includes "" because a file with no suffix is usually a
+    README or a config. Usually -- and an extensionless blob was being read
+    with errors="replace" and its mojibake put in front of the agent, which is
+    what that list's own comment says it exists to prevent.
+    """
+    with open(os.path.join(data_dir, "blob"), "wb") as fh:
+        fh.write(bytes([0]) + b"NEEDLE" + bytes(range(256)) * 20)
+    with open(os.path.join(data_dir, "README"), "w", encoding="utf-8") as fh:
+        fh.write("NEEDLE appears in this extensionless text file\n")
+
+    result = await search_workspace(pattern="NEEDLE", directory=data_dir)
+    assert result["success"] is True
+    files = {m["file"] for m in result["matches"]}
+    assert "README" in files, "extensionless text must still be searched"
+    assert "blob" not in files, "a binary must not reach the agent as mojibake"
+
+
+@pytest.mark.asyncio
+async def test_the_row_count_in_the_hint_is_the_file_not_the_head(paging_dir):
+    """
+    Introduced by the streaming fix and caught by a final sweep: `_shape_of`
+    counts newlines in whatever it is handed, and streaming handed it the 64KB
+    head -- so a 20,000-row file was reported as "about 2,285 rows". The count
+    exists so an agent can judge the file, and a wrong one is worse than none.
+    """
+    import re
+    from tools.file_ops import read_file
+
+    rows = 20000
+    path = os.path.join(paging_dir, "stores.csv")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write("store_id,name,city,pincode\n")
+        for i in range(rows):
+            fh.write(f"{i},Store {i},City{i % 30},4{i:05d}\n")
+
+    hint = (await read_file(path))["hint"]
+    claimed = re.search(r"about ([\d,]+) rows", hint)
+    assert claimed, f"no row count in the hint: {hint}"
+    # Header included, so rows + 1. Nowhere near the head's ~2,285 lines.
+    assert int(claimed.group(1).replace(",", "")) == rows + 1

@@ -93,6 +93,15 @@ async def search_workspace(
             try:
                 if os.path.getsize(path) > settings.search_workspace_max_file_bytes:
                     continue
+                # A NUL byte is the giveaway for a binary, and the extension
+                # list lets one through: "" is on it, because a file with no
+                # suffix is usually a README or a config. Usually. An
+                # extensionless blob was being read with errors="replace" and
+                # its mojibake put in front of the agent -- the exact thing
+                # this list's own comment says it exists to prevent.
+                with open(path, "rb") as probe:
+                    if bytes([0]) in probe.read(8192):
+                        continue
                 with open(path, "r", encoding="utf-8", errors="replace") as fh:
                     lines = fh.readlines()
             except OSError:

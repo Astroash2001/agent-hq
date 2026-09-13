@@ -139,7 +139,7 @@ _QUERYABLE = (".csv", ".tsv", ".json")
 _HEAD_CHARS = 64 * 1024
 
 
-def _shape_of(content: str, filepath: str) -> str:
+def _shape_of(head: str, filepath: str, lines: int) -> str:
     """
     What a structured file looks like, for an agent deciding how to read it.
 
@@ -153,9 +153,8 @@ def _shape_of(content: str, filepath: str) -> str:
     if suffix not in _QUERYABLE:
         return ""
 
-    lines = content.count("\n") + 1
     if suffix in (".csv", ".tsv"):
-        header = content.split("\n", 1)[0].strip()
+        header = head.split("\n", 1)[0].strip()
         sep = "\t" if suffix == ".tsv" else ","
         columns = [c.strip().strip('"') for c in header.split(sep)][:20]
         return (f" It is a {suffix.lstrip('.')} file with about {lines:,} rows "
@@ -163,8 +162,8 @@ def _shape_of(content: str, filepath: str) -> str:
     return f" It is a JSON file of about {lines:,} lines."
 
 
-def _truncation_hint(filepath: str, content: str, end: int, total: int,
-                     limit: int) -> str:
+def _truncation_hint(filepath: str, head: str, end: int, total: int,
+                     limit: int, lines: int) -> str:
     """
     What to do about a file that did not fit, with the arithmetic done.
 
@@ -182,7 +181,7 @@ def _truncation_hint(filepath: str, content: str, end: int, total: int,
     """
     remaining = total - end
     calls = max(1, -(-remaining // max(1, limit)))      # ceil
-    shape = _shape_of(content, filepath)
+    shape = _shape_of(head, filepath, lines)
     suffix = os.path.splitext(filepath)[1].lower()
 
     base = (f"Content truncated: {end:,} of {total:,} characters shown. "
@@ -229,6 +228,7 @@ def _read_slice(path: str, offset: int, limit: int) -> tuple:
     # enough to be cheap, large enough that a 60MB file is still one pass.
     chunk_size = 256 * 1024
     total = 0
+    newlines = 0
     collected = []
     collected_len = 0
     head = []
@@ -241,6 +241,11 @@ def _read_slice(path: str, offset: int, limit: int) -> tuple:
                 break
             block_start = total
             total += len(block)
+            # Counted here because this loop already has every character in
+            # hand. Deriving it from the head instead gave "about 2,285 rows"
+            # for a 20,000-row file -- the row count exists so an agent can
+            # judge the file, and a wrong one is worse than none.
+            newlines += block.count("\n")
 
             if head_len < _HEAD_CHARS:
                 head.append(block[:_HEAD_CHARS - head_len])
@@ -254,7 +259,7 @@ def _read_slice(path: str, offset: int, limit: int) -> tuple:
                     collected.append(take)
                     collected_len += len(take)
 
-    return "".join(collected), total, "".join(head)
+    return "".join(collected), total, "".join(head), newlines
 
 
 def _paged_stream(path: str, filepath: str, max_chars: int, offset: int) -> dict:
@@ -263,7 +268,7 @@ def _paged_stream(path: str, filepath: str, max_chars: int, offset: int) -> dict
     limit = max(1, min(int(limit), settings.read_file_max_chars))
     start = max(0, int(offset or 0))
 
-    chunk, total, head = _read_slice(path, start, limit)
+    chunk, total, head, lines = _read_slice(path, start, limit)
 
     if total and start >= total:
         return {
@@ -287,72 +292,7 @@ def _paged_stream(path: str, filepath: str, max_chars: int, offset: int) -> dict
         # The head, not the slice: a CSV's columns are on line one whatever
         # offset this call asked for.
         result["next_offset"] = end
-        result["hint"] = _truncation_hint(filepath, head, end, total, limit)
-        result["content"] = chunk + f"\n\n[TRUNCATED] {result['hint']}"
-    return result
-
-
-def _paged(content: str, filepath: str, max_chars: int, offset: int) -> dict:
-    """
-    One slice of a file, and enough metadata to ask for the next one.
-
-    `read_file` used to end with `content[:8000]` and a comment about context
-    safety. Nothing in the reply said a cut had happened, so a 45,000-character
-    page arrived as 8,000 characters that looked complete -- which is how an
-    agent extracts 65 of 365 records and reports finishing. The cap is still
-    there, because an agent's history is re-sent on every remaining turn of a
-    step; what is new is that the reply says so and says what to do about it.
-
-    Shared with `_read_file_unconstrained` so the kill-switch path cannot drift
-    back to a silent truncation.
-    """
-    limit = max_chars if max_chars and max_chars > 0 else settings.read_file_max_chars
-    limit = max(1, min(int(limit), settings.read_file_max_chars))
-    start = max(0, int(offset or 0))
-
-    total = len(content)
-
-    # Asking past the end is answered, not left as an empty string. The same
-    # lesson as fetch_url: an agent that reads "" decides for itself what it
-    # means, and what it decides is usually that the file is empty.
-    if total and start >= total:
-        return {
-            "success": True,
-            "filepath": filepath,
-            "total_chars": total,
-            "size_bytes": total,
-            "offset": start,
-            "chars_returned": 0,
-            "truncated": False,
-            "end_of_content": True,
-            "content": "",
-            "hint": (f"Offset {start} is at or past the end of {filepath}, which is "
-                     f"{total} characters long. Nothing further to read."),
-        }
-
-    end = min(start + limit, total)
-    chunk = content[start:end]
-    truncated = end < total
-
-    result = {
-        "success": True,
-        "filepath": filepath,
-        # Kept under its old name as well as the accurate one: callers and
-        # tests written against `size_bytes` still work, and it always meant
-        # the whole file rather than the slice.
-        "total_chars": total,
-        "size_bytes": total,
-        "offset": start,
-        "chars_returned": len(chunk),
-        "truncated": truncated,
-        "content": chunk,
-    }
-    if truncated:
-        result["next_offset"] = end
-        result["hint"] = _truncation_hint(filepath, content, end, total, limit)
-        # Said in the content too. A hint in a sibling field is one an agent
-        # can skim past; the whole failure this guards against is an agent
-        # treating a partial read as a complete one.
+        result["hint"] = _truncation_hint(filepath, head, end, total, limit, lines)
         result["content"] = chunk + f"\n\n[TRUNCATED] {result['hint']}"
     return result
 

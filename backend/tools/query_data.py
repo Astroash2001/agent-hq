@@ -217,6 +217,26 @@ async def query_data(
     if not header:
         return {"success": False, "error": f"{os.path.basename(path)} has no columns."}
 
+    # Prose queried as a table returns tidy nonsense: a letter opening "Dear
+    # team," becomes the columns `dear_team` and `col_1`, and every SELECT over
+    # it succeeds. `.txt` is accepted because data exports use it, and that is
+    # what lets a letter in.
+    #
+    # Width, not column count, is the test. "Dear team," has a trailing comma
+    # and so splits into two fields, which passes any check on the header
+    # alone. What separates data from prose is that data is RECTANGULAR: every
+    # row has the header's width. Prose does not, line by line.
+    if extension != ".json" and rows:
+        sample = rows[:50]
+        matching = sum(1 for r in sample if len(r) == len(header))
+        if matching * 2 < len(sample):
+            return _refuse(
+                f"{os.path.basename(path)} does not look like delimited data: "
+                f"only {matching} of its first {len(sample)} rows have the "
+                f"{len(header)} fields its first line implies. Querying it "
+                f"would return prose as a table. Use read_file for text, or "
+                f"point this at a real .csv or .tsv.")
+
     # The whole value of this tool is that its answer is exact. Loading part of
     # the file and answering anyway is worse than not answering: a COUNT over
     # the first 50,000 rows of a 60,000-row file comes back clean, plausible
