@@ -69,12 +69,24 @@ def test_a_text_file_is_staged_and_readable(staging):
     assert "Sodium-ion" in attachments.read("notes.md")
 
 
-def test_a_binary_is_refused_with_a_reason(staging):
-    """A model cannot read a PNG. Sending one is noise the user pays for."""
-    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 200
+def test_a_binary_with_no_reader_is_refused_with_a_reason(staging):
+    """
+    The rule was "a model cannot read a binary, so sending one is noise the
+    user pays for". That still holds for everything the office has no reader
+    for -- but it stopped being true of images the day `describe_image` landed,
+    so the line moved from "text only" to "something here can read it".
+    """
     with pytest.raises(ValueError) as exc:
-        attachments.save("logo.png", png)
-    assert "text" in str(exc.value).lower()
+        attachments.save("archive.zip", b"PK\x03\x04" + b"\x00" * 200)
+    assert "not a format an agent can read" in str(exc.value)
+
+
+def test_an_image_is_accepted_now_that_something_can_read_it(staging):
+    """The counterpart: a PNG is staged, and told it needs describe_image."""
+    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 200
+    got = attachments.save("logo.png", png)
+    assert got["kind"] == "image"
+    assert "describe_image" in got["note"]
 
 
 def test_a_text_extension_hiding_binary_content_is_still_refused(staging):

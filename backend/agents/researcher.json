@@ -12,7 +12,8 @@
     "fetch_url",
     "read_file",
     "search_workspace",
-    "calculate"
+    "calculate",
+    "describe_image"
   ],
   "desk_position": {
     "x": 180,

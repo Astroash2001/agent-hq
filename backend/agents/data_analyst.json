@@ -13,7 +13,8 @@
     "read_file",
     "list_files",
     "search_workspace",
-    "terminal"
+    "terminal",
+    "describe_image"
   ],
   "desk_position": {
     "x": 600,

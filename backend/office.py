@@ -111,7 +111,7 @@ STATIONS: List[Station] = [
         # tiles from the nearest bookshelf, beside a potted plant and the end
         # of somebody's desk.
         x=_station_xy("research_library", (8.91, 4.97))[0], y=_station_xy("research_library", (8.91, 4.97))[1],
-        tools=["web_search", "read_file", "fetch_url"],
+        tools=["web_search", "read_file", "fetch_url", "describe_image"],
         kind="tool",
         description=(
             "The library shelves on the north wall. Search, reading and fetching "

@@ -15,6 +15,7 @@ from tools.fetch_url import fetch_url
 from tools.calculate import calculate
 from tools.query_data import query_data
 from tools.search_workspace import search_workspace
+from tools.describe_image import describe_image
 
 logger = logging.getLogger("AgentHQ.ToolRegistry")
 
@@ -446,7 +447,35 @@ class ToolRegistry:
             risk="read",
         )
 
-        # 11. Conference table. These two only work in the meeting room -- see
+        # 11. Describe Image
+        self.register(
+            name="describe_image",
+            description=(
+                "Read an image file -- a screenshot, chart, scan or photo -- and "
+                "return what it shows as text. Use it to transcribe a table, read "
+                "off a chart's values, or extract text from a scan. This is the "
+                "only way to see an image: every other tool reads text, so an "
+                "image you have not described is one you know nothing about. "
+                "Do not guess at a chart you have not run through this. It costs "
+                "a model call, so describe an image once and work from the text."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "filepath": {"type": "string",
+                                 "description": "Path to a PNG, JPEG, WEBP or GIF"},
+                    "prompt": {"type": "string",
+                               "description": "What to look for. Omit for a full "
+                                              "description with tables and charts "
+                                              "transcribed."}
+                },
+                "required": ["filepath"]
+            },
+            function=describe_image,
+            risk="execute",
+        )
+
+        # 12. Conference table. These two only work in the meeting room -- see
         # tools/meeting.py for why they are their own pair rather than reusing
         # read_file / write_file.
         from tools.meeting import TOOLS as MEETING_TOOLS

@@ -3,6 +3,7 @@ import glob
 import json
 import logging
 import os
+import shutil
 import re
 import time
 import uuid
@@ -382,6 +383,26 @@ class Orchestrator:
 
         seeded: List[str] = []
         for name in names:
+            # An image has no text to seed. Copied as bytes into the mission
+            # directory instead, where `describe_image` can reach it -- that
+            # tool is the only reader an image has, and it needs the pixels.
+            # `workspace.put` stores a string, so this goes round it, and the
+            # file still lands where every other artifact lives.
+            if attachments.is_image(name):
+                source = attachments.path_of(name)
+                if not source or not workspace.dir:
+                    logger.warning("image attachment %r is missing; skipped", name)
+                    continue
+                safe = attachments.safe_name(name)
+                try:
+                    shutil.copyfile(source, os.path.join(workspace.dir, safe))
+                except OSError as exc:
+                    logger.warning("could not seed image %r: %s", name, exc)
+                    continue
+                attachments.discard(name)
+                seeded.append(safe)
+                continue
+
             body = attachments.read(name)
             if not body.strip():
                 logger.warning("attachment %r is missing or empty; skipped", name)

@@ -370,6 +370,17 @@ class Settings(BaseSettings):
     foundry_model: str = ""
     foundry_max_tokens: int = 400
 
+    # --- describe_image: the one tool whose implementation is a model call ---
+    # Empty means default_model. Set VISION_MODEL when the default cannot see:
+    # the failure is a refusal from the provider, not a wrong answer, so it is
+    # loud -- but it is only fixable here.
+    vision_model: str = os.getenv("VISION_MODEL", "")
+    describe_image_max_tokens: int = 1500
+    # Checked against the BASE64 length, not the file size, because base64 is
+    # what enters the prompt and it is about a third larger than the bytes.
+    # 8MB encoded is roughly a 6MB image, and already an expensive question.
+    describe_image_max_encoded_chars: int = 8 * 1024 * 1024
+
     # --- read_file ----------------------------------------------------------
     # Characters returned in one read. The agent's history is re-sent on every
     # remaining turn of a step, so this is a token budget as much as a cap --
