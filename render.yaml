@@ -1,0 +1,63 @@
+# Render Blueprint for AgentHQ.
+#
+# Applying this creates a service. An existing service set up in the dashboard
+# does not need it -- copy the three things that matter instead:
+#
+#   1. Docker runtime from ./Dockerfile (it builds the test fixtures itself).
+#   2. A persistent disk at /app/backend/data. Without one, runs.db, memory.json
+#      and every mission directory are wiped on each deploy or restart, so a
+#      mission can finish and be gone before evals/mission_check.py reads it.
+#      Disks need a paid instance type.
+#   3. The same model settings as your local backend/.env. Keys are `sync: false`:
+#      Render asks for their values and never reads them from this file.
+#   4. AGENTHQ_API_TOKEN. Required: the image runs with ENVIRONMENT=production
+#      and refuses to start without it, because a public URL with no token lets
+#      anyone run missions on your model keys. Use a long random value, e.g.
+#      `python -c "import secrets; print(secrets.token_urlsafe(32))"`. The UI
+#      asks for it once and keeps it in that browser.
+#
+# After a deploy, check a run from your machine with the same checker used
+# locally:
+#
+#   AGENTHQ_API_TOKEN=<token> python -m evals.mission_check \
+#       --base-url https://<service>.onrender.com --latest 1 \
+#       --spec evals/fixtures/ucl_edge_spec.json
+services:
+  - type: web
+    name: agent-hq
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: agenthq-data
+      mountPath: /app/backend/data
+      sizeGB: 1
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # Model routing. Match backend/.env, or local and Render runs are not
+      # the same experiment.
+      - key: DEFAULT_MODEL
+        sync: false
+      - key: FALLBACK_MODEL
+        sync: false
+      - key: LLM_API_BASE
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      # Required. Gates every /api/ route but /api/health, and the /ws socket.
+      - key: AGENTHQ_API_TOKEN
+        sync: false
+      # One mission at a time: each one spends on your keys.
+      - key: MAX_CONCURRENT_MISSIONS
+        value: "1"
+      # The public URL, e.g. ["https://agent-hq.onrender.com"].
+      - key: CORS_ORIGINS
+        sync: false

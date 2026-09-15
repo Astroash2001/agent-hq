@@ -190,7 +190,8 @@ def test_the_heuristic_buckets_declare_the_tools_they_need():
     needs = {s.agent_id: s.needs_tools for s in steps}
 
     assert "web_search" in needs["researcher"], "research without search is guessing"
-    assert "terminal" in needs["coder"], "running tests needs a terminal"
+    assert "read_file" in needs["coder"], "reviewing code starts with reading it"
+    assert "terminal" not in needs["coder"], "nothing in the office runs code"
 
 
 def test_a_research_bucket_names_search_across_shapes():
@@ -206,21 +207,22 @@ def test_a_research_bucket_names_search_across_shapes():
 
 def test_a_heuristic_step_is_regranted_when_its_agent_lacks_the_tool():
     """
-    The bucket hands execution to `coder`. Strip coder's terminal and the step
-    has to move to whoever still has one, exactly as an LLM plan would.
+    The bucket hands the code review to `coder`. Strip coder's read_file and
+    the step has to move to whoever can still read the code, exactly as an LLM
+    plan would.
     """
     from planner import heuristic_plan, regrant_steps
 
     tools = dict(TOOLS)
-    tools["coder"] = ["read_file", "write_file"]      # no terminal
+    tools["coder"] = ["write_file"]                   # cannot read the code
 
     steps = regrant_steps(
         heuristic_plan("Fix the caching bug in the Python service", AGENT_IDS),
         AGENT_IDS, tools)
 
     moved = [s for s in steps if s.regranted_from]
-    assert moved, "the execution step should have been reassigned"
-    assert all("terminal" in tools[s.agent_id] for s in moved)
+    assert moved, "the review step should have been reassigned"
+    assert all("read_file" in tools[s.agent_id] for s in moved)
     assert all(s.regranted_from == "coder" for s in moved)
 
 

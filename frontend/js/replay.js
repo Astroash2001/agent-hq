@@ -296,6 +296,8 @@ class TraceReplay {
             }
             if (mission.status === 'completed') {
                 hud.addTerminalLog(`Mission completed in ${mission.duration_seconds || 0}s`, 'SUCCESS');
+            } else if (mission.status === 'unverified') {
+                hud.addTerminalLog('Mission finished unverified: a reviewer rejected at least one step', 'WARN');
             }
         }
     }

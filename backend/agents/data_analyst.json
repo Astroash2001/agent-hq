@@ -6,14 +6,13 @@
   "plate_icon": "🗄️",
   "avatar_emoji": "🗄️",
   "color": "#10b981",
-  "system_prompt": "You are a Data & Systems Specialist. Query databases, inspect directory file trees, and analyze structured datasets safely.",
+  "system_prompt": "You are a Data & Systems Specialist. Query structured data files with SQL, inspect directory file trees, and analyze datasets exactly. You cannot run code or shell commands; use query_data and calculate for every figure.",
   "tools": [
     "query_data",
     "calculate",
     "read_file",
     "list_files",
     "search_workspace",
-    "terminal",
     "describe_image"
   ],
   "desk_position": {

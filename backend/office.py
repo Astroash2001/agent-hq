@@ -96,11 +96,10 @@ STATIONS: List[Station] = [
         id="ops_console",
         label="Ops Console",
         x=_station_xy("ops_console", (19.4, 18.4))[0], y=_station_xy("ops_console", (19.4, 18.4))[1],
-        tools=["terminal", "code_analysis", "query_data"],
+        tools=["query_data"],
         kind="tool",
         description=(
-            "The console rig by the conference wall. Shell, AST work and data "
-            "queries happen here."
+            "The console rig by the conference wall. Data queries happen here."
         )
     ),
     Station(
@@ -421,11 +420,26 @@ class OfficeFloor:
         a counter rather than a flag.
 
         Created lazily so none of them binds to the import-time event loop.
+
+        Recreated when the one on hand is bound to a different loop. A
+        semaphore binds to the loop it first makes something wait in, and the
+        office is a process-wide singleton, so a second event loop -- the next
+        test, or an eval task run under its own `asyncio.run` -- got "bound to a
+        different event loop" the first time two agents queued at a station. A
+        server runs one loop, so there this never fires.
         """
-        if station_id not in self._locks:
-            station = self._stations.get(station_id)
-            capacity = max(1, getattr(station, "capacity", 1) or 1)
-            self._locks[station_id] = asyncio.Semaphore(capacity)
+        existing = self._locks.get(station_id)
+        if existing is not None:
+            bound = getattr(existing, "_loop", None)   # set on first contention
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if bound is None or running is None or bound is running:
+                return existing
+        station = self._stations.get(station_id)
+        capacity = max(1, getattr(station, "capacity", 1) or 1)
+        self._locks[station_id] = asyncio.Semaphore(capacity)
         return self._locks[station_id]
 
     def _seats_free(self, station_id: str) -> bool:

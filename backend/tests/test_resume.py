@@ -65,8 +65,11 @@ class _Agent:
             self.last_run = {"outcome": "failure", "estimated": True}
             raise exc
         name = task.assigned_to + "_out.md"
+        # Tagged with the step, as write_file tags a real agent's file: filing
+        # only credits a step with artifacts it wrote.
         await self.workspace.put(name=name, content="# Work\n" + ("body " * 60),
-                                 author_id=self.id, author_name=self.name)
+                                 author_id=self.id, author_name=self.name,
+                                 step_id=task.id.rsplit("_", 1)[-1])
         self.last_run = {"duration_sec": self.delay, "tokens": 10, "tools_used": [],
                          "steps": 1, "outcome": "success", "estimated": True,
                          "cost_usd": 0.0, "model": "", "prompt_tokens": 6,

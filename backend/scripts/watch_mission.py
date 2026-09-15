@@ -206,7 +206,7 @@ async def contention_demo():
     event_bus.subscribe_all(tap)
 
     async def use(agent_id, name):
-        async with office.use_tool_station(agent_id, "terminal", agent_name=name) as station:
+        async with office.use_tool_station(agent_id, "query_data", agent_name=name) as station:
             print(f"  {name} is holding {station.label}")
             await asyncio.sleep(0.6)
             print(f"  {name} is done")

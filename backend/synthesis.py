@@ -72,6 +72,10 @@ a specific number or fact carries the answer.
 - Where the goal was not answered -- an artifact is a stub, a step failed, a \
 question went unaddressed -- say that plainly and say what is missing. This is \
 the most useful thing you can write, so do not paper over it.
+- Long artifacts reach you as excerpts marked [EXCERPT]. An excerpt is shortened \
+for you; the file is not. Never describe an artifact as truncated or incomplete \
+because its excerpt is, and do not claim something is missing from a file when \
+it may be in the part you were not shown -- say you could not see it instead.
 - Do not invent facts that are not in the artifacts. Do not restate the goal back \
 at the reader. Do not describe the plan, the agents or how many steps ran; that \
 is already in the briefing below you.
@@ -112,19 +116,27 @@ def _artifact_block(artifacts: Sequence[Tuple[str, str]]) -> str:
     crowd out the four short ones that disagree with it -- the disagreement is
     the part a conclusion most needs to see.
     """
+    # Both ends of each artifact, not the head: a report's findings and its
+    # limitations sit at the end. And the marker says the *excerpt* was
+    # shortened. "[... truncated]" read as a fact about the file, and a
+    # conclusion reported an 8KB extraction as "truncated before the required
+    # results" when the results were in the half it was not shown.
+    from workspace import condense
+
     blocks: List[str] = []
     budget = MAX_TOTAL_CHARS
     for name, body in artifacts:
         body = (body or "").strip()
         if not body:
             continue
-        clipped = body[:MAX_ARTIFACT_CHARS]
-        if len(body) > MAX_ARTIFACT_CHARS:
-            clipped += "\n[... truncated]"
-        if len(clipped) > budget:
-            clipped = clipped[:budget] + "\n[... truncated]"
-        if not clipped.strip():
+        limit = min(MAX_ARTIFACT_CHARS, budget)
+        if limit < 200:
             break
+        clipped = condense(body, limit)
+        if len(body) > limit:
+            clipped = (f"[EXCERPT: {name} is {len(body):,} characters in full; this "
+                       f"summary copy is shortened. The file itself is complete.]\n"
+                       f"{clipped}")
         blocks.append(f"--- {name} ---\n{clipped}")
         budget -= len(clipped)
         if budget <= 0:

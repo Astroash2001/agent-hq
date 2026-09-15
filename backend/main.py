@@ -11,6 +11,7 @@ from fastapi import (FastAPI, File, HTTPException, Request, UploadFile,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+import api_guard
 import api_missions
 import attachments
 import pricing
@@ -77,6 +78,7 @@ event_bus.subscribe_all(on_bus_event)
 async def lifespan(app: FastAPI):
     """Lifecycle manager for startup and shutdown."""
     logger.info("AgentHQ Backend Server starting up...")
+    api_guard.check_startup()
     # Before anything runs, say whether the models this office is configured to
     # use can be priced at all. An unpriced model reports $0.0000 everywhere --
     # cost panel, mission.json, eval budgets -- and a harness that sells "you
@@ -86,11 +88,24 @@ async def lifespan(app: FastAPI):
     logger.info("AgentHQ Backend Server shutting down...")
 
 
+# Refuse an open production server before binding a port, not after the first
+# request: lifespan runs the same check for servers started some other way.
+api_guard.check_startup()
+
+_production = settings.environment == "production"
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    # The interactive docs describe every route to whoever finds the URL.
+    docs_url=None if _production else "/docs",
+    redoc_url=None if _production else "/redoc",
+    openapi_url=None if _production else "/openapi.json",
 )
+
+# Token on every /api/ route but the health check. Added before CORS, so CORS
+# wraps it and a 401 still carries the headers a browser needs to read it.
+app.middleware("http")(api_guard.require_token_middleware)
 
 # Enable CORS
 # Browsers reject allow_credentials=True with wildcard allow_origins=["*"].
@@ -188,7 +203,9 @@ async def upload_attachment(file: UploadFile = File(...)):
     those messages are shown to whoever just dragged the file in, so they say
     why rather than "invalid file".
     """
-    raw = await file.read()
+    # Read one byte past the limit and stop. `file.read()` with no size pulled
+    # the whole body into memory before `attachments.save` could refuse it.
+    raw = await file.read(settings.max_attachment_bytes + 1)
     try:
         return attachments.save(file.filename or "", raw)
     except ValueError as exc:
@@ -212,25 +229,7 @@ async def delete_attachment(name: str):
 @app.post("/api/emergency-stop")
 async def emergency_stop(request: Request):
     """Emergency kill switch to halt all running agents."""
-    expected_token = getattr(settings, "api_token", "")
-    if expected_token:
-        auth_header = request.headers.get("authorization", "").strip()
-        token = ""
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:].strip()
-        elif auth_header:
-            token = auth_header
-        if not token:
-            token = request.headers.get("x-api-token", "").strip()
-        if not token:
-            token = request.query_params.get("token", "").strip()
-
-        if token != expected_token:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Unauthorized: invalid or missing API token."
-            )
-
+    # The token is checked by api_guard's middleware, like every /api/ route.
     orchestrator.cancel_all()
     await event_bus.emit(Event(
         type=EventType.SYSTEM_STATUS,
@@ -244,19 +243,12 @@ async def websocket_endpoint(websocket: WebSocket):
     """
     Bidirectional WebSocket connection for live 2D canvas, logs, DAG updates, and token telemetry.
     """
-    expected_token = getattr(settings, "api_token", "")
-    if expected_token:
-        token = websocket.query_params.get("token", "").strip()
-        if not token:
-            auth_header = websocket.headers.get("authorization", "").strip()
-            if auth_header.startswith("Bearer "):
-                token = auth_header[7:].strip()
-            elif auth_header:
-                token = auth_header
-        if not token:
-            token = websocket.headers.get("x-api-token", "").strip()
-
-        if token != expected_token:
+    if settings.api_token:
+        # A browser cannot set headers on a WebSocket, so the socket alone also
+        # accepts ?token=. REST routes do not: a query string lands in logs.
+        token = (websocket.query_params.get("token", "").strip()
+                 or api_guard.token_from_headers(websocket.headers))
+        if not api_guard.token_matches(token):
             await websocket.close(code=1008, reason="Unauthorized: invalid or missing API token.")
             return
 
@@ -309,11 +301,21 @@ async def websocket_endpoint(websocket: WebSocket):
                     # that every agent's status update shares.
                     attached = [str(a) for a in (msg_data.get("attachments") or [])]
                     if prompt:
+                        # Run as a task so the socket loop does not block, and
+                        # inside a mission slot so a second connection cannot
+                        # start a second bill.
+                        started = api_guard.mission_slots.start(
+                            orchestrator.handle_user_input(prompt, attachments=attached))
+                        if started is None:
+                            await websocket.send_json({
+                                "type": EventType.SYSTEM_STATUS.value,
+                                "data": {"message": (
+                                    "A mission is already running. Wait for it to "
+                                    "finish before submitting another.")}
+                            })
+                            continue
                         logger.info("Received user task via WebSocket: %s%s", prompt,
                                     f" (+{len(attached)} attachment(s))" if attached else "")
-                        # Run orchestrator as an async task so WebSocket loop doesn't block!
-                        asyncio.create_task(
-                            orchestrator.handle_user_input(prompt, attachments=attached))
 
                 elif action == "emergency_stop":
                     logger.warning("Emergency stop requested via WebSocket!")

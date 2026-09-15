@@ -517,7 +517,26 @@ we introduced `settings.jail_root`, explicitly set to the repository root
 (`read_file`, `list_files`), subprocess working directory checks, and symlink
 resolution are jailed strictly to `jail_root` or the active mission directory.
 
-### Basename and subcommand matching for terminal execution
+### No code execution at all
+
+**Superseded the two sections below.** The terminal allowlist held against the
+cases it was written for and still allowed `python <script>`, which is
+arbitrary code: a script opens `.env` itself, and no path check on the tool's
+arguments sees that. `code_analysis` was worse -- it ran any snippet with the
+server's full environment, API keys included. Across every recorded mission
+`terminal` was called 18 times and failed all 18, and `code_analysis` was never
+called outside the simulator.
+
+So both were removed from the registry, not merely from the manifests. The
+catalogue is what the planner offers and the foundry hires from, so a step that
+still declares one fails loudly as an unimplemented tool instead of hiring a
+contractor who holds it. The coder reviews code and proposes changes as diffs
+written into the mission workspace. A goal that needs code run gets an answer
+that says so. The option not taken is a container sandbox with no network and
+no secrets; it is the way back if execution is ever needed, and it is
+infrastructure this project chose not to require.
+
+### Basename and subcommand matching for terminal execution (removed)
 
 The terminal tool allowlist (`settings.terminal_allowed_commands`) matches on the
 basename of `argv[0]` (with `.exe` stripped and case-folded) plus any defined

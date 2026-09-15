@@ -140,7 +140,7 @@ async def test_workspace_delivery_emits_both_endpoints():
 # ---------------------------------------------------------------------- office
 
 def test_stations_bind_tools():
-    assert office.station_for_tool("terminal").id == "ops_console"
+    assert office.station_for_tool("query_data").id == "ops_console"
     assert office.station_for_tool("web_search").id == "research_library"
     assert office.station_for_tool("write_file").id == "filing_archive"
     assert office.station_for_tool("not_a_tool") is None
@@ -171,7 +171,7 @@ async def test_station_serialises_two_agents():
     event_bus.subscribe(EventType.STATION_QUEUED, tap)
 
     async def use(agent_id: str):
-        async with floor.use_tool_station(agent_id, "terminal", agent_name=agent_id) as station:
+        async with floor.use_tool_station(agent_id, "query_data", agent_name=agent_id) as station:
             assert station is not None
             holding.append(agent_id)
             assert len(holding) == 1, "two agents held the same station at once"
@@ -193,10 +193,10 @@ async def test_station_released_when_the_tool_raises():
     """A crashing tool must not deadlock the floor."""
     floor = OfficeFloor()
     with pytest.raises(RuntimeError):
-        async with floor.use_tool_station("coder", "terminal"):
+        async with floor.use_tool_station("coder", "query_data"):
             raise RuntimeError("tool blew up")
 
-    async with floor.use_tool_station("researcher", "terminal") as station:
+    async with floor.use_tool_station("researcher", "query_data") as station:
         assert station is not None, "station should be free again"
 
 
@@ -204,7 +204,7 @@ async def test_station_released_when_the_tool_raises():
 async def test_spatial_can_be_switched_off(monkeypatch):
     floor = OfficeFloor()
     monkeypatch.setattr(settings, "spatial_enabled", False)
-    async with floor.use_tool_station("coder", "terminal") as station:
+    async with floor.use_tool_station("coder", "query_data") as station:
         assert station is None, "tools should be callable from the desk when disabled"
 
 

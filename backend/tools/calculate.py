@@ -9,9 +9,8 @@ confidently as the first", and it reports every figure in a conclusion that no
 artifact supports. That check catches a bad number after the fact. This one
 lets an agent avoid producing it.
 
-The guardrail is an AST allowlist, which is a different shape from the one in
-`terminal.py`. That one names permitted commands; this one names permitted
-*node types*, and everything else -- every name, call, attribute, subscript,
+The guardrail is an AST allowlist that names permitted *node types*, and
+everything else -- every name, call, attribute, subscript,
 comprehension and import -- is refused by omission rather than by pattern. A
 blocklist of dangerous spellings is a losing game against a string that reaches
 an evaluator: `eval` is reachable as an attribute, a lambda, a comprehension

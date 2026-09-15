@@ -7,8 +7,8 @@ search tool, by the user, or by another agent's artifact had no way to open it,
 and the observed behaviour is the one this project keeps finding: the model
 writes what the page probably says.
 
-The guardrail here is a kind this repo did not have. `terminal` has a command
-allowlist, `file_ops` has path containment, and `web_search` is safe in a way
+The guardrail here is a kind this repo did not have. `file_ops` has path
+containment, and `web_search` is safe in a way
 that needed no policy at all -- it only ever talks to api.tavily.com, a single
 hardcoded host. This tool talks to whatever address a model names, which makes
 it the first outbound request in the harness whose destination is chosen by an

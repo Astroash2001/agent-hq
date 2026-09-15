@@ -6,14 +6,26 @@ over the same rows that were written, never by asking `query_data` -- a check
 that uses the tool under test to verify the tool under test agrees with itself
 and proves nothing. Seeded, so the file and its truths regenerate identically.
 
-    python backend/data/make_edge_fixtures.py
+    python backend/fixtures/make_edge_fixtures.py            # CSV, memo and truth
+    python backend/fixtures/make_edge_fixtures.py --no-truth # CSV and memo only
+
+The inputs live here, in `backend/fixtures/`, where an agent may read them. The
+answers go to `evals/fixtures/`, which the file sandbox denies: a mission that
+could open the answer key was seen validating its figures against it instead of
+reasoning about them. Out of `backend/data/` too, because that is runtime state
+and the directory a deployment mounts a disk over, hiding anything in the image.
+
+The Docker build runs this with `--no-truth`, so the 1.8MB CSV is never
+committed and the image never carries the answers.
 """
+import argparse
 import csv
 import json
 import os
 import random
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+TRUTH_DIR = os.path.join(HERE, "..", "..", "evals", "fixtures")
 ROWS = 30000
 
 CLUBS = ["Real Madrid", "Barcelona", "Bayern Munich", "Liverpool", "Inter Milan",
@@ -83,6 +95,11 @@ def truth(rows):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--no-truth", action="store_true",
+                        help="write the inputs only, not the answer key")
+    args = parser.parse_args()
+
     rows = build_players()
 
     csv_path = os.path.join(HERE, "ucl_edge_players.csv")
@@ -102,16 +119,21 @@ def main():
             "Regards,\nThe data desk\n")
 
     facts = truth(rows)
-    with open(os.path.join(HERE, "ucl_edge_truth.json"), "w", encoding="utf-8") as fh:
-        json.dump(facts, fh, indent=2)
-
     size = os.path.getsize(csv_path)
     with open(csv_path, encoding="utf-8") as fh:
         chars = len(fh.read())
     print(f"wrote {csv_path}")
     print(f"  {facts['total_rows']:,} rows | {size:,} bytes | {chars:,} characters")
     print(f"  bytes != characters ({size - chars:,} multibyte) -- as intended")
-    print("\nground truth:")
+
+    if args.no_truth:
+        return
+    os.makedirs(TRUTH_DIR, exist_ok=True)
+    truth_path = os.path.abspath(os.path.join(TRUTH_DIR, "ucl_edge_truth.json"))
+    with open(truth_path, "w", encoding="utf-8") as fh:
+        json.dump(facts, fh, indent=2)
+    print(f"\nwrote {truth_path}")
+    print("ground truth:")
     for k, v in facts.items():
         print(f"  {k:28} {v}")
 

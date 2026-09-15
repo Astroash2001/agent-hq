@@ -2,9 +2,15 @@ services:
   agenthq:
     build: .
     ports:
-      - "8080:8080"
+      # Bound to this machine only. The container runs with ENVIRONMENT=production,
+      # which refuses to start without an API token unless told the server is
+      # private -- and publishing on 127.0.0.1 is what makes that true.
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./backend/data:/app/backend/data
+    env_file:
+      - path: ./backend/.env
+        required: false
     environment:
       - HOST=0.0.0.0
       - PORT=8080
@@ -12,4 +18,9 @@ services:
       # source never changes and which falls back to stat-polling every file in
       # it -- `watchfiles` is a dev dependency on purpose. See backend/main.py.
       - ENVIRONMENT=production
+      # Set AGENTHQ_API_TOKEN (in backend/.env or your shell) before publishing
+      # this port beyond 127.0.0.1. Without one, the server is only safe
+      # because nobody else can reach it, and this flag says so.
+      - AGENTHQ_API_TOKEN=${AGENTHQ_API_TOKEN:-}
+      - ALLOW_UNAUTHENTICATED=${ALLOW_UNAUTHENTICATED:-true}
     restart: unless-stopped

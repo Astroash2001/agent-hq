@@ -54,6 +54,11 @@ page was truncated). If data was truncated during fetch, instruct the agent \
 to use fetch_url with save_as or offset/query_data to extract the full dataset. \
 Never accept lazy placeholder extraction or truncated subsets where complete data \
 was expected.
+- The instruction was written by a planner before anyone looked at the data, \
+so it can be wrong about the data: a column name, a category value, a table or \
+file name. When the artifact shows the instruction's version failed or returned \
+nothing, says why, and uses the correct value instead, that is the right work \
+-- accept it. Do not ask for the instruction's wrong version to be followed.
 - `score` is your confidence in the work, 0 to 1.
 - `reasons` are short, specific and concrete. Quote the artifact where useful.
 - `guidance` is a direct instruction to the specialist saying what to change. \
@@ -130,8 +135,16 @@ async def critique(
                 temperature=0.0,
             )
             payload = _extract_json(result.response.choices[0].message.content or "")
+            # The reasons go in the trace too. A span recording only "revise"
+            # left a rejected-but-correct extraction undiagnosable: the verdict
+            # was on disk and the reason for it was nowhere.
+            reasons = (payload or {}).get("reasons") or []
+            if isinstance(reasons, str):
+                reasons = [reasons]
             span.set(cost_usd=result.cost_usd,
-                     verdict=(payload or {}).get("verdict", "unparsed"))
+                     verdict=(payload or {}).get("verdict", "unparsed"),
+                     score=(payload or {}).get("score"),
+                     reasons=" | ".join(str(r) for r in reasons[:5]))
     except Exception as exc:
         logger.warning("[critic] judgement skipped: %s: %s", type(exc).__name__, exc)
         return Critique(skipped=True, reason_skipped=f"{type(exc).__name__}: {exc}"[:200])

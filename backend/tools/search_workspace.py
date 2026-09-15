@@ -21,7 +21,8 @@ import re
 from typing import Any, Dict, List
 
 from config import settings  # type: ignore
-from tools.file_ops import _get_read_allowed_roots, _is_contained  # type: ignore
+from tools.file_ops import (  # type: ignore
+    _get_read_allowed_roots, _is_contained, active_workspace, denied_reason, refusal_for)
 
 logger = logging.getLogger("AgentHQ.SearchWorkspace")
 
@@ -56,14 +57,16 @@ async def search_workspace(
         # The running mission's own directory, which is what "the workspace"
         # means to an agent mid-step. Falls back to the missions root so the
         # tool still works when nothing is bound (a bare agent, or a test).
-        from tools import file_ops
-        active = getattr(file_ops, "_active_workspace", None)
+        active = active_workspace()
         root = getattr(active, "dir", None) or settings.missions_path
 
     if getattr(settings, "file_ops_sandbox_enabled", True):
         if not _is_contained(root, _get_read_allowed_roots()):
             return {"success": False, "refused": True,
                     "error": f"'{root}' is outside the workspace and the repository."}
+        denied = refusal_for(root)
+        if denied:
+            return denied
 
     if not os.path.isdir(root):
         return {"success": False, "error": f"Not a directory: {root}"}
@@ -85,11 +88,17 @@ async def search_workspace(
     truncated = False
 
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".")]
+        # Denied directories are pruned before the walk enters them, so a
+        # search rooted at the repository does not quote another mission's
+        # report or the answer key back to the agent.
+        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS and not d.startswith(".")
+                       and not denied_reason(os.path.join(dirpath, d))]
         for filename in sorted(filenames):
             if os.path.splitext(filename)[1].lower() not in TEXT_EXTENSIONS:
                 continue
             path = os.path.join(dirpath, filename)
+            if denied_reason(path):
+                continue
             try:
                 if os.path.getsize(path) > settings.search_workspace_max_file_bytes:
                     continue

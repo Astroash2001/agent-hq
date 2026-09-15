@@ -181,11 +181,20 @@ def test_the_total_cap_holds_across_many_artifacts():
     assert len(block) <= synthesis.MAX_TOTAL_CHARS + 500
 
 
-def test_a_truncated_artifact_says_so():
-    block = synthesis._artifact_block([("big.md", "z" * 5000)])
+def test_a_shortened_artifact_says_the_excerpt_is_short_not_the_file():
+    """
+    The marker used to read "[... truncated]", and a conclusion took that as a
+    fact about the file: an 8KB extraction was reported "truncated before the
+    required results" when the results were in the half it was not shown.
+    """
+    body = "HEAD\n" + ("middle line\n" * 600) + "TAIL findings"
+    block = synthesis._artifact_block([("big.md", body)])
 
-    assert "[... truncated]" in block
-    assert block.count("z") == synthesis.MAX_ARTIFACT_CHARS
+    assert "[EXCERPT: big.md is" in block
+    assert "The file itself is complete" in block
+    assert "truncated" not in block
+    assert "HEAD" in block and "TAIL findings" in block, "both ends are kept"
+    assert len(block) <= synthesis.MAX_ARTIFACT_CHARS + 300
 
 
 def test_empty_artifacts_are_dropped_not_sent_as_blanks():

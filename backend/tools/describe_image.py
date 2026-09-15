@@ -89,6 +89,10 @@ async def describe_image(filepath: str, prompt: str = "") -> Dict[str, Any]:
             return _refuse(
                 f"'{path}' resolves outside the workspace and the repository, "
                 f"so it cannot be read.")
+        from tools.file_ops import refusal_for
+        denied = refusal_for(candidate, path)
+        if denied:
+            return denied
 
     if not os.path.isfile(candidate):
         return {"success": False, "error": f"No such image: {path}"}

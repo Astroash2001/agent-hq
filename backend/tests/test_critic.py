@@ -109,6 +109,54 @@ async def test_a_revise_verdict_carries_actionable_guidance(keyed, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_the_trace_records_why_the_critic_decided(keyed, monkeypatch):
+    """
+    The span held only the verdict. A correct extraction rejected twice at 0.72
+    could not be diagnosed, because the reasons were never written anywhere.
+    """
+    import tracing
+
+    recorded = {}
+    real_span = tracing.span
+
+    class _Recorder:
+        def set(self, **attrs):
+            recorded.update(attrs)
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _span(kind, name, **attrs):
+        if kind == "critic":
+            yield _Recorder()
+        else:
+            async with real_span(kind, name, **attrs) as s:
+                yield s
+
+    monkeypatch.setattr(critic.tracing, "span", _span)
+    monkeypatch.setattr(critic.llm, "acompletion", _reply({
+        "verdict": "revise", "score": 0.72,
+        "reasons": ["Query 3 did not use position = 'Forward' as instructed"],
+        "guidance": "Use the instructed filter."}))
+
+    await critic.critique("goal", "step", "an artifact")
+    assert recorded["verdict"] == "revise"
+    assert recorded["score"] == 0.72
+    assert "Forward" in recorded["reasons"]
+
+
+def test_the_judge_is_told_a_corrected_instruction_is_correct_work():
+    prompt = critic.CRITIC_SYSTEM_PROMPT
+    assert "planner before anyone looked at the data" in prompt
+    assert "accept it" in prompt
+
+
+def test_the_planner_is_told_not_to_guess_queries_or_values():
+    from planner import PLANNER_SYSTEM_PROMPT
+    assert "do not write SQL, column names, category values" in PLANNER_SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
 async def test_an_unreadable_reply_lets_the_work_through(keyed, monkeypatch):
     """A misparse must not spend a repair attempt."""
     monkeypatch.setattr(critic.llm, "acompletion", _reply("I think it's fine, honestly"))

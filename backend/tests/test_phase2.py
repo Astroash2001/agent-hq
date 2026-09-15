@@ -7,10 +7,9 @@ from event_bus import event_bus
 
 
 @pytest.mark.asyncio
-async def test_tool_registry_terminal():
-    result = await tool_registry.execute("terminal", {"command": "python --version"})
+async def test_tool_registry_calculate():
+    result = await tool_registry.execute("calculate", {"expression": "18 * 90 / 905"})
     assert result["success"] is True
-    assert "Python" in result["stdout"] or "Python" in result["stderr"]
 
 
 @pytest.mark.asyncio

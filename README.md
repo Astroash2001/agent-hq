@@ -138,8 +138,8 @@ Full detail in [[ARCHITECTURE]].
 |---|---|---|---|
 | `orchestrator` | Boss Dave | Planning & synthesis | — |
 | `researcher` | Alice | Search, RAG & discovery | web_search, fetch_url, read_file, search_workspace, calculate |
-| `coder` | Charlie | Code & bug hunting | terminal, code_analysis, read_file, write_file, search_workspace, calculate |
-| `data_analyst` | Bob | Data & analytics | query_data, calculate, read_file, list_files, search_workspace, terminal |
+| `coder` | Charlie | Code review & suggested changes | read_file, list_files, search_workspace, write_file, calculate |
+| `data_analyst` | Bob | Data & analytics | query_data, calculate, read_file, list_files, search_workspace, describe_image |
 | `creative` | Eve | Writing & synthesis | write_file, read_file, web_search, search_workspace, calculate |
 
 `write_file` is granted for the duration of any step that promises an artifact,
@@ -156,9 +156,18 @@ so an agent without it can still file a deliverable.
 | `query_data` | read | Read-only SQL over a CSV or JSON file |
 | `calculate` | read | Exact arithmetic, AST-sandboxed |
 | `write_file` | write | Jailed to the mission workspace |
-| `code_analysis` | execute | AST parse and test execution |
-| `terminal` | execute | Allowlisted commands only, no shell metacharacters |
 | `review_artifacts` / `record_decision` | write | Conference table only |
+
+**Nothing runs code.** There is no terminal and no code-execution tool, and
+none can be hired: either one gave a model arbitrary execution as the user
+running the server, which no file sandbox can contain. The coder reads code
+and proposes changes as diffs or revised files, written only into the mission
+workspace, for a person to review and apply. It never claims to have run or
+timed anything.
+
+**Agents cannot read secrets.** File tools refuse `.env` and other secret
+files, the run store and memory, `evals/` (answer keys) and every other
+mission's directory. The app itself still loads `backend/.env` as normal.
 
 **Risk** is metadata on the registry entry, not documentation: it is what lets
 code that hands tools to an agent know which ones are dangerous without keeping

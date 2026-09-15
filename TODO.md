@@ -108,6 +108,150 @@ the halted steps — which is right: you resumed it to finish it.
 
 ---
 
+## Mission integrity
+
+Two recorded runs of the scouting-report fixture both produced reports that read
+as finished. Neither was. Every fault below was found in their trace, and
+`evals/mission_check.py` now finds all of them without a person reading
+anything: run against those two missions it reports 0/2 clean, failing on
+exactly the rules listed here.
+
+### A step could read secrets, the answer key and other missions
+
+**Done.** The read jail was the repository root, so `read_file("backend/.env")`
+returned the key and `search_workspace("OPENAI_API_KEY")` quoted the line back.
+Worse for correctness, every earlier mission was readable: a guardrail step
+wrote "verbatim" refusals it had copied from a previous run without making one
+probe call, and a report step filled in figures it had no tool to compute.
+
+`file_ops.denied_reason` refuses, inside the jail: secret file names
+(`read_denied_names`), the run store, memory and embedding cache by path,
+`.git` and `evals/` (`read_denied_dirs`), and every mission directory except
+the running one. `read_file`, `list_files`, `query_data`, `describe_image` and
+`search_workspace` all apply it; the search prunes denied directories before
+walking into them.
+
+### Parallel steps overwrote each other's file binding
+
+**Done.** `file_ops._active_workspace` was a module global. Steps run in
+parallel, so the last to bind won: writes were attributed to whichever agent
+bound most recently, and the first step to finish unbound the workspace out
+from under the rest. The binding is a `ContextVar` now, in `meeting.py` too.
+
+`_best_artifact` also credited a step with *any* file new since its attempt
+started -- including a sibling's. That is how `extraction.md` became a
+byte-for-byte copy of `guardrails.md`. It only considers files tagged with the
+step's own `step_id`, and a meeting's recorded decision carries its step.
+
+### A rejected step was recorded as completed
+
+**Done.** A step that exhausts its repair budget still completes, so the DAG is
+not stranded -- that stays. But the mission recorded `completed` with an
+extraction step scored 0.05. The final verdict is now kept per step; a mission
+with any `revise` ends `unverified`, the run store files that step `unverified`
+so resume re-runs it, the briefing marks it, and the conclusion is told to treat
+its artifact as unreliable.
+
+### Reports printed SQL nothing ran
+
+**Done.** `query_data` records each successful query on the bound workspace, and
+`provenance.unexecuted_sql` flags SQL in any artifact that matches none of them
+(case, whitespace and punctuation spacing ignored). Reported in the briefing and
+as `unexecuted_sql` in `mission.json`, never rejected -- the same rule as
+`ungrounded_figures`. `null` on a resumed mission, whose earlier queries this
+process never saw.
+
+### Tool failures were undebuggable
+
+**Done.** A tool span recorded `success: false` and nothing else, so 35 failing
+`query_data` calls could not say which file they asked for. Spans carry `args`
+(bodies reduced to their length) and, on failure, `refused` and `tool_error`.
+
+### Test data lived in runtime state
+
+**Done.** The fixtures sat in `backend/data/`, which `.dockerignore` excludes and
+a deployment mounts a disk over, so a hosted run had no CSV at all. Inputs are
+in `backend/fixtures/` and the Docker build generates the CSV; the answer key is
+`evals/fixtures/ucl_edge_truth.json`, where agents cannot read it. `render.yaml`
+declares the disk and environment a hosted run needs.
+
+### Agents could run code
+
+**Done: removed.** `terminal` allowed `python <script>`, and `code_analysis` ran
+any snippet with the server's full environment -- API keys included. Either one
+made the file sandbox beside the point, because code opens files itself. Across
+24 recorded missions `terminal` was called 18 times and failed all 18;
+`code_analysis` was never called outside the simulator.
+
+Both modules are deleted and neither is registered, so the planner is not
+offered them and the foundry cannot hire for them: a step that declares one is
+an unimplemented tool and fails loudly. `coder` now reviews code and proposes
+changes as diffs or revised files in the mission workspace; `data_analyst` lost
+`terminal` and keeps `query_data`. `adversarial_missing_tool` now scores whether
+a mission says plainly that it cannot measure a runtime, instead of whether it
+found someone who could.
+
+The way back, if execution is ever wanted: a container sandbox with no network,
+no environment and only the mission folder mounted. Deliberately not built.
+
+### Artifact recovery invented a deliverable and passed the step
+
+**Done.** When a step never wrote its promised file, `_recover_missing_artifact`
+asked a model for "the full, complete deliverable" from the other workspace
+files -- and set the verdict to `accept` without any reviewer reading it.
+Observed on a real run: a scouting report with 150 invented records, fake GitHub
+URLs and quotes from a meeting that never happened, filed as a passing step.
+
+The prompt now forbids any fact, figure, URL or quotation not in the documents
+and requires naming what is missing; the file opens with a "reconstructed by
+the harness" banner; the verdict stays `revise`, so the mission is
+`unverified`; and the step records `recovered: true`, which `mission_check`
+fails on.
+
+### The hosted API was open to anyone
+
+**Done.** The token guarded only the kill switch and the socket, and was
+optional for both -- with none set, which was the default, anyone who found a
+deployment's URL could run missions on its owner's keys, resume them, wipe
+memory, upload files and read every mission. Worse, a mission id of `%2e%2e`
+decoded to `..`, so `GET /api/missions/%2e%2e/artifacts/memory.json` served the
+whole memory file.
+
+`api_guard.py` now requires the token on every `/api/` route except
+`/api/health` (headers only, compared in constant time; the socket also takes
+`?token=` because browsers cannot set WebSocket headers). Production refuses to
+start without a token unless `ALLOW_UNAUTHENTICATED=true`. Mission ids are
+validated by shape and resolved path. One mission runs at a time across every
+connection and the resume route (`max_concurrent_missions`). Uploads stop
+reading one byte past the limit. Production hides `/docs` and `/openapi.json`,
+and every response carries `nosniff`, `no-referrer` and `DENY` framing.
+`frontend/js/auth.js` asks for the token once and adds it to every API call.
+
+Still open:
+
+- ~~The token budget is checked between dispatches only~~ -- **done.** A run
+  logged "Token budget exhausted: 756,281 of 400,000" and a running step then
+  carried on to 1,114,035. `step_guard` binds the mission budget per step; an
+  agent over it gets one closing turn with only `write_file`, then stops. The
+  same run also exposed: an identical 30,000-row query issued ten times (an
+  identical observing call is now answered, not re-run, and `query_data`'s
+  capped result says not to repeat it); a guardrail step writing the extraction
+  step's file (promised filenames now belong to their step, and agents are told
+  the mission goal is context, not their assignment); and a conclusion calling
+  an 8KB artifact "truncated" because its excerpt was (synthesis now keeps both
+  ends and labels the excerpt, not the file). Overspend by up to one turn per
+  running step is still possible.
+- **Render disk ownership is unverified.** The image runs as a non-root user; if
+  the mounted disk is not writable by it, the run store logs "run store
+  unavailable" and missions vanish on restart. Check `/api/missions` after the
+  first hosted run.
+- **No eval cassettes are tracked in git.** `evals/cassettes/` does not exist in
+  the repository, so `--replay` (and CI's smoke step) runs the simulator. The
+  Testing section below describes committed cassettes; that is not the current
+  state of the tree.
+
+---
+
 ## Backend
 
 ### Task routing is keyword matching
@@ -1042,7 +1186,9 @@ Verified by booting both ways on a runtime-only venv: development logs
 
 ### Terminal tool allowlist and sandboxing
 
-**Done.** `backend/tools/terminal.py` enforces `settings.terminal_allowed_commands`,
+**Superseded: the terminal tool was later removed** (see "Agents could run code"
+under Mission integrity). Kept below as the record of what it did. It was
+**Done.** `backend/tools/terminal.py` enforced `settings.terminal_allowed_commands`,
 rejects shell metacharacters before execution, runs with `asyncio.create_subprocess_exec`
 (`shell=False`), jails `cwd` to `settings.jail_root`, scrubs secrets from child
 environments (preserving only `PATH` and `SYSTEMROOT`), caps output at

@@ -795,8 +795,8 @@ def test_observers_are_replayed_and_writers_really_run():
     # they read the repository, not just the mission workspace: a replayed
     # prompt was found carrying the whole of TODO.md, which changes on every
     # commit.
-    for observes in ("web_search", "terminal", "list_files", "read_file",
-                     "code_analysis", "review_artifacts", "fetch_url",
+    for observes in ("web_search", "list_files", "read_file",
+                     "review_artifacts", "fetch_url", "describe_image",
                      "query_data", "search_workspace", "a_tool_added_later"):
         assert replay_mod.is_external(observes) is True, observes
 

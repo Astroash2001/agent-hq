@@ -43,11 +43,21 @@ parallel, so do not chain steps that do not actually depend on each other.
 - `consumes` lists artifact filenames produced by the steps in `dependencies`.
 - `description` is an instruction addressed to that specialist, concrete enough \
 to act on without seeing the original goal.
+- Say WHAT to find, not the query that finds it. You have not seen the data, so \
+do not write SQL, column names, category values, table names or URL paths into a \
+description unless the goal itself states them -- the specialist inspects the \
+data first and writes its own. A guessed `position = 'Forward'` in a brief sent \
+an agent to run a query that could only return nothing, and its reviewer then \
+held the correct fix against it.
 - `rationale` is one short clause explaining why this specialist.
 - `needs_tools` lists the tools this step cannot be done without. Leave it \
 empty when the step is reasoning or writing and needs no tool. Name a tool \
-only when the work is impossible without it -- measuring a runtime needs \
-`terminal`, reporting a current fact needs `web_search`.
+only when the work is impossible without it -- reporting a current fact needs \
+`web_search`, an exact figure from a data file needs `query_data`.
+- Nothing in this office can run code. A code step reads files and proposes \
+changes as a diff or revised file; it never claims measured runtimes or test \
+results. If the goal needs code executed, plan the review and say in its \
+description that the result must be confirmed by running it elsewhere.
 - Name what the WORK needs, not what your chosen agent happens to hold. \
 Prefer an agent who already holds the whole set. If NO single agent holds it, \
 name the tools anyway and pick the closest agent: a specialist holding exactly \
@@ -554,9 +564,10 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
             step("s1", "researcher", f"Gather technical specifications and best-practice patterns for: {goal}",
                  produces="research_notes.md", why="needs sources before anyone writes code",
                  needs=["web_search"]),
-            step("s2", "coder", f"Implement the code, run AST verification and execute tests for: {goal}",
+            step("s2", "coder", f"Read the relevant code and propose the implementation or fix, "
+                                f"as a diff or revised file with the reason for each change, for: {goal}",
                  deps=["s1"], produces="implementation.md", consumes=["research_notes.md"],
-                 why="owns the terminal and AST tooling", needs=["terminal"]),
+                 why="owns code review and proposed changes", needs=["read_file", "write_file"]),
             step("s3", "data_analyst", f"Inspect the workspace and check inputs, edge cases and data shapes for: {goal}",
                  deps=["s1"], produces="analysis.md", consumes=["research_notes.md"],
                  why="can validate in parallel with implementation"),
@@ -598,9 +609,10 @@ def heuristic_plan(goal: str, valid_agent_ids: List[str]) -> List[PlanStep]:
             step("s1", "researcher", f"Investigate the core concepts and documentation for: {goal}",
                  produces="research_notes.md", why="establish the ground truth",
                  needs=["web_search"]),
-            step("s2", "coder", f"Prototype a validation script and probe the edge cases for: {goal}",
+            step("s2", "coder", f"Reason through the edge cases and failure modes, and draft "
+                                f"a validation approach someone could run, for: {goal}",
                  deps=["s1"], produces="implementation.md", consumes=["research_notes.md"],
-                 why="empirical check", needs=["terminal"]),
+                 why="structured check of the edge cases"),
             step("s3", "data_analyst", f"Quantify the trade-offs and sanity-check the numbers behind: {goal}",
                  deps=["s1"], produces="analysis.md", consumes=["research_notes.md"],
                  why="runs alongside the prototype"),

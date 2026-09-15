@@ -1,7 +1,7 @@
 """
 Query a CSV or JSON file with SQL, in memory.
 
-`data_analyst` held `read_file`, `list_files` and `terminal` -- which is to say
+`data_analyst` once held `read_file`, `list_files` and `terminal` -- which is to say
 it had no data tool at all, and analysed a spreadsheet by reading it into its
 own context window and doing the arithmetic in its head. That fails in two
 ways at once: a file bigger than the context is silently truncated to whatever
@@ -34,7 +34,8 @@ import sqlite3
 from typing import Any, Dict, List, Optional
 
 from config import settings  # type: ignore
-from tools.file_ops import _get_read_allowed_roots, _is_contained, resolve_read_path  # type: ignore
+from tools.file_ops import (  # type: ignore
+    _get_read_allowed_roots, _is_contained, refusal_for, resolve_read_path)
 
 logger = logging.getLogger("AgentHQ.QueryData")
 
@@ -176,7 +177,32 @@ async def query_data(
     Run a read-only SQL query against a CSV or JSON file.
 
     The file becomes a table called `data`. Never raises.
+
+    Every query that reached the engine -- ran, was refused, or failed as SQL
+    -- is written down on the bound mission, so a report's SQL can be checked
+    against what was really attempted (`provenance.unexecuted_sql`). A refusal
+    or an SQL error quoted in a report is a real call being reported honestly:
+    observed, an extraction showing "`SELECT name ...` -- failed, the column is
+    `player`" was flagged as SQL nobody ran. A figure attached to a failed query
+    is caught by the figure checks, not by this one. A missing file is not
+    recorded: no query was attempted.
     """
+    result = await _query_data(filepath, query, max_rows)
+    reached_engine = (result.get("success") or result.get("refused")
+                      or str(result.get("error", "")).startswith("SQL error"))
+    if reached_engine:
+        from tools.file_ops import active_workspace
+        workspace = active_workspace()
+        if workspace is not None and hasattr(workspace, "record_query"):
+            workspace.record_query((query or "").strip())
+    return result
+
+
+async def _query_data(
+    filepath: str,
+    query: str,
+    max_rows: Optional[int] = None,
+) -> Dict[str, Any]:
     path = (filepath or "").strip()
     sql = (query or "").strip()
 
@@ -186,6 +212,11 @@ async def query_data(
         return _refuse("No query given.")
 
     resolved = resolve_read_path(path)
+    # Refused before the existence check, so a denied path does not answer
+    # "is there a file here" either.
+    denied = refusal_for(resolved, path)
+    if denied:
+        return denied
     if not os.path.isfile(resolved):
         return {"success": False, "error": f"No such file: {path}"}
 
@@ -197,6 +228,7 @@ async def query_data(
                 f"so it cannot be read.")
 
     extension = os.path.splitext(path)[1].lower()
+    requested_rows = max_rows
     max_rows = max_rows or settings.query_data_max_rows
     max_rows = min(max_rows, settings.query_data_max_rows)
 
@@ -250,10 +282,10 @@ async def query_data(
             f"{os.path.basename(path)} has more than "
             f"{settings.query_data_max_source_rows:,} rows, which is this "
             f"tool's load limit. Any answer over a partly-loaded file would be "
-            f"wrong without saying so, so nothing was run. Either filter the "
-            f"file down first (a script through `terminal` can split or "
-            f"pre-aggregate it), or raise query_data_max_source_rows if the "
-            f"whole file genuinely has to be in memory at once.")
+            f"wrong without saying so, so nothing was run. Say in your "
+            f"deliverable that the file is over the limit and was not "
+            f"analysed; the operator can raise query_data_max_source_rows if "
+            f"the whole file genuinely has to be in memory at once.")
 
     columns = [_safe_column(name, i) for i, name in enumerate(header)]
     # Duplicate names after cleaning would make the CREATE fail on a file the
@@ -300,7 +332,7 @@ async def query_data(
     finally:
         connection.close()
 
-    return {
+    result = {
         "success": True,
         "file": os.path.basename(path),
         "table": TABLE,
@@ -310,3 +342,16 @@ async def query_data(
         "truncated": truncated,
         "rows": [list(r) for r in fetched],
     }
+    if truncated:
+        # Said outright, with what to do. Without it an agent asked for
+        # max_rows=30000 ten times in a row, waiting for a cap that never lifts.
+        asked_more = bool(requested_rows and requested_rows > settings.query_data_max_rows)
+        result["hint"] = (
+            f"Only the first {max_rows} rows are returned"
+            + (f" -- max_rows is capped at {settings.query_data_max_rows}, so asking "
+               f"for {requested_rows} returns the same rows" if asked_more else "")
+            + ". Do not repeat this query. Aggregate instead (COUNT, SUM, AVG, "
+              "GROUP BY), filter with WHERE, or take the rows you need with "
+              "ORDER BY ... LIMIT. A deliverable should report the aggregate, "
+              "not a full row dump.")
+    return result

@@ -159,7 +159,10 @@ async def test_orchestrator_recovers_missing_artifact_from_workspace(missions, m
     class MockResult:
         response = type("Resp", (), {"choices": [MockChoice()]})()
 
+    sent = {}
+
     async def mock_acompletion(*args, **kwargs):
+        sent.update(kwargs)
         return MockResult()
 
     monkeypatch.setattr("llm.acompletion", mock_acompletion)
@@ -173,3 +176,54 @@ async def test_orchestrator_recovers_missing_artifact_from_workspace(missions, m
     assert "Synthesized Executive Report" in recovered
     assert w.get("final_report.md") is not None
     assert w.get("final_report.md").content == recovered
+    # Marked in the file itself, and the model was held to the documents.
+    from orchestrator import RECOVERY_BANNER
+    assert recovered.startswith(RECOVERY_BANNER)
+    prompt = sent["messages"][-1]["content"]
+    assert "Invent none of them" in prompt
+
+
+@pytest.mark.asyncio
+async def test_a_recovered_artifact_does_not_pass_the_step(missions, monkeypatch):
+    """
+    Recovery used to set the verdict to "accept" with no reviewer reading the
+    result. Observed: a recovered report of invented records, URLs and meeting
+    quotes filed as a passing step. It stays "revise" now, and says recovered.
+    """
+    import contracts
+    orch = Orchestrator()
+    w = MissionWorkspace("m_recover_verdict")
+    step = PlanStep(id="s1", agent_id="creative", description="Write the report",
+                    produces="report_out.md")
+
+    class Specialist:
+        id = "creative"
+        name = "Eve"
+        tools = ["write_file"]
+        last_run = {"estimated": False}
+
+    class Span:
+        def set(self, **kw):
+            self.attrs = kw
+
+    async def dispatch(*args, **kwargs):
+        return ""                         # the agent wrote nothing
+
+    async def recover(*args, **kwargs):
+        return RECOVERY_TEXT
+
+    RECOVERY_TEXT = "> reconstructed\n\n# Report\n\n" + "text " * 40
+    monkeypatch.setattr(settings, "memory_enabled", False)
+    monkeypatch.setattr(settings, "max_repair_attempts", 0)
+    monkeypatch.setattr(orch, "_agent_by_id", lambda _id: Specialist())
+    monkeypatch.setattr(orch, "_dispatch_attempt", dispatch)
+    monkeypatch.setattr(orch, "_recover_missing_artifact", recover)
+    monkeypatch.setattr(contracts, "check",
+                        lambda text, spec: contracts.CheckResult(ok=False, failures=["empty"]))
+
+    span = Span()
+    result = await orch._run_step_body(step, w, "m_recover_verdict", "goal", span)
+
+    assert result["verdict"] == "revise"
+    assert result["recovered"] is True
+    assert span.attrs["recovered"] is True

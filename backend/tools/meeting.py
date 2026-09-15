@@ -15,18 +15,25 @@ the workspace is created per mission by the orchestrator, so there is nothing to
 import at module load. When no mission is running they degrade to a clear error
 instead of raising.
 """
+import contextvars
 from typing import Any, Dict, List, Optional
 
-# Set by the orchestrator for the duration of a mission. Module-level because a
-# tool function receives only its own arguments -- there is no context object
-# threaded through the registry to hang this on.
-_active_workspace = None
+# Set by the orchestrator for the duration of a meeting. A tool function
+# receives only its own arguments -- there is no context object threaded through
+# the registry to hang this on -- so it is a ContextVar: per asyncio task, for
+# the same reason `file_ops` binds that way. Two missions' meetings running at
+# once would otherwise share one binding.
+_binding: contextvars.ContextVar[Optional[tuple]] = contextvars.ContextVar(
+    "meeting_binding", default=None)
 
 
-def bind_workspace(workspace) -> None:
+def bind_workspace(workspace, step_id: str = "") -> None:
     """Point the meeting tools at the running mission's workspace."""
-    global _active_workspace
-    _active_workspace = workspace
+    _binding.set((workspace, step_id) if workspace is not None else None)
+
+
+def _bound() -> tuple:
+    return _binding.get() or (None, "")
 
 
 async def review_artifacts(names: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -37,10 +44,11 @@ async def review_artifacts(names: Optional[List[str]] = None) -> Dict[str, Any]:
     normal case, since the point of a meeting is that nobody has to know in
     advance what the others produced.
     """
-    if _active_workspace is None:
+    workspace, _ = _bound()
+    if workspace is None:
         return {"success": False, "error": "No mission is running, so there is nothing to review."}
 
-    available = _active_workspace.names()
+    available = workspace.names()
     wanted = [n for n in (names or available) if n in available]
     missing = [n for n in (names or []) if n not in available]
 
@@ -56,7 +64,7 @@ async def review_artifacts(names: Optional[List[str]] = None) -> Dict[str, Any]:
         "success": True,
         "reviewed": wanted,
         "missing": missing,
-        "content": _active_workspace.render_context(wanted),
+        "content": workspace.render_context(wanted),
     }
 
 
@@ -68,18 +76,27 @@ async def record_decision(decision: str, title: str = "meeting_notes.md") -> Dic
     it in `consumes` and receive it exactly like anything else -- a meeting's
     conclusion is not a special kind of thing once it exists.
     """
-    if _active_workspace is None:
+    workspace, step_id = _bound()
+    if workspace is None:
         return {"success": False, "error": "No mission is running, so there is nothing to record against."}
     if not decision or not decision.strip():
         return {"success": False, "error": "A decision needs some text."}
 
     name = title if title.endswith(".md") else f"{title}.md"
-    await _active_workspace.put(
+    owner = (workspace.claimed_by_another(name, step_id)
+             if hasattr(workspace, "claimed_by_another") else None)
+    if owner:
+        return {"success": False, "refused": True,
+                "error": f"'{name}' is the deliverable of step {owner}. Record the "
+                         f"decision under a different title."}
+    await workspace.put(
         name=name,
         content=decision.strip(),
         author_id="conference_table",
         author_name="Conference Room",
-        step_id="",
+        # The meeting step that recorded it, so filing can tell this decision
+        # from a file some other step wrote while the meeting ran.
+        step_id=step_id,
     )
     return {"success": True, "recorded": name, "size_chars": len(decision.strip())}
 

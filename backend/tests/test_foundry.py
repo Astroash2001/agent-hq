@@ -42,11 +42,11 @@ def test_a_gap_is_one_agent_holding_all_of_them_not_the_office_between_them():
     The case `regrant_steps` gives up on: the tools all exist and are all held,
     but by different people, so no single agent can run the step.
     """
-    steps = [_step(needs=["web_search", "terminal"])]
-    held = {"researcher": ["web_search"], "coder": ["terminal"]}
+    steps = [_step(needs=["web_search", "query_data"])]
+    held = {"researcher": ["web_search"], "data_analyst": ["query_data"]}
     gaps = foundry.find_gaps(steps, held)
     assert len(gaps) == 1
-    assert gaps[0].needed == ["terminal", "web_search"]
+    assert gaps[0].needed == ["query_data", "web_search"]
     assert gaps[0].hireable is True
 
 
@@ -62,6 +62,18 @@ def test_a_tool_nobody_implements_is_not_hireable():
     assert len(gaps) == 1
     assert gaps[0].missing == ["query_postgres"]
     assert gaps[0].hireable is False
+
+
+def test_code_execution_cannot_be_hired_for():
+    """
+    `terminal` and `code_analysis` were removed from the registry. A step that
+    still asks for one is the unimplemented case, not the hireable one -- so no
+    contractor can bring code execution back into the office.
+    """
+    steps = [_step(needs=["terminal"]), _step("s2", ["code_analysis", "read_file"])]
+    gaps = foundry.find_gaps(steps, {"coder": ["read_file", "write_file"]})
+    assert [g.missing for g in gaps] == [["terminal"], ["code_analysis"]]
+    assert all(g.hireable is False for g in gaps)
 
 
 def test_a_step_declaring_no_tools_is_not_a_gap():
@@ -106,7 +118,7 @@ async def test_a_missing_tool_is_refused_with_a_reason(monkeypatch):
 async def test_hiring_stops_at_the_desks_available(monkeypatch):
     monkeypatch.setattr(settings, "foundry_design_enabled", False)
     monkeypatch.setattr(settings, "max_spawned_agents", 5)
-    steps = [_step("s1", ["query_data"]), _step("s2", ["terminal"]),
+    steps = [_step("s1", ["query_data"]), _step("s2", ["calculate"]),
              _step("s3", ["fetch_url"])]
     gaps = foundry.find_gaps(steps, {"researcher": ["web_search"]})
     assert len(gaps) == 3
@@ -118,10 +130,35 @@ async def test_hiring_stops_at_the_desks_available(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_two_contractors_never_share_a_name(monkeypatch):
+    """
+    Observed: the design model named both hires "Maya", so the briefing credited
+    the extraction and the guardrail probe to the same person.
+    """
+    monkeypatch.setattr(settings, "foundry_design_enabled", False)
+    monkeypatch.setattr(settings, "max_spawned_agents", 5)
+
+    async def same_name(goal, gap, taken, index):
+        manifest = foundry._fallback_manifest(gap, taken, index)
+        manifest.name = "Maya"
+        return manifest
+
+    monkeypatch.setattr(foundry, "design", same_name)
+    steps = [_step("s1", ["query_data"]), _step("s2", ["fetch_url"]), _step("s3", ["calculate"])]
+    gaps = foundry.find_gaps(steps, {"researcher": ["web_search"]})
+    hires, _ = await foundry.hire("x", gaps, existing_ids=["researcher"], mission_id="m1",
+                                  seats_available=5, existing_names=["Alice", "Nina"])
+    names = [h.name for h in hires]
+    assert names[0] == "Maya"
+    assert len(set(n.lower() for n in names)) == len(names)
+    assert "Nina" not in names, "a staff member's name is not reused either"
+
+
+@pytest.mark.asyncio
 async def test_the_policy_cap_applies_even_with_desks_free(monkeypatch):
     monkeypatch.setattr(settings, "foundry_design_enabled", False)
     monkeypatch.setattr(settings, "max_spawned_agents", 1)
-    steps = [_step("s1", ["query_data"]), _step("s2", ["terminal"])]
+    steps = [_step("s1", ["query_data"]), _step("s2", ["calculate"])]
     gaps = foundry.find_gaps(steps, {"researcher": ["web_search"]})
     hires, refusals = await foundry.hire("x", gaps, existing_ids=["researcher"],
                                          mission_id="m1", seats_available=9)

@@ -2,14 +2,8 @@
 Sandboxing, hardening and containment tests (WP7).
 
 Guarantees:
-  - Terminal allowlist blocks unlisted commands and restricts multi-word commands (git status vs git push)
-  - Shell metacharacters are rejected before any subprocess is spawned
-  - Subprocess working directory cannot escape the jail root via traversal or symlinks
-  - Child subprocess environment is scrubbed of all secrets (GEMINI_API_KEY etc.)
-  - Child output is capped at the configured ceiling with a visible truncation marker
-  - Timed out commands are hard-killed and reaped
+  - No registered tool, and no agent manifest, can run code
   - File operations (read, write, list) are jailed to the workspace / repo root
-  - Empty allowlist explicitly blocks all commands
   - Optional API token gates emergency stop and WebSocket access
   - WebSocket submit_task is rate-limited per connection
 """
@@ -24,7 +18,6 @@ from fastapi.testclient import TestClient
 from config import settings
 from main import app
 from tools.file_ops import bind_workspace, list_files, read_file, write_file
-from tools.terminal import execute_terminal
 from workspace import MissionWorkspace
 
 
@@ -47,158 +40,48 @@ def test_client() -> TestClient:
     return TestClient(app)
 
 
-# ----------------------------------------------------------------- terminal allowlist & metacharacters
+# ----------------------------------------------------------------- no code execution
 
-@pytest.mark.asyncio
-async def test_rm_rf_slash_is_refused():
-    """Commands outside the allowlist are rejected immediately without executing."""
-    res = await execute_terminal("rm -rf /")
-    assert res["success"] is False
-    assert res.get("refused") is True
-    assert "not in the allowed commands list" in res["error"]
-
-
-@pytest.mark.asyncio
-async def test_shell_metacharacters_are_refused_before_any_subprocess_spawns():
+def test_no_tool_in_the_catalogue_runs_code():
     """
-    Chained commands or shell injection attempts are refused prior to execution.
-
-    A naive implementation splitting on whitespace would evaluate 'ls; rm x'
-    as binary 'ls;' which might fail later, but checking raw metacharacters
-    guarantees nothing is ever passed to an executor.
+    `terminal` and `code_analysis` were removed, not merely ungranted. Either
+    one let a model run arbitrary code as the server's user -- a script opens
+    `.env` itself, and the file sandbox cannot see that. The catalogue is what
+    the planner offers and the foundry hires from, so absent here means no
+    agent, staff or contractor, can be given one.
     """
-    res = await execute_terminal("ls; rm x")
-    assert res["success"] is False
-    assert res.get("refused") is True
-    assert "forbidden shell metacharacter" in res["error"]
+    from tool_registry import tool_registry
+
+    catalogue = tool_registry.catalogue()
+    assert "terminal" not in catalogue
+    assert "code_analysis" not in catalogue
+    # "execute" is still a risk class -- fetch_url reaches an address chosen at
+    # runtime -- but nothing registered runs code.
+    runners = {"terminal", "code_analysis", "run_python", "shell", "exec"}
+    assert not runners & set(catalogue)
 
 
 @pytest.mark.asyncio
-async def test_git_status_is_permitted_while_git_push_is_refused():
-    """
-    Multi-word allowlist entries match on argv[0] AND subsequent subcommands.
+async def test_calling_a_removed_execution_tool_is_refused():
+    from tool_registry import tool_registry
 
-    If matching only checked the primary binary ('git'), then 'git push --force'
-    would sail through a 'git status' or 'git log' allowlist entry.
-    """
-    push_res = await execute_terminal("git push --force")
-    assert push_res["success"] is False
-    assert push_res.get("refused") is True
-    assert "not in the allowed commands list" in push_res["error"]
-
-    status_res = await execute_terminal("git status")
-    # git status is permitted; it may succeed or exit with code 0/1 depending on repo state,
-    # but it must NOT be refused.
-    assert status_res.get("refused") is not True
-
-
-@pytest.mark.asyncio
-async def test_working_directory_traversal_escaping_jail_is_refused():
-    """A cwd that climbs out of the jail root via '../..' is caught and refused."""
-    res = await execute_terminal("python --version", cwd="../../")
-    assert res["success"] is False
-    assert res.get("refused") is True
-    assert "resolves outside sandbox jail root" in res["error"]
-
-
-@pytest.mark.asyncio
-async def test_symlink_pointing_outside_jail_is_refused(scratch_dir, monkeypatch):
-    """
-    Symlinks pointing outside the repository jail root are resolved and rejected.
-
-    On Windows without Developer Mode, creating directory symlinks can fail with
-    WinError 1314 (privilege not held). When that occurs, we monkeypatch realpath
-    for the synthetic symlink to verify containment resolution identically.
-    """
-    link_path = os.path.join(settings.jail_root, "_test_symlink_escape")
-    outside_target = os.path.dirname(settings.jail_root)
-
-    symlink_created = False
-    try:
-        os.symlink(outside_target, link_path, target_is_directory=True)
-        symlink_created = True
-    except (OSError, NotImplementedError):
-        # Fallback simulation of symlink resolution for restricted host
-        real_realpath = os.path.realpath
-
-        def fake_realpath(p):
-            if os.path.abspath(p) == os.path.abspath(link_path):
-                return outside_target
-            return real_realpath(p)
-
-        monkeypatch.setattr(os.path, "realpath", fake_realpath)
-
-    try:
-        res = await execute_terminal("python --version", cwd=link_path)
+    for name, args in (("terminal", {"command": "python --version"}),
+                       ("code_analysis", {"code_snippet": "print(1)"})):
+        res = await tool_registry.execute(name, args, agent_id="coder",
+                                          granted=[name])
         assert res["success"] is False
-        assert res.get("refused") is True
-        assert "resolves outside sandbox jail root" in res["error"]
-    finally:
-        if symlink_created and os.path.islink(link_path):
-            try:
-                os.unlink(link_path)
-            except OSError:
-                pass
+        assert "not registered" in res["error"]
 
 
-@pytest.mark.asyncio
-async def test_subprocess_cannot_read_gemini_api_key_from_environment(monkeypatch):
-    """
-    Subprocess environment is scrubbed down to PATH and SYSTEMROOT.
+def test_no_staff_manifest_grants_an_execution_tool():
+    import json
 
-    API keys and secrets present in the parent process or settings must never
-    be accessible to commands executed on behalf of an agent.
-    """
-    monkeypatch.setenv("GEMINI_API_KEY", "super-secret-production-key-99999")
-    monkeypatch.setattr(settings, "gemini_api_key", "super-secret-production-key-99999")
-
-    # Use a command free of semicolons or metacharacters to read the env var
-    cmd = 'python -c "__import__(\'sys\').stdout.write(str(__import__(\'os\').environ.get(\'GEMINI_API_KEY\')))"'
-    res = await execute_terminal(cmd)
-    assert res["success"] is True
-    assert "super-secret-production-key-99999" not in res["stdout"]
-    assert "None" in res["stdout"]
-
-
-@pytest.mark.asyncio
-async def test_output_truncation_fires_and_is_visible_in_result(monkeypatch):
-    """Commands generating excessive output are capped with a visible marker."""
-    monkeypatch.setattr(settings, "terminal_max_output_chars", 120)
-
-    # Output 300 characters of repeating text
-    cmd = 'python -c "__import__(\'sys\').stdout.write(\'Z\' * 300)"'
-    res = await execute_terminal(cmd)
-    assert res["success"] is True
-    assert len(res["stdout"]) > 120
-    assert "[output truncated at 120 characters]" in res["stdout"]
-    assert "Z" * 120 in res["stdout"]
-    assert "Z" * 121 not in res["stdout"]
-
-
-@pytest.mark.asyncio
-async def test_timeout_kills_child_and_returns_refusal_result():
-    """A command exceeding the timeout ceiling is hard-killed and returns a refusal payload."""
-    cmd = 'python -c "__import__(\'time\').sleep(10)"'
-    res = await execute_terminal(cmd, timeout_seconds=1)
-    assert res["success"] is False
-    assert res.get("refused") is True
-    assert res["exit_code"] == -1
-    assert "timed out after 1 seconds" in res["error"]
-
-
-@pytest.mark.asyncio
-async def test_empty_allowlist_refuses_all_commands(monkeypatch):
-    """
-    An empty allowlist explicitly refuses everything.
-
-    Settings defaulting or being configured to an empty list must not be
-    misinterpreted as 'allow everything'.
-    """
-    monkeypatch.setattr(settings, "terminal_allowed_commands", [])
-    res = await execute_terminal("python --version")
-    assert res["success"] is False
-    assert res.get("refused") is True
-    assert "terminal allowlist is empty" in res["error"]
+    for filename in os.listdir(settings.agents_dir):
+        if not filename.endswith(".json"):
+            continue
+        with open(os.path.join(settings.agents_dir, filename), encoding="utf-8") as fh:
+            tools = set(json.load(fh).get("tools", []))
+        assert not {"terminal", "code_analysis"} & tools, filename
 
 
 # ----------------------------------------------------------------- file operations containment
@@ -299,6 +182,15 @@ def test_websocket_submit_task_rate_limiting_throttles_rapid_messages(test_clien
     monkeypatch.setattr(settings, "api_token", "")
     monkeypatch.setattr(settings, "ws_submit_rate_limit", 2.0)
 
+    # The accepted submission must not start a real mission: that called the
+    # configured model with real keys and wrote into the real missions folder.
+    from orchestrator import orchestrator
+
+    async def no_mission(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(orchestrator, "handle_user_input", no_mission)
+
     with test_client.websocket_connect("/ws") as ws:
         # 1. Consume handshake message
         handshake = ws.receive_json()
@@ -310,8 +202,11 @@ def test_websocket_submit_task_rate_limiting_throttles_rapid_messages(test_clien
         # 3. Immediate second submission is throttled
         ws.send_json({"action": "submit_task", "message": "Task 2"})
 
+        # The accepted mission streams its own events (task.created, walks,
+        # speech) ahead of the reply, and how many land first depends on
+        # scheduling -- so read past them rather than counting on five.
         found_throttle = False
-        for _ in range(5):
+        for _ in range(40):
             msg = ws.receive_json()
             if (
                 msg.get("type") == "system.status"

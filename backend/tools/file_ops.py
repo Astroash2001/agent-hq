@@ -12,16 +12,30 @@ The sandbox extends this: `read_file`, `write_file`, and `list_files` are jailed
 to the bound MissionWorkspace directory or the repository root (read-only).
 Path traversal attempts ('..'), symlink escapes, and arbitrary absolute paths
 outside the sandbox boundaries are refused outright.
+
+Inside the jail, some things are still not an agent's to read (`denied_reason`):
+secrets, the harness's own runtime state, evaluation data, and every mission's
+files but the running one's. The repository root being readable put `.env` one
+`read_file` away, and `search_workspace` would quote the key line back. And a
+mission that can read the last mission's artifacts copies them: observed, a
+guardrail step pasted a previous run's "verbatim" refusals without making a
+single probe call, and a report step filled in figures it had no tool to compute.
 """
+import contextvars
+import fnmatch
 import os
 from typing import Any, Dict, List, Optional, Sequence
 
 from config import settings  # type: ignore
 from workspace import _safe_name  # type: ignore
 
-# Set by the orchestrator for the duration of a mission.
-_active_workspace = None
-_active_author = None
+# Set by the orchestrator for the duration of a step. A ContextVar rather than a
+# module global, because steps run in parallel: each step is its own asyncio
+# task and sees only its own binding. As a global, the last step to bind won --
+# every write was filed under whichever agent bound most recently, and the first
+# step to finish unbound the workspace out from under the others mid-step.
+_binding: contextvars.ContextVar[Optional[tuple]] = contextvars.ContextVar(
+    "file_ops_binding", default=None)
 
 
 def bind_workspace(
@@ -30,10 +44,20 @@ def bind_workspace(
     author_name: str = "",
     step_id: str = ""
 ) -> None:
-    """Point write_file at the running mission's workspace."""
-    global _active_workspace, _active_author
-    _active_workspace = workspace
-    _active_author = (author_id, author_name, step_id) if workspace else None
+    """Point write_file at the running mission's workspace, for this task only."""
+    _binding.set((workspace, author_id, author_name, step_id)
+                 if workspace is not None else None)
+
+
+def active_workspace():
+    """The workspace bound in the current task, or None."""
+    bound = _binding.get()
+    return bound[0] if bound else None
+
+
+def _active_author() -> tuple:
+    bound = _binding.get()
+    return bound[1:] if bound else ("", "", "")
 
 
 # ----------------------------------------------------------------- containment helpers
@@ -64,12 +88,69 @@ def _is_contained(target_path: str, allowed_roots: Sequence[Optional[str]]) -> b
 def _get_read_allowed_roots() -> List[str]:
     """Roots permitted for reading: the active mission, repo root, and missions path."""
     roots = [settings.jail_root]
-    if _active_workspace is not None and getattr(_active_workspace, "dir", None):
-        roots.append(_active_workspace.dir)
+    workspace = active_workspace()
+    if workspace is not None and getattr(workspace, "dir", None):
+        roots.append(workspace.dir)
     if getattr(settings, "missions_path", None):
         roots.append(settings.missions_path)
         roots.append(os.path.dirname(settings.missions_path))
     return roots
+
+
+def _within(target: str, root: Optional[str]) -> bool:
+    return bool(root) and _is_contained(target, [root])
+
+
+def denied_reason(path: str) -> Optional[str]:
+    """
+    Why `path` must not be read by an agent even though it is inside the jail.
+
+    None when it may be. Checked on the resolved path, so a relative name, a
+    `..` detour or a symlink all land on the same answer.
+    """
+    if not getattr(settings, "file_ops_sandbox_enabled", True) or not path:
+        return None
+    try:
+        real = os.path.realpath(os.path.abspath(path))
+    except (OSError, ValueError):
+        return "it cannot be resolved"
+
+    name = os.path.basename(real)
+    for pattern in getattr(settings, "read_denied_names", []):
+        if fnmatch.fnmatch(name.lower(), pattern.lower()):
+            return "it holds secrets"
+
+    for state in (getattr(settings, "runstore_path", ""),
+                  getattr(settings, "memory_path", ""),
+                  getattr(settings, "embedding_cache_path", "")):
+        if state and (real == os.path.realpath(state)
+                      or real.startswith(os.path.realpath(state) + "-")):
+            return "it is the harness's own runtime state"
+
+    for rel in getattr(settings, "read_denied_dirs", []):
+        if _within(real, os.path.join(settings.jail_root, rel)):
+            return "it is evaluation or repository-internal data"
+
+    missions = getattr(settings, "missions_path", None)
+    if missions and _within(real, missions):
+        workspace = active_workspace()
+        own = getattr(workspace, "dir", None) if workspace is not None else None
+        if workspace is not None and not (own and _within(real, own)):
+            return "it belongs to a different mission"
+    return None
+
+
+def refusal_for(path: str, shown: str = "") -> Optional[Dict[str, Any]]:
+    """The refusal payload for a denied path, or None when it may be read."""
+    reason = denied_reason(path)
+    if reason is None:
+        return None
+    return {
+        "success": False,
+        "refused": True,
+        "error": (f"'{shown or path}' may not be read: {reason}. Work from the "
+                  f"inputs named in your task and this mission's own files."),
+    }
 
 
 def _get_unbound_write_allowed_roots() -> List[str]:
@@ -97,10 +178,13 @@ def resolve_read_path(filepath: str) -> str:
     if cleaned.startswith("./"):
         cleaned = cleaned[2:]
 
+    workspace = active_workspace()
+    ws_dir = getattr(workspace, "dir", None) if workspace is not None else None
+
     candidates = []
     # 1. Active workspace directory
-    if _active_workspace is not None and getattr(_active_workspace, "dir", None):
-        candidates.append(os.path.join(_active_workspace.dir, cleaned))
+    if ws_dir:
+        candidates.append(os.path.join(ws_dir, cleaned))
     # 2. Raw path as given
     candidates.append(cleaned)
     # 3. Path from repo root
@@ -123,8 +207,8 @@ def resolve_read_path(filepath: str) -> str:
         if os.path.isfile(c):
             return os.path.abspath(c)
 
-    if _active_workspace is not None and getattr(_active_workspace, "dir", None):
-        return os.path.join(_active_workspace.dir, cleaned)
+    if ws_dir:
+        return os.path.join(ws_dir, cleaned)
     return cleaned
 
 
@@ -175,6 +259,9 @@ def _truncation_hint(filepath: str, head: str, end: int, total: int,
     out of budget and reports what it managed to read, which is the 65-of-365
     failure arriving by a different route.
 
+    There is no code-execution tool to hand a big non-tabular file to, so the
+    alternative to paging is a search rather than a script.
+
     So the numbers are spelled out rather than left for the model to work out,
     and the alternative is named with the file's own shape attached, so the
     next call can be the right one instead of the next chunk.
@@ -197,10 +284,9 @@ def _truncation_hint(filepath: str, head: str, end: int, total: int,
                 f"read_file(offset={end}) only if you genuinely need the raw "
                 f"text rather than the data.")
 
-    return (base + f" To continue anyway, call read_file with offset={end}. To "
-            f"process the whole file instead, write a script and run it with "
-            f"terminal -- that reads all {total:,} characters without any of "
-            f"them entering your history.")
+    return (base + f" To continue, call read_file with offset={end}. To find "
+            f"specific content without paging, use search_workspace with a "
+            f"pattern -- it returns only the matching lines.")
 
 
 def _read_slice(path: str, offset: int, limit: int) -> tuple:
@@ -324,6 +410,9 @@ async def read_file(filepath: str, max_chars: int = 0, offset: int = 0) -> Dict[
             "refused": True,
             "error": f"Path '{filepath}' resolves outside the allowed sandbox jail root.",
         }
+    denied = refusal_for(candidate, filepath)
+    if denied:
+        return denied
 
     try:
         if not os.path.exists(candidate):
@@ -352,8 +441,9 @@ async def write_file(filepath: str, content: str) -> Dict[str, Any]:
         return {"success": False, "refused": True, "error": "File path cannot be empty."}
 
     # ------------------------------------------------------------- bound workspace
-    if _active_workspace is not None:
-        ws_dir = getattr(_active_workspace, "dir", None)
+    workspace = active_workspace()
+    if workspace is not None:
+        ws_dir = getattr(workspace, "dir", None)
         # Check containment against workspace directory if one is on disk
         if ws_dir:
             target = filepath if os.path.isabs(filepath) else os.path.join(ws_dir, filepath)
@@ -374,9 +464,19 @@ async def write_file(filepath: str, content: str) -> Dict[str, Any]:
                     "error": f"Path '{filepath}' escapes the active mission workspace.",
                 }
 
-        author_id, author_name, step_id = _active_author or ("", "", "")
+        author_id, author_name, step_id = _active_author()
         safe_filename = _safe_name(os.path.basename(filepath or "untitled.md"))
-        artifact = await _active_workspace.put(
+        owner = (workspace.claimed_by_another(safe_filename, step_id)
+                 if hasattr(workspace, "claimed_by_another") else None)
+        if owner:
+            return {
+                "success": False,
+                "refused": True,
+                "error": (f"'{safe_filename}' is the deliverable of step {owner}, not "
+                          f"yours. Do only your own step's work, and write your own "
+                          f"deliverable instead."),
+            }
+        artifact = await workspace.put(
             name=safe_filename,
             content=content,
             author_id=author_id or "agent",
@@ -431,6 +531,9 @@ async def list_files(directory: str = ".") -> Dict[str, Any]:
             "refused": True,
             "error": f"Directory '{directory}' resolves outside the allowed sandbox jail root.",
         }
+    denied = refusal_for(directory)
+    if denied:
+        return denied
 
     try:
         if not os.path.exists(directory):
@@ -439,6 +542,8 @@ async def list_files(directory: str = ".") -> Dict[str, Any]:
         items = []
         for entry in os.listdir(directory):
             full_path = os.path.join(directory, entry)
+            if denied_reason(full_path):
+                continue
             is_dir = os.path.isdir(full_path)
             items.append({
                 "name": entry,

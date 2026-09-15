@@ -23,7 +23,7 @@ of them were chosen over the obvious alternative.
 
 Standard library carries more than usual by design: `asyncio` for the event bus,
 `glob`/`json` for manifest discovery, `uuid` for task ids, `ast` for
-`code_analysis`, `subprocess` for `terminal`.
+`calculate`'s expression allowlist, `sqlite3` for `query_data`.
 
 ### Models
 

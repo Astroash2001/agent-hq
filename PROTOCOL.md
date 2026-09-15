@@ -138,8 +138,8 @@ The agent wants a station someone else is holding, and is now waiting. This is
 the traffic jam — the one event that makes the floor plan visibly matter.
 
 ```json
-{ "agent_name": "Bob", "station_id": "ops_console", "label": "Ops Console",
-  "tool": "terminal", "occupied_by": "coder", "queue_length": 1 }
+{ "agent_name": "Nina", "station_id": "ops_console", "label": "Ops Console",
+  "tool": "query_data", "occupied_by": "data_analyst", "queue_length": 1 }
 ```
 
 ### `station.acquired` / `station.released`
@@ -148,8 +148,8 @@ Bracket the actual tool call. `acquired` fires after the agent has arrived;
 `released` fires even if the tool raised.
 
 ```json
-{ "agent_name": "Charlie", "station_id": "ops_console",
-  "label": "Ops Console", "tool": "terminal" }
+{ "agent_name": "Bob", "station_id": "ops_console",
+  "label": "Ops Console", "tool": "query_data" }
 ```
 
 ---
@@ -240,7 +240,7 @@ All additive — old readers keep working.
 | `task.assigned` | `step_id`, `produces`, `consumes`, `rationale`, `routed_from`, `attempt` (1 on the original dispatch, higher on a repair) |
 | `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0`. Each node that has **run** also carries `cost_usd`, `duration_sec`, `total_tokens`, `model`, `attempts`, `estimated`; the event carries mission totals `cost_usd`, `mission_tokens`, `tokens_estimated` |
 | `task.progress` | `wave` (which parallel wave just finished), `failed` |
-| `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated` |
+| `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated`, `outcome` (`completed` / `unverified` / `failed` / `halted`), `unverified_steps` |
 | `token.update` | `estimated` (the counts are the simulator's, not a provider's), `model` (which model answered) |
 
 **Reading `dag.update`:** a node with no `cost_usd` has not run yet. That is
@@ -264,6 +264,13 @@ Anything that assumed one active agent at a time needs a per-agent keyed state.
 ---
 
 ## REST
+
+**Auth.** When `AGENTHQ_API_TOKEN` is set, every `/api/` route except
+`/api/health` needs `Authorization: Bearer <token>` (or `X-API-Token`); a
+missing or wrong token is **401**. `/ws` takes the same token as `?token=`, and
+refuses without it by closing with code **1008**. Mission ids that are not
+`[A-Za-z0-9][A-Za-z0-9_-]*` are **400**. A second mission while one is running
+is refused: a `system.status` message on the socket, **429** on resume.
 
 | Endpoint | Returns |
 |---|---|
@@ -303,7 +310,25 @@ inside the mission directory; a name that escapes is a 400.
 `mission.json` gained `cost_usd`, `mission_tokens`, `unpriced_models`,
 `tokens_estimated`, and `per_step`, one row per plan step carrying `model`,
 `prompt_tokens`, `completion_tokens`, `cost_usd`, `duration_sec`, `tool_calls`,
-`retries`, `fell_back`, `estimated` and `status`.
+`retries`, `fell_back`, `estimated` and `status`, plus `verdict` and `quality`
+once the step has been reviewed.
+
+`outcome` is `completed`, `unverified`, `failed` or `halted`. **`unverified`**
+means every step ran but at least one ended on a reviewer's `revise` verdict --
+the DAG carried on past it, so the artifact exists, but nothing vouched for it.
+The run store records such a step as `unverified` rather than `completed`, so
+resuming the mission re-runs it.
+
+`unexecuted_sql` lists SQL shown in any artifact that no successful `query_data`
+call in the mission ran, as `"file: query"`. `[]` is checked and clean; `null`
+means not checked, which is what a resumed mission records, because queries run
+before the restart were never seen by this process.
+
+A `tool` span's `attrs` carry `args` (bodies such as `write_file`'s `content`
+reduced to their length) and, on failure, `refused` and `tool_error`.
+
+`python -m evals.mission_check` grades a finished mission from these files,
+locally or through the REST endpoints above (`--base-url`). See `evals/README.md`.
 
 Both token figures are this mission's. `total_tokens` is what the budget gate
 measured -- every token the roster burned between the mission starting and

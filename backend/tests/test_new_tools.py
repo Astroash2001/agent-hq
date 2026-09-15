@@ -472,8 +472,8 @@ async def test_a_tool_outside_the_grant_is_refused():
     property before an agent's tool list is chosen at runtime.
     """
     result = await tool_registry.execute(
-        tool_name="terminal",
-        arguments={"command": "ls"},
+        tool_name="query_data",
+        arguments={"filepath": "x.csv", "query": "SELECT 1"},
         agent_id="researcher",
         granted=["web_search", "read_file"],
     )
@@ -516,7 +516,7 @@ def test_the_catalogue_is_the_authority_on_what_exists():
     """
     catalogue = tool_registry.catalogue()
     for name in ("web_search", "fetch_url", "calculate", "query_data",
-                 "search_workspace", "terminal", "read_file", "write_file"):
+                 "search_workspace", "read_file", "write_file"):
         assert name in catalogue, name
         assert catalogue[name]["description"]
         assert catalogue[name]["risk"] in ("read", "write", "execute")
@@ -529,6 +529,7 @@ def test_the_catalogue_is_the_authority_on_what_exists():
 
 
 def test_risk_is_recorded_so_the_dangerous_tools_are_knowable():
+    # Never registered, so reported as the most dangerous class.
     assert tool_registry.risk_of("terminal") == "execute"
     assert tool_registry.risk_of("fetch_url") == "execute"
     assert tool_registry.risk_of("calculate") == "read"
@@ -602,9 +603,9 @@ async def test_a_large_file_admits_the_cut(paging_dir):
     assert result["chars_returned"] == settings.read_file_max_chars
     assert result["next_offset"] == settings.read_file_max_chars
     # The hint has to say what to DO, not merely that something was cut. This
-    # is a .txt, so the alternative named is a script rather than SQL.
+    # is a .txt, so the alternative named is a search rather than SQL.
     assert "offset=" in result["hint"]
-    assert "terminal" in result["hint"]
+    assert "search_workspace" in result["hint"]
 
 
 @pytest.mark.asyncio
@@ -715,15 +716,16 @@ async def test_a_truncated_csv_is_told_to_query_not_to_page(paging_dir):
 
 
 @pytest.mark.asyncio
-async def test_a_truncated_plain_file_is_pointed_at_a_script(paging_dir):
-    """No SQL over a .txt, so the alternative named is the one that exists."""
+async def test_a_truncated_plain_file_is_pointed_at_a_search(paging_dir):
+    """No SQL over a .txt and no code execution, so the alternative named is a search."""
     from tools.file_ops import read_file
     path = os.path.join(paging_dir, "notes.txt")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("lorem ipsum " * 4000)
 
     hint = (await read_file(path))["hint"]
-    assert "terminal" in hint
+    assert "search_workspace" in hint
+    assert "terminal" not in hint
     assert "offset=" in hint
     assert "query_data" not in hint
 
@@ -783,8 +785,10 @@ async def test_query_data_refuses_rather_than_answering_from_half_a_file(data_di
     assert result["success"] is False
     assert result["refused"] is True
     assert "500" in result["error"]
-    # The refusal has to say what to do instead, or it is only a failure.
-    assert "terminal" in result["error"]
+    # The refusal has to say what to do instead, or it is only a failure --
+    # and must not point at a code-execution tool that does not exist.
+    assert "query_data_max_source_rows" in result["error"]
+    assert "terminal" not in result["error"]
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ from fastapi.responses import PlainTextResponse
 
 import runstore
 import tracing
+from api_guard import mission_slots, safe_mission_id
 from config import settings
 
 logger = logging.getLogger("AgentHQ.API.Missions")
@@ -29,7 +30,19 @@ router = APIRouter(prefix="/api/missions", tags=["missions"])
 
 
 def _mission_dir(mission_id: str) -> str:
-    return os.path.join(settings.missions_path, mission_id)
+    """
+    The directory for one mission, never anything above it.
+
+    The id comes from the URL. `%2e%2e` decodes to `..`, and joined here that
+    named `backend/data` itself -- so the artifact route served `memory.json`
+    to anyone who asked. Validated by shape, then by resolved path.
+    """
+    safe_mission_id(mission_id)
+    root = os.path.realpath(settings.missions_path)
+    directory = os.path.realpath(os.path.join(root, mission_id))
+    if os.path.dirname(directory) != root:
+        raise HTTPException(status_code=400, detail="invalid mission id")
+    return directory
 
 
 @router.get("")
@@ -98,10 +111,11 @@ async def get_mission(mission_id: str):
     """
     One mission: its plan, its steps, its report, and artifact details.
     """
+    safe_dir = _mission_dir(mission_id)
     mission = runstore.get_store().get_mission(mission_id)
-    directory = (mission.get("mission_dir") if mission else None) or _mission_dir(mission_id)
+    directory = (mission.get("mission_dir") if mission else None) or safe_dir
     if not os.path.isdir(directory):
-        directory = _mission_dir(mission_id)
+        directory = safe_dir
 
     if not mission:
         if os.path.isdir(directory):
@@ -200,7 +214,7 @@ async def get_artifact(mission_id: str, name: str):
     decoding, and a blocklist of shapes is a losing game against a filename that
     reaches the filesystem; comparing the resolved path is not.
     """
-    directory = os.path.realpath(_mission_dir(mission_id))
+    directory = _mission_dir(mission_id)
     target = os.path.realpath(os.path.join(directory, name))
     if os.path.commonpath([directory, target]) != directory or target == directory:
         raise HTTPException(status_code=400, detail="artifact name escapes the mission")
@@ -211,6 +225,8 @@ async def get_artifact(mission_id: str, name: str):
     try:
         with open(target, encoding="utf-8") as fh:
             return fh.read()
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=415, detail=f"'{name}' is not a text artifact")
     except OSError as exc:
         raise HTTPException(status_code=500,
                             detail=f"could not read artifact: {exc}") from exc
@@ -219,8 +235,9 @@ async def get_artifact(mission_id: str, name: str):
 @router.get("/{mission_id}/trace", response_class=PlainTextResponse)
 async def get_trace(mission_id: str):
     """The mission's spans, as the newline-delimited JSON they were written as."""
+    safe_dir = _mission_dir(mission_id)
     mission = runstore.get_store().get_mission(mission_id)
-    directory = (mission or {}).get("mission_dir") or _mission_dir(mission_id)
+    directory = (mission or {}).get("mission_dir") or safe_dir
     path = os.path.join(directory, tracing.TRACE_FILENAME)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404,
@@ -245,6 +262,7 @@ async def resume_mission(mission_id: str):
     """
     from orchestrator import orchestrator
 
+    safe_mission_id(mission_id)
     store = runstore.get_store()
     mission = store.get_mission(mission_id)
     if not mission:
@@ -260,8 +278,13 @@ async def resume_mission(mission_id: str):
             detail=f"mission '{mission_id}' died before planning finished, "
                    f"so there is nothing to resume")
 
+    # The same cap a new mission obeys: a resume spends exactly as much.
+    if not mission_slots.try_acquire():
+        raise HTTPException(
+            status_code=429,
+            detail="a mission is already running; resume it when that one finishes")
     try:
-        return await orchestrator.handle_user_input(
-            mission["goal"], resume_from=mission_id)
+        return await mission_slots.run(orchestrator.handle_user_input(
+            mission["goal"], resume_from=mission_id))
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc))

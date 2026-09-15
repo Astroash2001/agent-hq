@@ -18,7 +18,9 @@ import foundry
 import office as office_mod
 import planner as planner_mod
 import pricing
+import provenance
 import runstore
+import step_guard
 import synthesis
 import tracing
 from base_agent import BaseAgent
@@ -33,6 +35,15 @@ from tools import file_ops
 from workspace import MissionWorkspace
 
 logger = logging.getLogger("AgentHQ.Orchestrator")
+
+
+# Heads every Markdown artifact the harness reconstructs after a step failed to
+# write its own (`_recover_missing_artifact`).
+RECOVERY_BANNER = (
+    "> ⚠️ **Reconstructed by the harness, not written by the assigned agent.** "
+    "The step did not produce this file, so it was assembled from other "
+    "workspace documents and has not been reviewed. Treat it as unverified.\n\n"
+)
 
 
 class StepDeadlineExceeded(Exception):
@@ -134,9 +145,25 @@ class Orchestrator:
                 logger.error(f"Failed to load agent manifest {filepath}: {e}")
 
     def _agent_lock(self, agent_id: str) -> asyncio.Lock:
-        """Created lazily so no lock binds to the import-time event loop."""
-        if agent_id not in self._agent_locks:
-            self._agent_locks[agent_id] = asyncio.Lock()
+        """
+        Created lazily so no lock binds to the import-time event loop.
+
+        Recreated when the one on hand is bound to another loop, for the reason
+        `office._lock_for` documents: the orchestrator is a process-wide
+        singleton, and a lock first contended in one `asyncio.run` raises "bound
+        to a different event loop" when two steps queue for the same agent in
+        the next. A server runs one loop, so there this never fires.
+        """
+        existing = self._agent_locks.get(agent_id)
+        if existing is not None:
+            bound = getattr(existing, "_loop", None)
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if bound is None or running is None or bound is running:
+                return existing
+        self._agent_locks[agent_id] = asyncio.Lock()
         return self._agent_locks[agent_id]
 
     def _agent_by_id(self, agent_id: str):
@@ -537,6 +564,9 @@ class Orchestrator:
             await self.boss_agent.speak("Synthesizing final executive briefing...", task_id=task_id)
 
         duration = time.time() - start_time
+        # Queries run before a restart were never recorded in this process, so a
+        # resumed mission cannot be checked without flagging real work.
+        self._provenance_checkable = not already_completed
         synthesis_text = await self._synthesize_results(
             user_prompt, results, duration, plan, workspace)
 
@@ -571,6 +601,10 @@ class Orchestrator:
             # the good case and is recorded either way, because "checked and
             # clean" and "never checked" must not read alike.
             "ungrounded_figures": list(getattr(self, "_last_ungrounded", [])),
+            # SQL shown in an artifact that no successful query_data call in
+            # this mission ran. `null` means not checked (a resumed mission),
+            # which must not read like an empty, clean list.
+            "unexecuted_sql": getattr(self, "_last_unexecuted_sql", None),
             "tokens_estimated": telemetry["tokens_estimated"],
             "per_step": telemetry["per_step"],
             "steps": [
@@ -608,6 +642,11 @@ class Orchestrator:
                 # itself as a success.
                 "steps_completed": sum(1 for s in plan.steps if s.status == "completed"),
                 "steps_failed": sum(1 for s in plan.steps if s.status == "failed"),
+                # The same outcome mission.json records. A mission can finish
+                # every step and still be "unverified", which the counts above
+                # cannot say.
+                "outcome": outcome,
+                "unverified_steps": [s.id for s in self._unverified_steps(task_id, plan)],
                 "plan_source": plan.source,
                 "artifacts": workspace.summary(),
                 "mission_dir": workspace.dir,
@@ -681,6 +720,8 @@ class Orchestrator:
                 [self.boss_agent.id] if self.boss_agent else []),
             mission_id=task_id,
             seats_available=office.free_seats(),
+            existing_names=[a.name for a in self.agents.values()] + (
+                [self.boss_agent.name] if self.boss_agent else []),
         )
 
         for manifest in hires:
@@ -856,9 +897,15 @@ class Orchestrator:
         An agent may write several (drafts, notes). Preference goes to an exact
         match on the promised name, then to the largest new one -- the closing
         summary an agent writes about its work is always shorter than the work.
+
+        Only files this step wrote count. Steps run in parallel, so "new since
+        the attempt started" also covers a sibling's output: observed, an
+        extraction step that wrote nothing was credited with the guardrail
+        step's file, which was then re-filed as `extraction.md` and read by the
+        review as the extraction.
         """
         fresh = [workspace.get(n) for n in workspace.names() if n not in before]
-        fresh = [a for a in fresh if a is not None]
+        fresh = [a for a in fresh if a is not None and a.step_id == step.id]
         if not fresh:
             return None
         for a in fresh:
@@ -951,6 +998,14 @@ class Orchestrator:
             return "halted"
         if any(s.status == "failed" for s in plan.steps):
             return "failed"
+        # Every step ran, but a reviewer's last word on at least one was
+        # "revise". Recorded as its own outcome because "completed" was printed
+        # for a mission whose extraction step scored 0.05 and filed nothing of
+        # its own -- the status is what a reader trusts first. Resume gates on
+        # "completed" alone, so an unverified mission can be resumed.
+        rows = self._step_telemetry.get(task_id, {})
+        if any(rows.get(s.id, {}).get("verdict") == "revise" for s in plan.steps):
+            return "unverified"
         return "completed"
 
     def _mission_telemetry(self, task_id: str, plan: Plan) -> Dict[str, Any]:
@@ -1136,6 +1191,11 @@ class Orchestrator:
         # the same reason `self._slots` is rebuilt per mission.
         halt_event = self._halt_events.setdefault(task_id, asyncio.Event())
 
+        # Each promised filename belongs to the step that promised it, so a
+        # step running alongside cannot overwrite it (see workspace.reserve).
+        if hasattr(workspace, "reserve"):
+            workspace.reserve({s.produces: s.id for s in plan.steps if s.produces})
+
         for sid in completed:
             by_id[sid].status = "completed"
             self._set_node_status(sid, "completed")
@@ -1312,8 +1372,20 @@ class Orchestrator:
                 completed.add(sid)
                 self._set_node_status(sid, "completed")
                 stats = self._step_telemetry.get(task_id, {}).get(sid, {})
+                # The step still counts as done for the DAG -- stranding every
+                # step behind a rejected one throws good downstream work away --
+                # but a final verdict of "revise" is not a pass, and the record
+                # says so. Stored as `unverified` rather than `completed`, so a
+                # resume re-runs it instead of trusting it.
+                verdict = outcome.get("verdict") if isinstance(outcome, dict) else None
+                if stats:
+                    stats["verdict"] = verdict
+                    stats["quality"] = (outcome.get("quality")
+                                        if isinstance(outcome, dict) else None)
+                    stats["recovered"] = bool(isinstance(outcome, dict)
+                                              and outcome.get("recovered"))
                 store.finish_step(
-                    task_id, sid, "completed",
+                    task_id, sid, "unverified" if verdict == "revise" else "completed",
                     tokens=stats.get("prompt_tokens", 0) + stats.get("completion_tokens", 0),
                     cost_usd=stats.get("cost_usd", 0.0),
                     artifact_path=step.produces or "")
@@ -1429,7 +1501,7 @@ class Orchestrator:
             f"to write down what the room agreed before you finish."
         )
 
-        meeting_tools.bind_workspace(workspace)
+        meeting_tools.bind_workspace(workspace, step.id)
         # file_ops too, not just the meeting tools. A chair whose own manifest
         # carries write_file will use it -- and with only meeting_tools bound
         # that write escaped the workspace and landed loose in backend/, giving
@@ -1556,6 +1628,18 @@ class Orchestrator:
                 await self.boss_agent.speak(
                     f"Dispatched {step.id} to {specialist.name}", task_id=task_id)
 
+        # The mission budget, readable from inside the agent's own loop, so a
+        # step already running stops spending when the mission is out.
+        budget_token = step_guard.bind_budget(
+            lambda: (self._mission_tokens_spent(task_id), settings.max_tokens_budget_per_task))
+        try:
+            return await self._dispatch_under_lock(
+                step, specialist, subtask, workspace, task_id, goal, grant)
+        finally:
+            step_guard.reset_budget(budget_token)
+
+    async def _dispatch_under_lock(self, step, specialist, subtask, workspace,
+                                   task_id, goal, grant):
         # One task per specialist at a time, even if the graph offers two.
         async with self._agent_lock(step.agent_id):
             await asyncio.sleep(0.3)  # Visual handoff pacing
@@ -1572,7 +1656,7 @@ class Orchestrator:
                     await event_bus.emit(Event(
                         type=EventType.MEMORY_RECALLED,
                         agent_id=step.agent_id,
-                        task_id=subtask_id,
+                        task_id=subtask.id,
                         data={
                             "step_id": step.id,
                             "agent_name": specialist.name,
@@ -1623,7 +1707,8 @@ class Orchestrator:
             return result_text
 
         current = workspace.get(step.produces)
-        if current is not None and current.content != before_content:
+        if (current is not None and current.content != before_content
+                and current.step_id == step.id):
             # Rewritten in place, under the name the plan promised.
             return current.content
 
@@ -1673,6 +1758,11 @@ class Orchestrator:
         Reads the available workspace artifacts and calls the primary model to produce
         the full file directly, preventing 39-byte stubs or blank files from breaking
         the mission outcome.
+
+        What it files is a stand-in, and is marked as one: a banner in the file,
+        `recovered: true` on the step, and a verdict that stays "revise" so the
+        mission ends `unverified`. The model is held to the documents it is
+        given, because the step that should have gathered the facts did not.
         """
         if not step.produces or not llm_configured():
             return None
@@ -1700,10 +1790,11 @@ class Orchestrator:
             system_role = "You are a precise data extraction specialist generating clean, complete CSV."
         else:
             format_instruction = (
-                f"Generate the full, complete Markdown deliverable for '{step.produces}'. "
-                f"Do not summarize or apologize. Output the final file contents directly and completely."
+                f"Write the Markdown deliverable for '{step.produces}' from the documents above. "
+                f"Output the file contents directly."
             )
-            system_role = "You are an executive technical synthesizer writing a finalized deliverable file from research findings."
+            system_role = ("You assemble a deliverable strictly from the documents you are given, "
+                           "and you never add information that is not in them.")
 
         prompt = (
             f"Mission Goal: {goal}\n"
@@ -1713,7 +1804,19 @@ class Orchestrator:
             + "\n".join(f"- {f}" for f in failures) + "\n\n"
             f"Available Workspace Documents:\n{context}\n\n"
             f"Instructions:\n"
-            f"{format_instruction}"
+            f"{format_instruction}\n\n"
+            # The failure this exists to stop is invention. The step that should
+            # have written this file did not, so there is nothing behind it but
+            # these documents -- and a model told to produce "the full, complete
+            # deliverable" with nothing to produce it from wrote a data summary,
+            # sources and meeting quotes out of thin air.
+            f"RULES:\n"
+            f"- Use only facts, figures, names, URLs and quotations that appear in the "
+            f"documents above. Invent none of them.\n"
+            f"- Do not describe work, runs, meetings or tool results the documents do "
+            f"not record.\n"
+            f"- Where the documents do not contain what the task requires, say plainly "
+            f"what is missing instead of filling the gap."
         )
 
         try:
@@ -1733,6 +1836,10 @@ class Orchestrator:
                 text = re.sub(r"\n?```$", "", text).strip()
 
             if text and len(text) > 40:
+                if not produces_lower.endswith((".json", ".csv")):
+                    # Said in the file itself, where every later reader sees it:
+                    # the next step, the synthesis, and a person opening it.
+                    text = RECOVERY_BANNER + text
                 await workspace.put(
                     name=step.produces,
                     content=text,
@@ -1835,6 +1942,7 @@ class Orchestrator:
         attempt = 0
         quality: Optional[float] = None
         verdict = "accept"
+        recovered = False
         stats: Dict[str, Any] = {}
         result_text = ""
         artifact_text = ""
@@ -1881,11 +1989,17 @@ class Orchestrator:
                     feedback = check.as_guidance()
                     continue
                 if step.produces:
-                    recovered = await self._recover_missing_artifact(
+                    recovered_text = await self._recover_missing_artifact(
                         workspace, step, specialist, goal, check.failures)
-                    if recovered:
-                        artifact_text = recovered
-                        verdict = "accept"
+                    if recovered_text:
+                        # Filed so downstream steps are not stranded, but the
+                        # verdict stays "revise". This used to be "accept", with
+                        # no reviewer ever reading the result: observed, a
+                        # recovered scouting report with 150 invented records,
+                        # made-up URLs and quotes from a meeting that never
+                        # happened, marked as a passing step.
+                        artifact_text = recovered_text
+                        recovered = True
                 break
 
             critique = await critic.critique(goal, step.description, artifact_text)
@@ -1915,6 +2029,7 @@ class Orchestrator:
             attempts=attempt,
             verdict=verdict,
             quality=quality,
+            recovered=recovered,
         )
 
         if settings.memory_enabled:
@@ -1949,6 +2064,8 @@ class Orchestrator:
             "attempts": attempt,
             "verdict": verdict,
             "quality": quality,
+            # The artifact was written by the harness, not by this step's agent.
+            "recovered": recovered,
         }
 
     # ---------------------------------------------------------------- synthesis
@@ -2056,7 +2173,19 @@ class Orchestrator:
 
         failures = [f"{s.id} ({s.agent_id}): {s.description[:120]}"
                     for s in plan.steps if s.status == "failed"]
+        # Finished but rejected by its reviewer. Named alongside the failures so
+        # the conclusion treats that step's artifact as unreliable rather than
+        # building on it.
+        failures += [f"{s.id} ({s.agent_id}): finished, but its reviewer's final "
+                     f"verdict was 'revise' -- treat its artifact as unverified"
+                     for s in self._unverified_steps(workspace.mission_id, plan)]
         return await synthesis.conclude(user_prompt, artifacts, failures)
+
+    def _unverified_steps(self, task_id: str, plan: Plan) -> List[PlanStep]:
+        """Completed steps whose final review verdict was 'revise'."""
+        rows = self._step_telemetry.get(task_id, {})
+        return [s for s in plan.steps
+                if s.status == "completed" and rows.get(s.id, {}).get("verdict") == "revise"]
 
     async def _synthesize_results(
         self,
@@ -2077,6 +2206,13 @@ class Orchestrator:
         # single-mission-at-a-time assumption already holds for `self._slots`
         # and the tracing stack.
         self._last_ungrounded = list(conclusion.ungrounded)
+        unverified = self._unverified_steps(workspace.mission_id, plan)
+        unexecuted: Optional[List[str]] = None
+        if getattr(self, "_provenance_checkable", True):
+            unexecuted = provenance.unexecuted_sql(
+                [(n, a.content or "") for n, a in workspace.artifacts.items()],
+                workspace.executed_queries)
+        self._last_unexecuted_sql = unexecuted
 
         lines = [
             "# 🎯 AgentHQ Mission Briefing",
@@ -2108,12 +2244,25 @@ class Orchestrator:
             lines.append("")
             lines.append("---")
 
+        if unexecuted:
+            # Placed with the finding, not in the audit trail: a query printed
+            # beside a figure is the reader's evidence for that figure.
+            lines.append("## ⚠️ SQL no step ran\n")
+            lines.append("These queries appear in the artifacts, but no successful "
+                         "`query_data` call in this mission executed them. Any "
+                         "figure shown with one was not produced by it.\n")
+            lines.extend(f"- `{q}`" for q in unexecuted)
+            lines.append("")
+            lines.append("---")
+
         lines.append("## 🗺️ Execution Graph\n")
 
         for step in plan.steps:
             deps = ", ".join(step.dependencies) if step.dependencies else "start"
             name = self.agents[step.agent_id].name if step.agent_id in self.agents else step.agent_id
             marker = {"completed": "✅", "failed": "❌", "running": "⏳"}.get(step.status, "•")
+            if any(u.id == step.id for u in unverified):
+                marker = "⚠️"
             lines.append(f"- {marker} `{step.id}` **{name}** — {step.description[:90]} "
                          f"_(after: {deps} → produces `{step.produces}`)_")
 
@@ -2165,6 +2314,10 @@ class Orchestrator:
         if failed:
             lines.append(f"{completed} of {len(plan.steps)} steps completed; **{failed} failed**. "
                          f"Review the failed branches before acting on this briefing.")
+        elif unverified:
+            lines.append(f"All {completed} steps ran, but **{len(unverified)} ended with a "
+                         f"'revise' verdict**: {', '.join(f'`{s.id}`' for s in unverified)}. "
+                         f"Their artifacts are unverified.")
         else:
             lines.append(f"All {completed} steps completed and every artifact filed.")
 

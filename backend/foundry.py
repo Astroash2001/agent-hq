@@ -71,8 +71,6 @@ _CAPABILITY = {
     "search_workspace": "cross-document search",
     "query_data": "data querying",
     "calculate": "exact calculation",
-    "code_analysis": "code inspection",
-    "terminal": "command execution",
 }
 
 _SLUG_RE = re.compile(r"[^a-z0-9_]+")
@@ -284,6 +282,7 @@ async def hire(
     existing_ids: Sequence[str],
     mission_id: str,
     seats_available: int,
+    existing_names: Optional[Sequence[str]] = None,
 ) -> tuple:
     """
     Design a contractor for each hireable gap.
@@ -295,6 +294,10 @@ async def hire(
     manifests: List[AgentManifest] = []
     refusals: List[str] = []
     taken = list(existing_ids)
+    # Names already in the room. The design model picks a name per hire with no
+    # idea who else was hired, and two contractors both came back "Maya" -- so
+    # the briefing credited the extraction and the guardrail probe to one person.
+    used_names = {str(n).strip().lower() for n in (existing_names or []) if n}
 
     budget = min(settings.max_spawned_agents, max(0, seats_available))
 
@@ -317,6 +320,10 @@ async def hire(
             continue
 
         manifest = await design(goal, gap, taken, index)
+        if manifest.name.strip().lower() in used_names:
+            spare = [n for n in _NAMES if n.lower() not in used_names]
+            manifest.name = spare[0] if spare else f"{manifest.name} {len(manifests) + 2}"
+        used_names.add(manifest.name.strip().lower())
         manifest.spawned = True
         manifest.spawned_for = gap.step_id
         manifest.spawned_reason = ", ".join(gap.needed)

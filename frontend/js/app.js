@@ -23,7 +23,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. Establish WebSocket Connection with Backend Server
     function connectWebSocket() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws`;
+        const wsUrl = window.AgentAuth
+            ? window.AgentAuth.socketUrl(`${protocol}//${window.location.host}/ws`)
+            : `${protocol}//${window.location.host}/ws`;
 
         socket = new WebSocket(wsUrl);
 
@@ -32,7 +34,13 @@ document.addEventListener('DOMContentLoaded', () => {
             hud.addTerminalLog('Connected to AI Agent HQ Network.', 'SUCCESS');
         };
 
-        socket.onclose = () => {
+        socket.onclose = (event) => {
+            // 1008: the server refused the token. Ask once, then reconnect with
+            // what was entered; a second refusal is left in the log.
+            if (event && event.code === 1008) {
+                hud.addTerminalLog('Server refused the connection: API token required.', 'ERROR');
+                if (!window.AgentAuth || !window.AgentAuth.askAfterSocketRefusal()) return;
+            }
             reconnectAttempts++;
             setTimeout(connectWebSocket, Math.min(3000 * reconnectAttempts, 10000));
         };
@@ -315,11 +323,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 {
                     const failed = payload.steps_failed || 0;
                     const done = payload.steps_completed || 0;
+                    // Every step ran, but a reviewer rejected at least one of
+                    // them. Not a success, and not a failure either.
+                    const unverified = payload.outcome === 'unverified';
                     hud.addTerminalLog(
                         failed
                             ? `Task ended in ${payload.duration_seconds}s — ${done} step(s) completed, ${failed} failed`
-                            : `Task completed in ${payload.duration_seconds}s`,
-                        failed ? 'ERROR' : 'SUCCESS');
+                            : unverified
+                                ? `Task finished in ${payload.duration_seconds}s — unverified: ${(payload.unverified_steps || []).join(', ')} ended on a 'revise' verdict`
+                                : `Task completed in ${payload.duration_seconds}s`,
+                        failed ? 'ERROR' : unverified ? 'WARN' : 'SUCCESS');
                 }
                 hud.stopMissionMeter();
                 hud.showExecutiveMemo(payload.result, payload);

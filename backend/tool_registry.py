@@ -7,10 +7,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from event_bus import event_bus
 from schemas import Event, EventType
-from tools.terminal import execute_terminal
 from tools.file_ops import read_file, write_file, list_files
 from tools.web_search import search_web
-from tools.code_analysis import analyze_python_code
 from tools.fetch_url import fetch_url
 from tools.calculate import calculate
 from tools.query_data import query_data
@@ -219,24 +217,24 @@ class ToolRegistry:
         return result
 
     def _register_default_tools(self):
-        """Register the standard built-in harness tools."""
-        # 1. Terminal / Shell
-        self.register(
-            name="terminal",
-            description="Execute a shell or PowerShell command on the host system to run scripts, tests, or check status.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "command": {"type": "string", "description": "The exact shell command to execute"},
-                    "cwd": {"type": "string", "description": "Optional working directory"}
-                },
-                "required": ["command"]
-            },
-            function=execute_terminal,
-            risk="execute",
-        )
+        """
+        Register the standard built-in harness tools.
 
-        # 2. Web Search
+        There is deliberately no tool that runs code. `terminal` and
+        `code_analysis` used to be here, and either one gave a model arbitrary
+        code execution as the user running the server: `python <script>` passed
+        the terminal allowlist, and `code_analysis` ran whatever snippet it was
+        handed with the server's full environment -- API keys included. The
+        file sandbox cannot contain code that opens files itself. In every
+        recorded mission the two were either never called or failed on every
+        call, so the office reads and proposes code instead of running it.
+
+        Not registering them is the control, not just leaving them off the
+        manifests: the catalogue is what the planner offers and what the
+        foundry hires from, so a tool that is not here cannot be granted to
+        anyone, and a step that declares one fails loudly naming it.
+        """
+        # 1. Web Search
         self.register(
             name="web_search",
             description=(
@@ -265,7 +263,7 @@ class ToolRegistry:
             risk="read",
         )
 
-        # 3. Read File
+        # 2. Read File
         self.register(
             name="read_file",
             description=(
@@ -295,7 +293,7 @@ class ToolRegistry:
             risk="read",
         )
 
-        # 4. Write File
+        # 3. Write File
         self.register(
             name="write_file",
             description="Write or overwrite code or text content to a destination file.",
@@ -311,7 +309,7 @@ class ToolRegistry:
             risk="write",
         )
 
-        # 5. List Files
+        # 4. List Files
         self.register(
             name="list_files",
             description="List files and directories in a given folder.",
@@ -326,22 +324,7 @@ class ToolRegistry:
             risk="read",
         )
 
-        # 6. Code Analysis
-        self.register(
-            name="code_analysis",
-            description="Parse Python code using AST and run a test execution to detect bugs or syntax errors.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "code_snippet": {"type": "string", "description": "Python source code string to analyze"}
-                },
-                "required": ["code_snippet"]
-            },
-            function=analyze_python_code,
-            risk="execute",
-        )
-
-        # 7. Fetch URL
+        # 5. Fetch URL
         self.register(
             name="fetch_url",
             description=(
@@ -373,7 +356,7 @@ class ToolRegistry:
             risk="execute",
         )
 
-        # 8. Calculate
+        # 6. Calculate
         self.register(
             name="calculate",
             description=(
@@ -395,7 +378,7 @@ class ToolRegistry:
             risk="read",
         )
 
-        # 9. Query Data
+        # 7. Query Data
         self.register(
             name="query_data",
             description=(
@@ -421,7 +404,7 @@ class ToolRegistry:
             risk="read",
         )
 
-        # 10. Search Workspace
+        # 8. Search Workspace
         self.register(
             name="search_workspace",
             description=(
@@ -447,7 +430,7 @@ class ToolRegistry:
             risk="read",
         )
 
-        # 11. Describe Image
+        # 9. Describe Image
         self.register(
             name="describe_image",
             description=(
@@ -475,7 +458,7 @@ class ToolRegistry:
             risk="execute",
         )
 
-        # 12. Conference table. These two only work in the meeting room -- see
+        # 10. Conference table. These two only work in the meeting room -- see
         # tools/meeting.py for why they are their own pair rather than reusing
         # read_file / write_file.
         from tools.meeting import TOOLS as MEETING_TOOLS

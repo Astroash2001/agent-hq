@@ -275,10 +275,17 @@ which is what populates the HUD terminal. Registered tools:
 
 | Tool | Module |
 |---|---|
-| `terminal` | `tools/terminal.py` |
 | `web_search` | `tools/web_search.py` |
+| `fetch_url` | `tools/fetch_url.py` |
 | `read_file`, `write_file`, `list_files` | `tools/file_ops.py` |
-| `code_analysis` | `tools/code_analysis.py` |
+| `search_workspace` | `tools/search_workspace.py` |
+| `query_data` | `tools/query_data.py` |
+| `calculate` | `tools/calculate.py` |
+| `describe_image` | `tools/describe_image.py` |
+| `review_artifacts`, `record_decision` | `tools/meeting.py` |
+
+No tool runs code. `terminal` and `code_analysis` were removed; see
+`tool_registry._register_default_tools` and [[DECISIONS]].
 
 ### `schemas.py` — the contract
 

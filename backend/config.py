@@ -314,26 +314,23 @@ class Settings(BaseSettings):
     # earlier `workspace_root` pointed one level higher still, at the parent of
     # the repo, which would have leaked sibling projects into any path check --
     # it was replaced rather than fixed, and is gone. jail_root restricts path
-    # traversal, subprocess cwd, and file operations to this repository.
+    # traversal and file operations to this repository.
+    #
+    # There is no code-execution tool, so no terminal allowlist either: see
+    # `tool_registry._register_default_tools` for why both were removed.
     jail_root: str = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
-    # Terminal tool allowlist and execution caps.
-    # Empty list means "refuse everything" rather than "allow everything".
-    # Multi-word commands match on binary + subcommands (e.g., "git status").
-    terminal_sandbox_enabled: bool = True
-    terminal_allowed_commands: list[str] = [
-        "python",
-        "pytest",
-        "git status",
-        "git diff",
-        "git log",
-        "ls",
-        "dir",
-    ]
-    terminal_max_output_chars: int = 5000
 
     # File ops path containment kill switch.
     file_ops_sandbox_enabled: bool = True
+    # Inside the jail but still not an agent's to read (`file_ops.denied_reason`).
+    # File names that hold secrets, matched case-insensitively on the basename.
+    read_denied_names: list[str] = [".env", ".env.*", "*.pem", "*.key"]
+    # Directories under jail_root. `evals` holds ground-truth answers and judge
+    # rubrics: a mission that can read the answer key validates against it
+    # instead of doing the work, which is what a recorded run was seen to do.
+    read_denied_dirs: list[str] = [".git", "evals"]
+    # The run store, memory and embedding cache are denied by their own paths,
+    # and so is every mission directory but the one running.
 
     # --- fetch_url: outbound requests to an address the model chooses --------
     # A guardrail class the harness did not have. Every other outbound call
@@ -392,15 +389,22 @@ class Settings(BaseSettings):
     search_workspace_max_results: int = 100
     search_workspace_max_file_bytes: int = 2_000_000
 
-    # API authentication and network hardening.
-    # When api_token is empty, all endpoints remain open (local dev / no-key demo).
-    # When set, require it on /ws connect and on POST /api/emergency-stop.
+    # API authentication and network hardening (api_guard.py).
+    # When set, every /api/ route but /api/health and the /ws socket require it.
+    # When empty, the API is open -- which production refuses to start with.
     api_token: str = os.getenv("AGENTHQ_API_TOKEN", "")
     cors_origins: list[str] = ["http://localhost:8080"]
 
     # Rate limiting on WebSocket task submissions (seconds between submissions).
     # 0 or negative disables rate limiting.
     ws_submit_rate_limit: float = 1.0
+    # See api_guard.py. Production with no api_token refuses to start unless
+    # this is set, which is the explicit way to say "only I can reach it".
+    allow_unauthenticated: bool = False
+    # Missions running at once, across every connection. Each one is real
+    # spend, and a per-connection rate limit does nothing against a second
+    # connection. 0 means no cap.
+    max_concurrent_missions: int = 1
 
     # Both files are absolute and anchored to this module, because a relative
     # ".env" is resolved against the process's working directory -- and only

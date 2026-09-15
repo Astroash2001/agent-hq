@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import llm
+import step_guard
 import tracing
 from config import date_context, settings, llm_configured
 from event_bus import event_bus
@@ -26,6 +27,41 @@ def _call_id(step: int, call_index: int) -> str:
     to calls by this id.
     """
     return f"call_{step}_{call_index}"
+
+
+# Arguments whose value is a body rather than a choice. The trace keeps their
+# length, not their text: a write_file span carrying the whole report would make
+# the trace larger than the work it describes.
+_BODY_ARGS = {"content", "decision", "code_snippet"}
+
+# Tools called for their side effect. Repeating one is a new write, not a repeat
+# of an observation, so the duplicate-call guard leaves them alone.
+_SIDE_EFFECT_TOOLS = {"write_file", "record_decision"}
+_TRACE_ARG_CHARS = 300
+
+
+def _trace_args(tool_args: Any) -> Dict[str, Any]:
+    """
+    A tool call's arguments as the trace records them.
+
+    Recorded at all because a span that says only `success: false` cannot be
+    debugged: observed, an extraction step made 35 failing `query_data` calls and
+    the trace could not say which file it had asked for or what came back.
+    """
+    if not isinstance(tool_args, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for key, value in tool_args.items():
+        if key in _BODY_ARGS and isinstance(value, str):
+            out[key] = f"<{len(value)} chars>"
+        elif isinstance(value, str):
+            out[key] = value[:_TRACE_ARG_CHARS] + ("..." if len(value) > _TRACE_ARG_CHARS else "")
+        elif isinstance(value, (int, float, bool)) or value is None:
+            out[key] = value
+        else:
+            text = json.dumps(value, default=str)
+            out[key] = text[:_TRACE_ARG_CHARS] + ("..." if len(text) > _TRACE_ARG_CHARS else "")
+    return out
 
 
 def _append_tool_exchange(messages, call_id, tool_name, tool_args, result) -> None:
@@ -176,7 +212,14 @@ class BaseAgent:
 
         user_parts = [f"Task: {task.description}"]
         if goal:
-            user_parts.append(f"This subtask is one step of a larger mission: {goal}")
+            # Context, not a second assignment. Handed the whole goal with no
+            # boundary, a guardrail agent also ran the extraction and wrote the
+            # extraction step's file -- work, tokens and a file that were not
+            # its to produce.
+            user_parts.append(
+                f"For context only, this task is one step of a larger mission: {goal}\n"
+                f"Other steps of that mission are assigned to other specialists. "
+                f"Do only the Task above, and write only your own deliverable.")
         if context:
             user_parts.append(context)
 
@@ -194,6 +237,8 @@ class BaseAgent:
         final_answer = ""
         last_content = ""      # best non-empty reply seen, for the fallback below
         searches = 0           # web_search calls this run, capped below
+        seen_calls: Dict[str, int] = {}   # identical observing calls, see below
+        budget_last_turn = False          # the one closing turn after the budget runs out
 
         while step < settings.max_agent_steps:
             if self._is_cancelled:
@@ -209,6 +254,36 @@ class BaseAgent:
                 }
                 return "Task halted by emergency stop."
 
+            # The mission's token budget, checked every turn rather than only
+            # between steps. Out of budget: one last turn to file what exists,
+            # with write_file as the only tool, then stop. Observed without
+            # this: the gate fired at 756K of 400K and a running step carried
+            # on to 1.1M.
+            over_budget = step_guard.budget_exhausted()
+            turn_schemas = tool_schemas
+            if over_budget:
+                if budget_last_turn:
+                    logger.warning("[%s] stopped: mission token budget exhausted (%s)",
+                                   self.name, over_budget)
+                    final_answer = last_content or (
+                        f"Stopped: the mission token budget is exhausted ({over_budget}).")
+                    break
+                budget_last_turn = True
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"The mission's token budget is used up ({over_budget}). Stop all "
+                        f"further investigation. This is your final turn. "
+                        + (f"Write your deliverable to `{produces}` with write_file now, "
+                           f"using only what you already have, and say plainly what "
+                           f"you did not get to. " if produces and "write_file" in granted
+                           else "Reply now with what you have, and say plainly what you "
+                                "did not get to. ")
+                    ),
+                })
+                turn_schemas = [s for s in tool_schemas
+                                if s.get("function", {}).get("name") == "write_file"]
+
             step += 1
             await self.update_status(AgentStatus.THINKING, {"step": step})
 
@@ -217,7 +292,7 @@ class BaseAgent:
                 async with tracing.span(
                     "turn", f"{self.id} turn {step}", agent_id=self.id, step=step
                 ) as turn:
-                    response_data = await self._call_llm(messages, tool_schemas, task)
+                    response_data = await self._call_llm(messages, turn_schemas, task)
                     turn.set(
                         model=response_data.get("model", ""),
                         prompt_tokens=response_data.get("prompt_tokens", 0),
@@ -333,6 +408,38 @@ class BaseAgent:
                 tool_args = tool_call.get("arguments", {})
                 tools_used.append(tool_name)
 
+                # Out of budget: nothing but filing the deliverable runs.
+                if budget_last_turn and tool_name != "write_file":
+                    _append_tool_exchange(
+                        messages, _call_id(step, call_index), tool_name, tool_args,
+                        {"success": False, "refused": True,
+                         "error": "The mission token budget is exhausted. Only write_file is available."})
+                    continue
+
+                # The same observing call, with the same arguments, again. Its
+                # result is already in this conversation and will not change, and
+                # every repeat re-sends the whole history. Observed: an agent ran
+                # an identical 30,000-row query ten times hoping the 200-row cap
+                # would lift, on a mission that went on to spend 1.1M tokens.
+                if tool_name not in _SIDE_EFFECT_TOOLS:
+                    try:
+                        call_key = f"{tool_name}:{json.dumps(tool_args, sort_keys=True, default=str)}"
+                    except (TypeError, ValueError):
+                        call_key = f"{tool_name}:{tool_args!r}"
+                    seen_calls[call_key] = seen_calls.get(call_key, 0) + 1
+                    if seen_calls[call_key] > 1:
+                        _append_tool_exchange(
+                            messages, _call_id(step, call_index), tool_name, tool_args,
+                            {"success": False, "refused": True,
+                             "error": (
+                                 f"You already made this exact {tool_name} call in this task, "
+                                 f"and its result is earlier in this conversation. Repeating "
+                                 f"it returns the same result. Use that result, change the "
+                                 f"arguments, or write your deliverable.")})
+                        logger.info("[%s] refused repeat of an identical %s call",
+                                    self.name, tool_name)
+                        continue
+
                 # Late-turn tool gating: force write_file on final turns when a deliverable is promised
                 if remaining <= 1 and produces and "write_file" in granted and tool_name in (
                     "web_search", "fetch_url", "read_file", "search_workspace", "calculate"
@@ -415,11 +522,18 @@ class BaseAgent:
                         # model chose reaches a tool function.
                         granted=granted,
                     )
+                    succeeded = bool(isinstance(tool_result, dict)
+                                     and tool_result.get("success", True))
                     tool_span.set(
                         station_id=station.id if station else None,
-                        success=bool(isinstance(tool_result, dict)
-                                     and tool_result.get("success", True)),
+                        success=succeeded,
+                        args=_trace_args(tool_args),
                     )
+                    if not succeeded and isinstance(tool_result, dict):
+                        tool_span.set(
+                            refused=bool(tool_result.get("refused")),
+                            tool_error=str(tool_result.get("error") or "")[:_TRACE_ARG_CHARS],
+                        )
 
                 # Feed observation back to context
                 _append_tool_exchange(messages, _call_id(step, call_index),
@@ -610,10 +724,10 @@ class BaseAgent:
         if history_len <= 2:
             if "coder" in self.id or "jim" in self.id or "bug" in desc or "code" in desc:
                 return {
-                    "thought": "Checking codebase syntax and running AST test...",
+                    "thought": "Reading the code in the workspace...",
                     "tool_calls": [{
-                        "name": "code_analysis",
-                        "arguments": {"code_snippet": "def calculate_score(val):\n    return val * 1.25\n\nprint(calculate_score(10))"}
+                        "name": "search_workspace",
+                        "arguments": {"pattern": "def "}
                     }],
                     "prompt_tokens": 140,
                     "completion_tokens": 60

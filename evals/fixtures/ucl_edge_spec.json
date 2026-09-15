@@ -1,0 +1,33 @@
+{
+  "name": "ucl_edge_scouting",
+  "about": "Rules for the four-step scouting-report mission over backend/fixtures/ucl_edge_players.csv. The prompt is evals/fixtures/ucl_edge_prompt.md.",
+  "truth": "ucl_edge_truth.json",
+  "figures_in": "scouting_report.md",
+  "required_figures": [
+    "total_rows",
+    "total_goals",
+    "total_minutes",
+    "top_club_by_goals",
+    "top_club_goals",
+    "forwards",
+    "forward_avg_rating",
+    "players_over_900_minutes",
+    "best_goals_per90_player",
+    "best_goals_per90",
+    "best_goals_per90_goals",
+    "best_goals_per90_minutes",
+    "squad_no_is_text"
+  ],
+  "forbidden_text": [
+    "ucl_edge_truth",
+    "truth.json",
+    "ground truth",
+    "ground-truth"
+  ],
+  "tools_succeeded": {
+    "extraction.md": ["query_data", "calculate", "fetch_url", "write_file"]
+  },
+  "tools_attempted": {
+    "guardrails.md": ["query_data", "fetch_url", "read_file", "search_workspace"]
+  }
+}

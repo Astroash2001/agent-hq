@@ -123,6 +123,16 @@ class MissionWorkspace:
     def __init__(self, mission_id: str):
         self.mission_id = mission_id
         self.artifacts: Dict[str, Artifact] = {}
+        # Every SELECT `query_data` ran successfully for this mission, in order.
+        # In memory only: a resumed mission starts empty, and says so by
+        # skipping the provenance check rather than flagging SQL a dead process
+        # really did run.
+        self.executed_queries: List[str] = []
+        # Promised filename -> the step that promised it. Observed: a guardrail
+        # step, handed the whole mission goal, also wrote `extraction.md` --
+        # overwriting the extraction step's file mid-run, so the review would
+        # have read the wrong agent's figures under the right agent's name.
+        self.owners: Dict[str, str] = {}
         self.dir: Optional[str] = None
         if settings.persist_missions:
             try:
@@ -234,6 +244,22 @@ class MissionWorkspace:
                 }
             ))
         return delivered
+
+    def reserve(self, owners: Dict[str, str]) -> None:
+        """Record which step owns each promised filename."""
+        self.owners.update({_safe_name(name): sid for name, sid in owners.items() if name and sid})
+
+    def claimed_by_another(self, name: str, step_id: str) -> Optional[str]:
+        """The step that owns `name`, when it is not `step_id`; otherwise None."""
+        owner = self.owners.get(_safe_name(name))
+        if owner and step_id and owner != step_id:
+            return owner
+        return None
+
+    def record_query(self, sql: str) -> None:
+        """Note one successfully executed query, for the provenance check."""
+        if sql and sql.strip():
+            self.executed_queries.append(sql.strip())
 
     def get(self, name: str) -> Optional[Artifact]:
         return self.artifacts.get(name)

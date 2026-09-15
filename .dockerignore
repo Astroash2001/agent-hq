@@ -11,6 +11,9 @@ venv/
 env/
 backend/data/*
 !backend/data/.gitkeep
+# Regenerated inside the build, so a stale local copy never ships.
+backend/fixtures/ucl_edge_players.csv
+evals/
 backend/tests/
 furniture/
 Modern_Interiors_Free_v2.2/
