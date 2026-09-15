@@ -6,8 +6,8 @@ over the same rows that were written, never by asking `query_data` -- a check
 that uses the tool under test to verify the tool under test agrees with itself
 and proves nothing. Seeded, so the file and its truths regenerate identically.
 
-    python backend/fixtures/make_edge_fixtures.py            # CSV, memo and truth
-    python backend/fixtures/make_edge_fixtures.py --no-truth # CSV and memo only
+    python backend/fixtures/make_scouting_fixtures.py            # CSV, memo and truth
+    python backend/fixtures/make_scouting_fixtures.py --no-truth # CSV and memo only
 
 The inputs live here, in `backend/fixtures/`, where an agent may read them. The
 answers go to `evals/fixtures/`, which the file sandbox denies: a mission that
@@ -102,7 +102,7 @@ def main():
 
     rows = build_players()
 
-    csv_path = os.path.join(HERE, "ucl_edge_players.csv")
+    csv_path = os.path.join(HERE, "scouting_players.csv")
     with open(csv_path, "w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
         writer.writeheader()
@@ -110,7 +110,7 @@ def main():
 
     # A letter, not a table. query_data must refuse it rather than making
     # `dear_analytics` a column and answering from prose.
-    with open(os.path.join(HERE, "ucl_edge_memo.txt"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(HERE, "scouting_memo.txt"), "w", encoding="utf-8") as fh:
         fh.write(
             "Dear analytics team,\n\n"
             "The attached export covers the full competition. Note that squad\n"
@@ -129,7 +129,7 @@ def main():
     if args.no_truth:
         return
     os.makedirs(TRUTH_DIR, exist_ok=True)
-    truth_path = os.path.abspath(os.path.join(TRUTH_DIR, "ucl_edge_truth.json"))
+    truth_path = os.path.abspath(os.path.join(TRUTH_DIR, "scouting_answer_key.json"))
     with open(truth_path, "w", encoding="utf-8") as fh:
         json.dump(facts, fh, indent=2)
     print(f"\nwrote {truth_path}")

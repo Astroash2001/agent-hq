@@ -46,11 +46,11 @@ tools/_slices/
 backend/data/
 # Sample data a mission can be pointed at lives in backend/fixtures/ instead,
 # which is committed normally. The edge-case CSV there is NOT committed: the
-# generator is seeded, so `python backend/fixtures/make_edge_fixtures.py`
+# generator is seeded, so `python backend/fixtures/make_scouting_fixtures.py`
 # rebuilds it byte for byte (and the Docker build does exactly that), and a
 # fixture that can be rebuilt is not worth a megabyte of history. Its answer
-# key is evals/fixtures/ucl_edge_truth.json, kept where agents cannot read it.
-backend/fixtures/ucl_edge_players.csv
+# key is evals/fixtures/scouting_answer_key.json, kept where agents cannot read it.
+backend/fixtures/scouting_players.csv
 
 
 # =============================================================================

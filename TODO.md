@@ -172,7 +172,7 @@ process never saw.
 **Done.** The fixtures sat in `backend/data/`, which `.dockerignore` excludes and
 a deployment mounts a disk over, so a hosted run had no CSV at all. Inputs are
 in `backend/fixtures/` and the Docker build generates the CSV; the answer key is
-`evals/fixtures/ucl_edge_truth.json`, where agents cannot read it. `render.yaml`
+`evals/fixtures/scouting_answer_key.json`, where agents cannot read it. `render.yaml`
 declares the disk and environment a hosted run needs.
 
 ### Agents could run code

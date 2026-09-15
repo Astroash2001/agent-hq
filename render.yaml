@@ -21,7 +21,7 @@
 #
 #   AGENTHQ_API_TOKEN=<token> python -m evals.mission_check \
 #       --base-url https://<service>.onrender.com --latest 1 \
-#       --spec evals/fixtures/ucl_edge_spec.json
+#       --spec evals/fixtures/scouting_rules.json
 services:
   - type: web
     name: agent-hq

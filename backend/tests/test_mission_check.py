@@ -116,11 +116,11 @@ def test_unexecuted_sql_and_an_unverified_outcome_fail(scratch):
 
 def test_a_spec_checks_figures_forbidden_text_and_tool_success(scratch):
     source = _write_mission(os.path.join(scratch, "spec"),
-                            report="Validated against ucl_edge_truth.json: 111,520 goals\n",
+                            report="Validated against scouting_answer_key.json: 111,520 goals\n",
                             s1_tools=[("query_data", False)])
     spec = {"figures_in": "scouting_report.md",
             "_truth": {"total_goals": 111520, "total_rows": 30000},
-            "forbidden_text": ["ucl_edge_truth"],
+            "forbidden_text": ["scouting_answer_key"],
             "tools_succeeded": {"extraction.md": ["query_data"]},
             "tools_attempted": {"guardrails.md": ["fetch_url"]}}
     results = mc.check_mission(source, spec)
@@ -132,5 +132,5 @@ def test_a_spec_checks_figures_forbidden_text_and_tool_success(scratch):
 
 
 def test_the_committed_spec_loads_with_its_answer_key():
-    spec = mc.load_spec(os.path.join(mc.REPO, "evals", "fixtures", "ucl_edge_spec.json"))
+    spec = mc.load_spec(os.path.join(mc.REPO, "evals", "fixtures", "scouting_rules.json"))
     assert set(spec["required_figures"]) <= set(spec["_truth"])

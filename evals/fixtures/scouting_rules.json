@@ -1,7 +1,7 @@
 {
-  "name": "ucl_edge_scouting",
-  "about": "Rules for the four-step scouting-report mission over backend/fixtures/ucl_edge_players.csv. The prompt is evals/fixtures/ucl_edge_prompt.md.",
-  "truth": "ucl_edge_truth.json",
+  "name": "scouting_report",
+  "about": "Rules for the four-step scouting-report mission over backend/fixtures/scouting_players.csv. The prompt is evals/fixtures/scouting_prompt.md.",
+  "answer_key": "scouting_answer_key.json",
   "figures_in": "scouting_report.md",
   "required_figures": [
     "total_rows",
@@ -19,8 +19,8 @@
     "squad_no_is_text"
   ],
   "forbidden_text": [
-    "ucl_edge_truth",
-    "truth.json",
+    "scouting_answer_key",
+    "answer_key.json",
     "ground truth",
     "ground-truth"
   ],

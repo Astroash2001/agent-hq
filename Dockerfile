@@ -13,10 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
-# The edge-case test inputs. Seeded, so this CSV is identical to the one a local
+# The scouting test inputs. Seeded, so this CSV is identical to the one a local
 # run queries. --no-truth: the image carries the inputs and never the answers,
 # which only the checker (evals/mission_check.py, run from outside) reads.
-RUN python backend/fixtures/make_edge_fixtures.py --no-truth
+RUN python backend/fixtures/make_scouting_fixtures.py --no-truth
 
 # Ensure runtime mission data directory exists and is writable by non-root user.
 # backend/data holds runtime state only, so a persistent disk mounted over it

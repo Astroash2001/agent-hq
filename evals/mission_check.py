@@ -14,7 +14,7 @@ run and a hosted one:
     python -m evals.mission_check backend/data/missions/<mission_id>
     python -m evals.mission_check --latest 3
     python -m evals.mission_check --base-url https://agent-hq.onrender.com --latest 1
-    python -m evals.mission_check --latest 5 --spec evals/fixtures/ucl_edge_spec.json
+    python -m evals.mission_check --latest 5 --spec evals/fixtures/scouting_rules.json
 
 Generic rules apply to every mission. A spec adds rules for one known task:
 figures that must match an answer key, text that must not appear, tools a
@@ -395,8 +395,10 @@ def load_spec(path: Optional[str]) -> Optional[Dict[str, Any]]:
         return None
     with open(path, encoding="utf-8") as fh:
         spec = json.load(fh)
-    if spec.get("truth"):
-        truth_path = os.path.join(os.path.dirname(os.path.abspath(path)), spec["truth"])
+    # `answer_key` names the file of correct values; `truth` is its older name.
+    key_file = spec.get("answer_key") or spec.get("truth")
+    if key_file:
+        truth_path = os.path.join(os.path.dirname(os.path.abspath(path)), key_file)
         with open(truth_path, encoding="utf-8") as fh:
             spec["_truth"] = json.load(fh)
     return spec
