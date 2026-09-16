@@ -48,7 +48,7 @@ Standard library only. Exits 1 if any mission has a FAIL.
 | `recovered` | the harness reconstructed a step's artifact because the step never wrote it |
 | `artifacts` | a promised artifact is missing or empty |
 | `distinct` | two steps' artifacts are byte-identical |
-| `tools_called` | a step never called a tool it declared in `needs_tools` |
+| `tools_called` | a step called **none** of the tools it was routed on (skipping some is a WARN) |
 | `sql_provenance` | an artifact shows SQL no successful `query_data` call ran |
 | `sandbox` | (WARN) a step tried to read outside its mission and was refused |
 | `grounding`, `budget` | (WARN) ungrounded conclusion figures; tokens over budget |

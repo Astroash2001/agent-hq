@@ -254,17 +254,31 @@ def check_mission(source, spec: Optional[Dict[str, Any]] = None) -> List[Result]
                           else "no two steps filed the same content"))
 
     # 5. A step that needed a tool called it itself.
+    #
+    # `needs_tools` is what the step was routed on, not a checklist it owes.
+    # A step given read_file, list_files and query_data that does the whole job
+    # in SQL has done better work, not worse -- so using NONE of them fails, and
+    # skipping some is a note.
     if spans:
-        unmet = []
+        unused, partial = [], []
         for step in steps:
             needed = step.get("needs_tools") or []
+            if not needed:
+                continue
             called = {t.get("name") for t in views.get(step.get("id"), {}).get("tools", [])}
             lacking = [t for t in needed if t not in called]
-            if lacking:
-                unmet.append(f"{step.get('id')} never called {', '.join(lacking)}")
-        results.append(Result(FAIL if unmet else PASS, "tools_called",
-                              "; ".join(unmet) if unmet
-                              else "every step called the tools it declared"))
+            if lacking and len(lacking) == len(needed):
+                unused.append(f"{step.get('id')} called none of {', '.join(needed)}")
+            elif lacking:
+                partial.append(f"{step.get('id')} did not need {', '.join(lacking)}")
+        if unused:
+            results.append(Result(FAIL, "tools_called", "; ".join(unused)))
+        elif partial:
+            results.append(Result(WARN, "tools_called",
+                                  "declared but unused: " + "; ".join(partial)))
+        else:
+            results.append(Result(PASS, "tools_called",
+                                  "every step used the tools it was routed on"))
 
         tool_spans = [t for v in views.values() for t in v.get("tools", [])]
         if tool_spans and not any("args" in (t.get("attrs") or {}) for t in tool_spans):

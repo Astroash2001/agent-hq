@@ -1922,7 +1922,15 @@ class Orchestrator:
                 f"{step.description}\n\n"
                 f"Deliverable: write your full output to `{step.produces}` with the "
                 f"write_file tool before you finish. Put the actual content in that "
-                f"file -- the next step reads the file, not your reply."
+                f"file -- the next step reads the file, not your reply.\n"
+                # A person opens this file first. One produced for a "best XI"
+                # goal opened with four SQL blocks and never showed the eleven
+                # together: correct, and unreadable.
+                f"Lead with the answer. Open the file with a short summary a "
+                f"reader can take in at once -- the result itself, as a table or "
+                f"a short list when there is more than one figure, name or pick. "
+                f"Method, SQL, evidence and caveats come after it, and anything "
+                f"you could not obtain is stated plainly at the end."
             )
 
         # Citations are asked for only when they were obtainable. Whether a

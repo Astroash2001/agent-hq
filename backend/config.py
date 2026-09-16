@@ -239,7 +239,11 @@ class Settings(BaseSettings):
     synthesis_model: str = ""
     # A conclusion, not a second report. The artifacts are already in the
     # briefing directly below it, so anything longer is restating them.
-    synthesis_max_tokens: int = 600
+    # Enough for a lead table plus its explanation. At 600 a conclusion that
+    # opened with a four-row table was cut mid-word, and the cut is the first
+    # thing a reader sees. `synthesis._whole_sentences` trims any fragment that
+    # still gets through.
+    synthesis_max_tokens: int = 1000
     # The eval suite's rubric grader (evals/judge.py). Fixed and separate from
     # the models under test: grading a model with itself measures its
     # self-consistency, not the quality of its output. Empty means

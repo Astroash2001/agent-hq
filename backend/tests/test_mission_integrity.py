@@ -199,6 +199,46 @@ async def test_a_step_cannot_write_another_steps_deliverable(jail):
     assert clash.get("refused") is True
 
 
+@pytest.mark.asyncio
+async def test_a_step_that_promises_a_file_is_told_to_lead_with_the_answer(jail, monkeypatch):
+    """
+    A deliverable for a "best XI" goal opened with four SQL blocks and never
+    showed the eleven together: correct, and unreadable.
+    """
+    import contracts
+    orch = Orchestrator()
+    workspace = MissionWorkspace("m_brief")
+    step = PlanStep(id="s1", agent_id="creative", description="Pick the best XI",
+                    produces="dream_xi.md")
+    seen = {}
+
+    class Specialist:
+        id = "creative"
+        name = "Eve"
+        tools = ["write_file"]
+        last_run = {"estimated": False}
+
+    class Span:
+        def set(self, **kw):
+            pass
+
+    async def dispatch(step_arg, specialist, subtask_id, workspace_arg, task_id,
+                       goal, description, grant, attempt):
+        seen["description"] = description
+        return "# Dream XI\n" + ("body " * 60)
+
+    monkeypatch.setattr(settings, "memory_enabled", False)
+    monkeypatch.setattr(settings, "contracts_enabled", False)
+    monkeypatch.setattr(orch, "_agent_by_id", lambda _id: Specialist())
+    monkeypatch.setattr(orch, "_dispatch_attempt", dispatch)
+    monkeypatch.setattr(contracts, "infer_spec", lambda *a, **k: contracts.ArtifactSpec())
+
+    await orch._run_step_body(step, workspace, "m_brief", "goal", Span())
+
+    assert "Lead with the answer" in seen["description"]
+    assert "table or" in seen["description"]
+
+
 # ----------------------------------------------------------------- 3. status
 
 def _plan(n=2):

@@ -65,7 +65,11 @@ asked for and the artifacts the specialists produced.
 
 Answer the goal. Lead with the finding, not with a description of the process.
 
-- Write 2-5 short paragraphs, or a short paragraph followed by bullets. Markdown.
+- Open with the answer itself. When the mission produced a set of figures, \
+names or picks, put them in a compact markdown table or short list first, then \
+explain. A reader who stops after the first block should still have the answer.
+- Keep it short enough to finish. Write 2-5 short paragraphs, or a table \
+followed by a paragraph or two. Markdown.
 - Ground every claim in the artifacts you were given. Quote or name the file when \
 a specific number or fact carries the answer.
 - Where the artifacts disagree, say so and say which reading you take.
@@ -142,6 +146,26 @@ def _artifact_block(artifacts: Sequence[Tuple[str, str]]) -> str:
         if budget <= 0:
             break
     return "\n\n".join(blocks)
+
+
+def _whole_sentences(text: str) -> str:
+    """
+    Drop a final fragment the token ceiling cut off.
+
+    A conclusion once ended "...rating 9.5; goals per" mid-word, and that is
+    what a reader sees first. Better a paragraph short than a sentence severed;
+    a reply that ends cleanly is returned untouched.
+    """
+    body = (text or "").rstrip()
+    if not body or body[-1] in ".!?:)|`" or body.endswith("---"):
+        return body
+    cut = max(body.rfind(". "), body.rfind(".\n"), body.rfind("!"), body.rfind("?"))
+    # A whole trailing table row is worth keeping even without punctuation.
+    if body.rstrip().endswith("|"):
+        return body
+    if cut > len(body) * 0.4:
+        return body[:cut + 1]
+    return body
 
 
 def figures(text: str) -> List[str]:
@@ -254,7 +278,7 @@ async def conclude(
                 temperature=0.2,
                 max_tokens=settings.synthesis_max_tokens,
             )
-            text = (result.response.choices[0].message.content or "").strip()
+            text = _whole_sentences((result.response.choices[0].message.content or "").strip())
             span.set(cost_usd=result.cost_usd,
                      total_tokens=result.total_tokens,
                      model=result.model,

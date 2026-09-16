@@ -83,6 +83,32 @@ def test_the_copied_artifact_run_fails_on_the_rules_that_caught_it(scratch):
     assert levels["tools_called"] == mc.FAIL
 
 
+def test_an_unused_extra_tool_is_a_note_not_a_failure(scratch):
+    """
+    A step routed on query_data, read_file and list_files that did the whole
+    job in SQL has done better work, not worse. Observed: a clean deployed run
+    failed only because it never called read_file.
+    """
+    source = _write_mission(os.path.join(scratch, "extra"))
+    manifest_path = os.path.join(source.directory, "mission.json")
+    with open(manifest_path, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+    manifest["steps"][0]["needs_tools"] = ["query_data", "read_file", "list_files"]
+    with open(manifest_path, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh)
+
+    by_rule = {r.rule: r for r in mc.check_mission(source)}
+    assert by_rule["tools_called"].level == mc.WARN
+    assert "read_file" in by_rule["tools_called"].detail
+
+
+def test_a_step_that_used_none_of_its_tools_fails(scratch):
+    source = _write_mission(os.path.join(scratch, "none"), s1_tools=[])
+    by_rule = {r.rule: r for r in mc.check_mission(source)}
+    assert by_rule["tools_called"].level == mc.FAIL
+    assert "called none of" in by_rule["tools_called"].detail
+
+
 def test_a_harness_reconstructed_artifact_fails(scratch):
     source = _write_mission(os.path.join(scratch, "rebuilt"))
     trace_path = os.path.join(source.directory, "trace.jsonl")

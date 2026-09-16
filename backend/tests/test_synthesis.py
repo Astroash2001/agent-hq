@@ -181,6 +181,27 @@ def test_the_total_cap_holds_across_many_artifacts():
     assert len(block) <= synthesis.MAX_TOTAL_CHARS + 500
 
 
+def test_a_conclusion_cut_by_the_token_ceiling_loses_the_fragment():
+    """
+    A briefing once opened "...rating 9.5; goals per" -- the ceiling cut it
+    mid-word, and that is the first thing a reader sees.
+    """
+    cut = ("The four picks are listed below. Each cleared 900 minutes. "
+           "The forward leads on goals per")
+    assert synthesis._whole_sentences(cut).endswith("Each cleared 900 minutes.")
+
+    clean = "All four picks cleared 900 minutes."
+    assert synthesis._whole_sentences(clean) == clean
+
+    table = "| GK | 00042 | Bayern |\n| DF | 00027 | Liverpool |"
+    assert synthesis._whole_sentences(table) == table, "a whole table row is kept"
+
+
+def test_the_conclusion_is_asked_to_lead_with_the_answer():
+    assert "compact markdown table" in synthesis.SYNTHESIS_SYSTEM_PROMPT
+    assert "Keep it short enough to finish" in synthesis.SYNTHESIS_SYSTEM_PROMPT
+
+
 def test_a_shortened_artifact_says_the_excerpt_is_short_not_the_file():
     """
     The marker used to read "[... truncated]", and a conclusion took that as a
