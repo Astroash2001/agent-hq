@@ -240,7 +240,7 @@ All additive — old readers keep working.
 | `task.assigned` | `step_id`, `produces`, `consumes`, `rationale`, `routed_from`, `attempt` (1 on the original dispatch, higher on a repair) |
 | `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0`. Each node that has **run** also carries `cost_usd`, `duration_sec`, `total_tokens`, `model`, `attempts`, `estimated`; the event carries mission totals `cost_usd`, `mission_tokens`, `tokens_estimated` |
 | `task.progress` | `wave` (which parallel wave just finished), `failed` |
-| `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated`, `outcome` (`completed` / `unverified` / `failed` / `halted`), `unverified_steps` |
+| `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated`, `outcome` (`completed` / `unverified` / `failed` / `halted`), `unverified_steps`, `mission_id` (what the artifact and bundle endpoints address) |
 | `token.update` | `estimated` (the counts are the simulator's, not a provider's), `model` (which model answered) |
 
 **Reading `dag.update`:** a node with no `cost_usd` has not run yet. That is
@@ -282,6 +282,7 @@ is refused: a `system.status` message on the socket, **429** on resume.
 | `GET /api/missions?limit=50` | every mission the run store knows, newest first |
 | `GET /api/missions/{id}` | one mission: plan, steps, status, artifacts, `has_trace` |
 | `GET /api/missions/{id}/trace` | the mission's spans as raw NDJSON (`text/plain`) |
+| `GET /api/missions/{id}/bundle` | every file of that mission as one zip (`application/zip`) |
 | `POST /api/missions/{id}/resume` | carry on a mission a killed process left unfinished |
 
 `GET /api/missions/{id}` is served from the run store, not from `mission.json` --

@@ -65,9 +65,13 @@ asked for and the artifacts the specialists produced.
 
 Answer the goal. Lead with the finding, not with a description of the process.
 
-- Open with the answer itself. When the mission produced a set of figures, \
-names or picks, put them in a compact markdown table or short list first, then \
-explain. A reader who stops after the first block should still have the answer.
+- Open with one plain sentence that states the result in the reader's own \
+terms -- "Your best XI is:", "The cheapest option is X", "There were 30,000 \
+rows". Then, when the mission produced a set of figures, names or picks, put \
+them in a compact markdown table or short list. A reader who stops after that \
+block should still have the answer.
+- Never open with what the mission did, how many steps it took, or which file \
+holds what. The reader wants the answer; the process is recorded below you.
 - Keep it short enough to finish. Write 2-5 short paragraphs, or a table \
 followed by a paragraph or two. Markdown.
 - Ground every claim in the artifacts you were given. Quote or name the file when \

@@ -814,6 +814,11 @@ class RetroHUD {
         // the UI rather than a mission that did not produce anything.
         const files = Array.isArray(payload.artifacts) ? payload.artifacts : [];
         this.missionDir = payload.mission_dir || '';
+        // What the bundle download addresses. From the payload when the mission
+        // just finished, or from the directory name when one was replayed.
+        this.missionId = payload.mission_id || payload.task_id
+            || (this.missionDir ? this.missionDir.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : '')
+            || this.missionId || '';
         const banner = document.getElementById('outBanner');
         const failed = /\b(\d+)\s+failed\b/i.exec(String(markdownText || ''));
         const nFailed = failed ? parseInt(failed[1], 10) : 0;
@@ -840,6 +845,42 @@ class RetroHUD {
         this.liveArtifacts = null;   // the full bodies supersede the running view
         this.executiveMemoCard.style.display = 'flex';
         this.selectOutputTab('report');
+    }
+
+    /**
+     * Every file of this mission, in one zip.
+     *
+     * The files tab lists them one at a time, so keeping a finished run meant
+     * saving each artifact by hand -- and a deployment with no disk loses the
+     * lot at the next restart.
+     *
+     * Fetched rather than linked, because a link cannot carry the API token on
+     * a server that requires one.
+     */
+    async downloadMissionBundle() {
+        if (!this.missionId) {
+            this.addTerminalLog('No mission is loaded to download.', 'WARN');
+            return;
+        }
+        try {
+            const res = await fetch(`/api/missions/${encodeURIComponent(this.missionId)}/bundle`);
+            if (!res.ok) {
+                this.addTerminalLog(`Download failed: ${res.status} ${res.statusText}`, 'ERROR');
+                return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${this.missionId}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            this.addTerminalLog(`Downloaded ${this.missionId}.zip`, 'SUCCESS');
+        } catch (e) {
+            this.addTerminalLog(`Download failed: ${e}`, 'ERROR');
+        }
     }
 
     renderOutputFiles(files) {
@@ -1169,6 +1210,9 @@ class RetroHUD {
 
         const outPdf = document.getElementById('downloadPdfBtn');
         if (outPdf) outPdf.addEventListener('click', () => this.downloadReportAsPdf());
+
+        const outZip = document.getElementById('downloadAllBtn');
+        if (outZip) outZip.addEventListener('click', () => this.downloadMissionBundle());
 
         const outOverlay = document.getElementById('outOverlay');
         if (outOverlay) {

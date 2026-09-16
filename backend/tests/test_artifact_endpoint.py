@@ -47,6 +47,35 @@ def test_an_artifact_comes_back_as_its_own_text(client):
     assert "Sodium-ion at $61/kWh." in r.text
 
 
+def test_the_whole_mission_downloads_as_one_zip(client):
+    """
+    Saving a finished run meant saving each artifact by hand, and a deployment
+    with no disk loses the lot at the next restart.
+    """
+    import io
+    import zipfile
+
+    r = client.get("/api/missions/m_1/bundle")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/zip"
+    assert 'filename="m_1.zip"' in r.headers["content-disposition"]
+
+    with zipfile.ZipFile(io.BytesIO(r.content)) as archive:
+        assert archive.namelist() == ["m_1/report.md"]
+        assert b"Sodium-ion" in archive.read("m_1/report.md")
+
+
+def test_a_bundle_of_an_unknown_mission_is_a_404(client):
+    assert client.get("/api/missions/m_nope/bundle").status_code == 404
+
+
+def test_a_bundle_cannot_reach_outside_the_missions_directory(client):
+    for bad in ("%2e%2e", ".."):
+        response = client.get(f"/api/missions/{bad}/bundle")
+        assert response.status_code in (400, 404)
+        assert b"not yours" not in response.content
+
+
 def test_a_missing_artifact_is_a_404_not_an_empty_body(client):
     """An empty 200 reads as "the agent wrote nothing", which is a different
     and much worse claim than "there is no such file"."""

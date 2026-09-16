@@ -208,6 +208,22 @@ the harness" banner; the verdict stays `revise`, so the mission is
 `unverified`; and the step records `recovered: true`, which `mission_check`
 fails on.
 
+### A finished mission read as a log, not an answer
+
+**Done.** The briefing put the finding, the execution graph, the handoffs and
+the run record at the same level, so a reader looking for "what is my XI" got
+four SQL blocks and a step table first. It now opens with **You asked**, then
+**The answer**, then one line on whether it can be trusted and the files it
+produced. Everything else -- graph, handoffs, artifact list, run record -- is
+inside a `<details>` fold below it, unchanged for anyone who wants it. Every
+step that promises a file is told the same thing: lead with the result, put
+method and caveats after.
+
+`GET /api/missions/{id}/bundle` returns the whole mission directory as one zip,
+and the output panel has a download button for it. Saving a run used to mean
+saving each artifact by hand, which matters most on a deployment with no disk,
+where the files are gone at the next restart.
+
 ### The hosted API was open to anyone
 
 **Done.** The token guarded only the kill switch and the socket, and was

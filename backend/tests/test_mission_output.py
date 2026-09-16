@@ -117,8 +117,52 @@ async def test_summary_carries_bodies_and_flags_truncation(missions):
 # sentence. These pin down which of the two becomes the artifact.
 
 from orchestrator import Orchestrator
-from schemas import PlanStep
+from schemas import Plan, PlanStep
 from tools import file_ops
+
+
+@pytest.mark.asyncio
+async def test_the_briefing_leads_with_the_answer_and_folds_the_rest(missions, monkeypatch):
+    """
+    A finished mission read as a log: the graph, the handoffs and the run
+    record sat at the same level as the finding. A reader wants what was asked,
+    what the answer is, and whether to trust it -- then the evidence.
+    """
+    import synthesis
+
+    orch = Orchestrator()
+    workspace = MissionWorkspace("m_answer")
+    await workspace.put("dream_xi.md", "# XI\n" + ("detail " * 50), "creative", "Eve", "s1")
+
+    plan = Plan(goal="Pick the best XI", source="llm", steps=[
+        PlanStep(id="s1", agent_id="creative", description="Pick the XI",
+                 produces="dream_xi.md")])
+    plan.steps[0].status = "completed"
+
+    # The model writes the answer; a test must not call one. This stands in for
+    # whatever it would say, so the test checks placement and nothing else.
+    stub_answer = "STUB ANSWER SENTENCE\n\n| Column | Value |\n|---|---|\n| a | b |"
+
+    async def conclusion(*args, **kwargs):
+        return synthesis.Conclusion(text=stub_answer, skipped=False)
+
+    monkeypatch.setattr(synthesis, "conclude", conclusion)
+    orch._provenance_checkable = False
+
+    text = await orch._synthesize_results(
+        "Pick the best XI", [{"step_id": "s1", "agent_name": "Eve", "subtask": "Pick",
+                              "result": "done", "consumes": [], "tools_used": []}],
+        12.0, plan, workspace)
+
+    answer_at = text.index("## ✅ The answer")
+    details_at = text.index("<details>")
+    assert text.index("**You asked:**") < answer_at < details_at, "answer before the audit trail"
+    assert stub_answer.splitlines()[0] in text[answer_at:details_at], \
+        "whatever the model wrote is the answer section"
+    assert "✅ **Verified.**" in text[answer_at:details_at], "trust stated with the answer"
+    assert "`dream_xi.md`" in text[answer_at:details_at], "files named with the answer"
+    assert "Execution Graph" in text[details_at:], "the graph moves inside the fold"
+    assert text.rstrip().endswith("</details>"), "the fold is closed"
 
 
 @pytest.mark.asyncio

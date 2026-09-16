@@ -647,6 +647,10 @@ class Orchestrator:
                 # cannot say.
                 "outcome": outcome,
                 "unverified_steps": [s.id for s in self._unverified_steps(task_id, plan)],
+                # The id the artifact and bundle endpoints address. The envelope
+                # carries it too, but `task.completed` is handed to the output
+                # panel as data alone.
+                "mission_id": task_id,
                 "plan_source": plan.source,
                 "artifacts": workspace.summary(),
                 "mission_dir": workspace.dir,
@@ -2222,19 +2226,21 @@ class Orchestrator:
                 workspace.executed_queries)
         self._last_unexecuted_sql = unexecuted
 
+        # A reader opens this to find out what was asked and what the answer
+        # is. Everything else -- the graph, the handoffs, the run record -- is
+        # how the answer was reached, and it used to sit at the same level as
+        # the answer itself, which made a finished mission read as a log.
+        asked = " ".join((user_prompt or "").split())
         lines = [
             "# 🎯 AgentHQ Mission Briefing",
-            f"**Objective:** {user_prompt}",
-            f"**Total Turnaround Time:** `{duration_sec:.2f}s` | "
-            f"**Specialists Coordinated:** `{len(results)}` | "
-            f"**Planned by:** `{planner_label}`\n",
+            "",
+            f"**You asked:** {asked[:400]}{'…' if len(asked) > 400 else ''}",
+            "",
             "---",
         ]
 
-        # The finding goes first. A reader who opens a report wants the answer
-        # before the audit trail, and the audit trail is the rest of this file.
         if not conclusion.skipped:
-            lines.append("## 🧠 What the mission found\n")
+            lines.append("## ✅ The answer\n")
             lines.append(conclusion.text)
             if conclusion.ungrounded:
                 # Named, not hidden, and not grounds for throwing the conclusion
@@ -2252,6 +2258,29 @@ class Orchestrator:
             lines.append("")
             lines.append("---")
 
+        # One line on whether the answer can be trusted, and what was produced.
+        # Both used to be at the bottom, under the audit trail.
+        completed = sum(1 for st in plan.steps if st.status == "completed")
+        failed = sum(1 for st in plan.steps if st.status == "failed")
+        if failed:
+            status = (f"❌ **{failed} of {len(plan.steps)} steps failed.** "
+                      f"Treat this answer as incomplete.")
+        elif unverified:
+            status = (f"⚠️ **Unverified.** All {completed} steps ran, but a reviewer "
+                      f"rejected {', '.join(f'`{u.id}`' for u in unverified)}. "
+                      f"Check those figures before relying on them.")
+        else:
+            status = f"✅ **Verified.** All {completed} steps ran and passed review."
+        lines.append(status)
+        lines.append("")
+
+        artifacts = workspace.summary()
+        if artifacts:
+            lines.append("**Files produced:** " + ", ".join(
+                f"`{a['name']}`" for a in artifacts))
+            lines.append("")
+        lines.append("---")
+
         if unexecuted:
             # Placed with the finding, not in the audit trail: a query printed
             # beside a figure is the reader's evidence for that figure.
@@ -2262,6 +2291,14 @@ class Orchestrator:
             lines.extend(f"- `{q}`" for q in unexecuted)
             lines.append("")
             lines.append("---")
+
+        # Everything below is evidence, not the answer. Folded so the page ends
+        # at the answer for a reader who wants only that, and opens in one click
+        # for a reader who wants to check it. Markdown viewers that do not
+        # render HTML simply show it all, which is the old behaviour.
+        lines.append(f"<details><summary><b>How this was produced</b> — "
+                     f"{len(results)} specialist(s), {duration_sec:.0f}s, "
+                     f"{planner_label}, and every file produced</summary>\n")
 
         lines.append("## 🗺️ Execution Graph\n")
 
@@ -2301,7 +2338,6 @@ class Orchestrator:
             lines.append("")
             lines.append(f"{item['result']}\n")
 
-        artifacts = workspace.summary()
         if artifacts:
             lines.append("---")
             lines.append("### 🗂️ Workspace Artifacts")
@@ -2317,8 +2353,6 @@ class Orchestrator:
         # every specialist filed a stub. The finding is at the top now; what
         # belongs here is what can be counted.
         lines.append("### 📊 Run Record")
-        completed = sum(1 for s in plan.steps if s.status == "completed")
-        failed = sum(1 for s in plan.steps if s.status == "failed")
         if failed:
             lines.append(f"{completed} of {len(plan.steps)} steps completed; **{failed} failed**. "
                          f"Review the failed branches before acting on this briefing.")
@@ -2335,6 +2369,9 @@ class Orchestrator:
             lines.append("")
             lines.append(f"_No conclusion was drawn: {conclusion.reason_skipped}. "
                          f"The artifacts above are the mission's output._")
+
+        lines.append("")
+        lines.append("</details>")
 
         return "\n".join(lines)
 

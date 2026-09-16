@@ -208,6 +208,8 @@ class TraceReplay {
                 result: mission.report || '_No report markdown recorded for this mission._',
                 artifacts: files,
                 mission_dir: mission.mission_dir || '',
+                // So "download all" addresses the mission being replayed.
+                mission_id: mission.id || missionId,
                 duration_seconds: mission.duration_seconds || 0,
                 steps_completed: steps.filter(s => s.status === 'completed').length,
                 steps_failed: steps.filter(s => s.status === 'failed').length,

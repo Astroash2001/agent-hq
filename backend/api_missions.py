@@ -12,12 +12,14 @@ purpose -- the file is line-delimited so a partially written one from a killed
 process is still readable, and parsing it server-side would throw that property
 away at exactly the moment it matters.
 """
+import io
 import json
 import logging
 import os
+import zipfile
 
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 
 import runstore
 import tracing
@@ -230,6 +232,48 @@ async def get_artifact(mission_id: str, name: str):
     except OSError as exc:
         raise HTTPException(status_code=500,
                             detail=f"could not read artifact: {exc}") from exc
+
+
+@router.get("/{mission_id}/bundle")
+async def get_bundle(mission_id: str):
+    """
+    Every file of one mission, as a single zip.
+
+    The files tab lists them one at a time, so keeping a finished mission meant
+    saving each artifact by hand -- and on a deployment with no disk, a mission
+    is gone at the next restart. One download takes the report, the artifacts,
+    the manifest and the trace together.
+
+    Built in memory: a mission directory is a handful of markdown files plus a
+    trace, and streaming a temporary file would leave one behind on a killed
+    process.
+    """
+    directory = _mission_dir(mission_id)
+    if not os.path.isdir(directory):
+        raise HTTPException(status_code=404, detail=f"no mission '{mission_id}'")
+
+    buffer = io.BytesIO()
+    written = 0
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name in sorted(os.listdir(directory)):
+            path = os.path.join(directory, name)
+            if not os.path.isfile(path):
+                continue
+            try:
+                archive.write(path, arcname=f"{mission_id}/{name}")
+                written += 1
+            except OSError as exc:
+                logger.warning("[%s] could not add %s to the bundle: %s",
+                               mission_id, name, exc)
+    if not written:
+        raise HTTPException(status_code=404,
+                            detail=f"mission '{mission_id}' has no files to download")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{mission_id}.zip"'},
+    )
 
 
 @router.get("/{mission_id}/trace", response_class=PlainTextResponse)
