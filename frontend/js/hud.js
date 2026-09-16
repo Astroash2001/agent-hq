@@ -858,26 +858,35 @@ class RetroHUD {
      * a server that requires one.
      */
     async downloadMissionBundle() {
-        if (!this.missionId) {
-            this.addTerminalLog('No mission is loaded to download.', 'WARN');
+        // The replay picker is the fallback: a mission opened from history is
+        // the one on screen even when no task.completed arrived this session.
+        const picked = document.getElementById('replayMission');
+        const missionId = this.missionId || (picked && picked.value) || '';
+        if (!missionId) {
+            this.addTerminalLog('No mission is loaded to download. Run one, or pick a past mission.', 'WARN');
             return;
         }
         try {
-            const res = await fetch(`/api/missions/${encodeURIComponent(this.missionId)}/bundle`);
+            const res = await fetch(`/api/missions/${encodeURIComponent(missionId)}/bundle`);
             if (!res.ok) {
-                this.addTerminalLog(`Download failed: ${res.status} ${res.statusText}`, 'ERROR');
+                // A hosted instance with no disk forgets its missions whenever
+                // it restarts or sleeps, and a 404 here is usually that.
+                this.addTerminalLog(res.status === 404
+                    ? `Nothing to download: the server no longer has ${missionId}. `
+                      + `A hosted instance loses its files when it restarts.`
+                    : `Download failed: ${res.status} ${res.statusText}`, 'ERROR');
                 return;
             }
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${this.missionId}.zip`;
+            link.download = `${missionId}.zip`;
             document.body.appendChild(link);
             link.click();
             link.remove();
             URL.revokeObjectURL(url);
-            this.addTerminalLog(`Downloaded ${this.missionId}.zip`, 'SUCCESS');
+            this.addTerminalLog(`Downloaded ${missionId}.zip`, 'SUCCESS');
         } catch (e) {
             this.addTerminalLog(`Download failed: ${e}`, 'ERROR');
         }
