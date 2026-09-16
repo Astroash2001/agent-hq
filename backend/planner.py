@@ -116,6 +116,29 @@ class PlanValidationError(ValueError):
     """Raised when a model-authored plan cannot be repaired into a runnable DAG."""
 
 
+def _declared_tools(named: List[str], description: str) -> List[str]:
+    """
+    The tools a step needs: what the plan named, plus any the brief names itself.
+
+    `needs_tools` is what `regrant_steps` and the foundry read, and a model that
+    leaves it empty leaves both asleep. Observed on a deployment: a plan whose
+    descriptions said "query the CSV with query_data" and "open one live page
+    with fetch_url" declared no tools at all, so the extraction step ran on an
+    agent with no `fetch_url` and the probe step on one with no `query_data`.
+    Both said so honestly and neither could do the work.
+
+    Only exact registry names count, so ordinary prose cannot conjure a tool.
+    """
+    from tool_registry import tool_registry
+
+    declared = list(named)
+    text = description or ""
+    for name in tool_registry.catalogue():
+        if name not in declared and re.search(rf"\b{re.escape(name)}\b", text):
+            declared.append(name)
+    return declared
+
+
 def regrant_steps(
     steps: List[PlanStep],
     valid_agent_ids: List[str],
@@ -249,8 +272,9 @@ def validate_plan(
             rationale=str(item.get("rationale") or "").strip(),
             kind=kind,
             attendees=attendees,
-            needs_tools=[str(t).strip() for t in (item.get("needs_tools") or [])
-                         if str(t).strip()],
+            needs_tools=_declared_tools(
+                [str(t).strip() for t in (item.get("needs_tools") or []) if str(t).strip()],
+                description),
         ))
 
     if not steps:

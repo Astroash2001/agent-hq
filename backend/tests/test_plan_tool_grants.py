@@ -40,6 +40,32 @@ def test_a_step_moves_to_an_agent_holding_the_tool_it_needs():
     assert "terminal" in TOOLS[steps[0].agent_id]
 
 
+def test_a_brief_naming_a_tool_declares_it_even_when_the_plan_forgot():
+    """
+    A deployed run planned "query the CSV with query_data" and "open one live
+    page with fetch_url" with an empty needs_tools, so nothing was reassigned
+    and neither step could do its work.
+    """
+    steps = validate_plan(_raw({
+        "id": "s1", "agent_id": "creative",
+        "description": "Query the file with query_data and open the club page with fetch_url.",
+        "produces": "extraction.md",
+    }), AGENT_IDS, {"creative": ["write_file"],
+                    "data_analyst": ["query_data", "fetch_url", "write_file"]})
+
+    assert set(steps[0].needs_tools) == {"query_data", "fetch_url"}
+    assert steps[0].agent_id == "data_analyst", "and the step moves to who holds them"
+
+
+def test_prose_does_not_conjure_a_tool():
+    steps = validate_plan(_raw({
+        "id": "s1", "agent_id": "creative",
+        "description": "Calculate the trend and search the literature for context.",
+        "produces": "notes.md",
+    }), AGENT_IDS, TOOLS)
+    assert steps[0].needs_tools == [], "only exact registry names count"
+
+
 def test_a_step_whose_agent_already_holds_the_tool_is_left_alone():
     steps = validate_plan(_raw({
         "id": "s1", "agent_id": "coder", "description": "Measure the runtime",
