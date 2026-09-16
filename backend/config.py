@@ -107,6 +107,22 @@ class Settings(BaseSettings):
     # result -- on every turn.
     max_tokens_budget_per_task: int = 400000
 
+    # Held back for the steps that have not started yet.
+    #
+    # Observed: a 3-step Goa mission where two research steps spent 413,788 of
+    # the 400,000 between them, so `s3` -- the step that writes the itinerary
+    # the user actually asked for -- was failed by the budget gate without ever
+    # calling its model. The mission produced research and no deliverable,
+    # which is worse than research that had to stop early.
+    #
+    # A running step's ceiling is therefore the mission budget minus this much
+    # per step still waiting. The step hits its closing turn sooner and the
+    # steps after it are still affordable. The reserve never takes more than
+    # `max_reserve_fraction` of the budget, or a wide plan would leave the first
+    # step nothing to work with.
+    reserved_tokens_per_pending_step: int = 60000
+    max_reserve_fraction: float = 0.5
+
     # Planning (P1)
     # The planner asks the model for a DAG; heuristic buckets are the fallback.
     planner_enabled: bool = True

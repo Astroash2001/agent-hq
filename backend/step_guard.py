@@ -27,6 +27,27 @@ def reset_budget(token) -> None:
     _budget.reset(token)
 
 
+def ceiling_for_step(budget: int, steps_waiting: int, per_step: int,
+                     max_fraction: float) -> int:
+    """
+    What a running step may spend when `steps_waiting` steps come after it.
+
+    A mission budget spent first-come leaves nothing for the step that writes
+    the deliverable: two research steps once spent 413,788 of 400,000 and the
+    step that was to write the itinerary was failed by the gate without ever
+    calling its model. Research and no deliverable is worse than less research.
+
+    So a step's ceiling is the budget minus a reserve for each step still
+    waiting -- it reaches its closing turn sooner and the rest stay affordable.
+    The reserve is capped as a fraction of the budget, because a wide plan would
+    otherwise reserve the whole thing and leave the first step unable to start.
+    """
+    if budget <= 0 or steps_waiting <= 0 or per_step <= 0:
+        return budget
+    reserve = min(per_step * steps_waiting, int(budget * max(0.0, max_fraction)))
+    return max(1, budget - reserve)
+
+
 def budget_exhausted() -> Optional[str]:
     """A short description when the bound mission is over budget, else None."""
     reader = _budget.get()

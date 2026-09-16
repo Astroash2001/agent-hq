@@ -197,6 +197,32 @@ async def test_an_identical_observing_call_is_not_run_twice(researcher, monkeypa
     assert executed.count("read_file") == 1, "a repeat must be answered, not re-run"
 
 
+def test_a_step_leaves_the_steps_behind_it_something_to_spend():
+    """
+    Observed: a 3-step mission where two research steps spent 413,788 of the
+    400,000 between them, so the step that was to write the itinerary was
+    failed by the budget gate without ever calling its model. The mission
+    produced research and no deliverable.
+    """
+    import step_guard
+
+    # Nothing waiting: the step may use the whole budget, as before.
+    assert step_guard.ceiling_for_step(400_000, 0, 60_000, 0.5) == 400_000
+
+    # One step waiting: its share is held back.
+    assert step_guard.ceiling_for_step(400_000, 1, 60_000, 0.5) == 340_000
+    assert step_guard.ceiling_for_step(400_000, 2, 60_000, 0.5) == 280_000
+
+    # A wide plan cannot reserve the budget away from the step that is running:
+    # 8 steps waiting is 480,000 of reserve, capped at half.
+    assert step_guard.ceiling_for_step(400_000, 8, 60_000, 0.5) == 200_000
+
+    # Degenerate inputs are not a division by zero or a negative ceiling.
+    assert step_guard.ceiling_for_step(0, 3, 60_000, 0.5) == 0
+    assert step_guard.ceiling_for_step(400_000, 3, 0, 0.5) == 400_000
+    assert step_guard.ceiling_for_step(100, 3, 60_000, 1.0) >= 1
+
+
 @pytest.mark.asyncio
 async def test_a_running_step_stops_when_the_mission_budget_is_spent(researcher, monkeypatch):
     """

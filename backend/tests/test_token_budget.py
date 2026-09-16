@@ -179,6 +179,96 @@ async def test_prior_spend_and_own_spend_add_up_the_way_the_gate_reads_them(
     assert orch._tokens_spent() == 58_000
 
 
+class _GreedyAgent(_Agent):
+    """
+    A specialist that works until its own ceiling says stop.
+
+    `BaseAgent` reads `step_guard.budget_exhausted()` at the top of every turn
+    and takes one closing turn after it fires. This is that behaviour in three
+    lines, because the thing under test is which ceiling the orchestrator bound,
+    not how an agent spends against it.
+    """
+
+    async def run(self, task, context="", hints="", goal="", extra_tools=None):
+        import step_guard
+
+        self.calls.append(task.description)
+        spent_here = 0
+        while step_guard.budget_exhausted() is None and spent_here < 10_000_000:
+            self.token_usage.prompt_tokens += self.burn
+            self.token_usage.total_tokens += self.burn
+            spent_here += self.burn
+            await asyncio.sleep(0)
+        await self.workspace.put(name=task.assigned_to + "_out.md",
+                                 content="# Work\n" + ("body " * 60),
+                                 author_id=self.id, author_name=self.name)
+        self.last_run = {"duration_sec": 0.01, "tokens": spent_here, "tools_used": [],
+                         "steps": 1, "outcome": "success", "estimated": True,
+                         "cost_usd": 0.0, "model": "", "prompt_tokens": spent_here,
+                         "completion_tokens": 0, "retries": 0, "fell_back": False}
+        return "done"
+
+
+@pytest.mark.asyncio
+async def test_the_last_step_is_not_starved_by_the_ones_before_it(scratch, monkeypatch):
+    """
+    The regression, from mission `task_plan_day_goa_trip_bd013b`: two research
+    steps spent 413,788 of a 400,000 budget between them, and `s3` -- the step
+    that writes the itinerary the user asked for -- was failed by the budget
+    gate without ever calling its model. Research and no deliverable.
+
+    A step's ceiling now holds back a share for each step still waiting, so an
+    agent that works until it is told to stop leaves the deliverable affordable.
+    """
+    monkeypatch.setattr(settings, "reserved_tokens_per_pending_step", 60_000)
+    monkeypatch.setattr(settings, "max_reserve_fraction", 0.5)
+    monkeypatch.setattr(settings, "max_tokens_budget_per_task", 400_000)
+
+    orch = Orchestrator()
+    agent = _GreedyAgent("researcher", "Alice", burn=10_000)
+    _wire(orch, monkeypatch, {"researcher": agent})
+
+    workspace = MissionWorkspace("m_starve")
+    agent.workspace = workspace
+    orch._slots = asyncio.Semaphore(1)
+    orch._token_baseline["m_starve"] = orch._tokens_spent()
+
+    plan = _linear_plan(3)
+    await orch._execute_plan(plan, workspace, "m_starve", "g")
+
+    assert [s.status for s in plan.steps] == ["completed"] * 3, \
+        "the last step must still be dispatched"
+    assert len(agent.calls) == 3, "every step ran, including the deliverable"
+    assert orch._mission_tokens_spent("m_starve") <= 400_000 + 10_000, \
+        "the reserve must not be spent and then exceeded as well"
+
+
+@pytest.mark.asyncio
+async def test_without_a_reserve_the_last_step_starves(scratch, monkeypatch):
+    """
+    The same mission with the reserve turned off, which is what shipped. Kept
+    because a test that only asserts the good case cannot tell a working
+    reserve from a budget nothing was spending anyway.
+    """
+    monkeypatch.setattr(settings, "reserved_tokens_per_pending_step", 0)
+    monkeypatch.setattr(settings, "max_tokens_budget_per_task", 400_000)
+
+    orch = Orchestrator()
+    agent = _GreedyAgent("researcher", "Alice", burn=10_000)
+    _wire(orch, monkeypatch, {"researcher": agent})
+
+    workspace = MissionWorkspace("m_starve_off")
+    agent.workspace = workspace
+    orch._slots = asyncio.Semaphore(1)
+    orch._token_baseline["m_starve_off"] = orch._tokens_spent()
+
+    plan = _linear_plan(3)
+    await orch._execute_plan(plan, workspace, "m_starve_off", "g")
+
+    assert [s.status for s in plan.steps] == ["completed", "failed", "failed"], \
+        "the first step spends the lot and the rest never run"
+
+
 def test_a_mission_with_no_baseline_is_charged_the_lifetime_total():
     """
     The conservative fallback. A caller that drives `_execute_plan` without

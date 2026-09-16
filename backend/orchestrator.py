@@ -125,6 +125,10 @@ class Orchestrator:
         # read at rest reads zero however broken the scheduler is.
         self._active_steps = 0
         self._peak_active_steps = 0
+        # Steps a mission has planned but not yet dispatched, per task. Read
+        # when a step's token ceiling is computed, so a running step leaves the
+        # ones behind it something to spend.
+        self._steps_waiting: Dict[str, int] = {}
         # Contractors hired for the running mission. Held apart from
         # `self.agents` membership so dismissal knows exactly who to let go
         # without having to ask each manifest whether it was spawned.
@@ -1313,6 +1317,11 @@ class Orchestrator:
                 await self._emit_dag(task_id, plan.source)
                 break
 
+            # What this wave must leave behind. Counted before dispatch, so a
+            # step's own ceiling already knows how many steps are queued after
+            # it -- the count that decides the reserve in `_dispatch_attempt`.
+            self._steps_waiting[task_id] = max(0, len(pending) - len(ready))
+
             for sid in ready:
                 pending.discard(sid)
                 by_id[sid].status = "running"
@@ -1432,6 +1441,7 @@ class Orchestrator:
                 }
             ))
 
+        self._steps_waiting.pop(task_id, None)
         return results
 
     async def _record_step_failure(self, task_id: str, step: PlanStep, goal: str,
@@ -1665,9 +1675,16 @@ class Orchestrator:
                     f"Dispatched {step.id} to {specialist.name}", task_id=task_id)
 
         # The mission budget, readable from inside the agent's own loop, so a
-        # step already running stops spending when the mission is out.
+        # step already running stops spending when the mission is out -- less
+        # whatever the steps queued behind this one will need, so this step
+        # cannot spend the deliverable's share as well as its own.
+        ceiling = step_guard.ceiling_for_step(
+            settings.max_tokens_budget_per_task,
+            self._steps_waiting.get(task_id, 0),
+            settings.reserved_tokens_per_pending_step,
+            settings.max_reserve_fraction)
         budget_token = step_guard.bind_budget(
-            lambda: (self._mission_tokens_spent(task_id), settings.max_tokens_budget_per_task))
+            lambda: (self._mission_tokens_spent(task_id), ceiling))
         try:
             return await self._dispatch_under_lock(
                 step, specialist, subtask, workspace, task_id, goal, grant)
