@@ -149,6 +149,48 @@ def infer_spec(
     return spec
 
 
+# Endings that finish a document: punctuation, a closing fence or quote, a
+# table row, a list marker's own line. Anything else at the very end is a
+# sentence the writer did not get to the end of.
+_FINISHED_END = re.compile(r"""[.!?:;)\]"'`*_|>-]\s*$|```\s*$""", re.S)
+
+
+def _looks_cut_off(body: str) -> Optional[str]:
+    """
+    Whether this artifact stops in the middle of something, and what.
+
+    A step that exhausts its output ceiling files whatever it had: a report
+    ending "…the Mand" reads as finished to every check that counts characters.
+    Two tells, both cheap and both free of false alarms on ordinary prose: an
+    unclosed code fence, and a final line that simply stops.
+    """
+    text = (body or "").rstrip()
+    if not text:
+        return None
+    if text.count("```") % 2 == 1:
+        return "code block"
+    last_line = text.splitlines()[-1].strip()
+    # A heading or a lone marker is a fine place to stop only if nothing follows
+    # it; a heading as the very last line means the section under it is missing.
+    if last_line.startswith("#"):
+        return "section, with its heading written and nothing under it"
+    if _FINISHED_END.search(last_line):
+        return None
+    # A running sentence with no terminator is the cut-off case. A short or
+    # few-word final line -- a label, a squad number, a table cell, a bold
+    # status -- legitimately ends bare, so both tests have to hold.
+    words = len(last_line.split())
+    if words < 6 or len(last_line) <= 40:
+        return None
+    # A line that already contains a full stop is a finished thought whose
+    # final clause happens to end bare -- "**Verified.** All 4 steps passed
+    # review". A long line with no sentence punctuation at all is the writer
+    # being cut off.
+    if re.search(r"[.!?]", last_line):
+        return None
+    return "sentence"
+
+
 def check(artifact: Optional[str], spec: ArtifactSpec) -> CheckResult:
     """
     Measure one artifact against its spec.
@@ -183,6 +225,19 @@ def check(artifact: Optional[str], spec: ArtifactSpec) -> CheckResult:
         failures.append(
             f"The artifact is {len(body)} characters; this deliverable needs at "
             f"least {spec.min_chars}. Expand it with real detail, not filler."
+        )
+
+    cut = _looks_cut_off(body)
+    if cut:
+        # The step ran out of room mid-sentence and filed what it had. Observed:
+        # a costs file ending at "Mand", which took its source with it and made
+        # the whole mission unverified. Major, because the missing part is the
+        # part nobody has: only a re-dispatch can produce it.
+        major = True
+        failures.append(
+            f"The artifact stops mid-{cut}: it was cut off before it was "
+            f"finished. Write it again, shorter if need be, so it ends on a "
+            f"complete sentence and covers everything asked for."
         )
 
     if spec.require_heading and not _HEADING_RE.search(body):

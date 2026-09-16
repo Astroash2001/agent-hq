@@ -11,6 +11,42 @@ checked one. These pin down the layer that checks.
 import pytest
 
 import contracts
+
+
+FENCE = "```"
+
+
+def test_an_artifact_cut_off_mid_sentence_is_rejected():
+    """
+    Observed: a costs file that ended at "…the Mand". It passed every check
+    that counts characters, took its source with it, and made the mission
+    unverified.
+    """
+    cut = ("# Costs\n\n- train 4145\n\nThe cheapest cruise found so far was the Mand")
+    result = contracts.check(cut, contracts.ArtifactSpec(min_chars=10))
+
+    assert result.ok is False
+    assert result.severity == "major", "only a re-dispatch can produce the missing part"
+    assert any("cut off" in f for f in result.failures)
+
+
+def test_an_unclosed_code_block_counts_as_cut_off():
+    body = f"# Report\n\n{FENCE}sql\nSELECT 1 FROM data"
+    assert contracts.check(body, contracts.ArtifactSpec(min_chars=10)).ok is False
+
+
+def test_ordinary_endings_are_not_mistaken_for_a_cut():
+    """The detector must not spend a repair on a finished artifact."""
+    for body in (
+        "# Report\n\nAll figures verified against the source pages.",
+        "| Metric | Value |\n|---|---|\n| Rows | 30,000 |",
+        "- first item\n- second item",
+        "The mission is **unverified**",
+        f"# Report\n\n{FENCE}sql\nSELECT 1 FROM data\n{FENCE}",
+        "✅ **Verified.** All 4 steps ran and passed review",
+        "# Report\n\nWhich train is cheapest?",
+    ):
+        assert contracts._looks_cut_off(body) is None, body[:40]
 from contracts import ArtifactSpec, check, infer_spec
 
 

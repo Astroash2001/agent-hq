@@ -530,6 +530,21 @@ class BaseAgent:
                         args=_trace_args(tool_args),
                     )
                     if not succeeded and isinstance(tool_result, dict):
+                        # A page that will not load is not an answer. Observed:
+                        # a research step met three HTTP 403s, wrote "could not
+                        # be priced" for each, and finished with two facts. The
+                        # web has more than one page per fact, and a search does
+                        # not count against the cap when it is replacing a
+                        # fetch that failed.
+                        if tool_name == "fetch_url":
+                            searches = max(0, searches - 1)
+                            tool_result = dict(tool_result)
+                            tool_result["next_step"] = (
+                                "This page did not load. Find the same fact on a "
+                                "different site -- search again and open another "
+                                "result -- before recording it as unavailable. "
+                                "Only say it could not be obtained once a second "
+                                "source has also failed.")
                         tool_span.set(
                             refused=bool(tool_result.get("refused")),
                             tool_error=str(tool_result.get("error") or "")[:_TRACE_ARG_CHARS],

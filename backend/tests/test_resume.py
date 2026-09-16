@@ -67,7 +67,9 @@ class _Agent:
         name = task.assigned_to + "_out.md"
         # Tagged with the step, as write_file tags a real agent's file: filing
         # only credits a step with artifacts it wrote.
-        await self.workspace.put(name=name, content="# Work\n" + ("body " * 60),
+        # Ends on a full stop, as a finished artifact does: a body that stops
+        # mid-word is what `contracts._looks_cut_off` exists to reject.
+        await self.workspace.put(name=name, content="# Work\n" + ("body " * 60) + "end.",
                                  author_id=self.id, author_name=self.name,
                                  step_id=task.id.rsplit("_", 1)[-1])
         self.last_run = {"duration_sec": self.delay, "tokens": 10, "tools_used": [],

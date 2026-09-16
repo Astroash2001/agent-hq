@@ -124,6 +124,51 @@ async def test_other_tools_are_not_capped(researcher, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_a_page_that_will_not_load_is_told_to_try_another_source(researcher, monkeypatch):
+    """
+    Observed: a research step met three HTTP 403s, wrote "could not be priced"
+    for each, and finished on two facts. A failed fetch buys back the search
+    that replaces it.
+    """
+    monkeypatch.setattr(settings, "search_max_calls", 3)
+    turns = []
+
+    async def _fake(self, messages, tool_schemas, task):
+        turns.append(1)
+        if len(turns) > 3:
+            return {"content": "done", "thought": "", "tool_calls": [],
+                    "prompt_tokens": 1, "completion_tokens": 1}
+        # One search, then a fetch that fails, on each turn.
+        name = "web_search" if len(turns) % 2 else "fetch_url"
+        args = ({"query": f"q{len(turns)}"} if name == "web_search"
+                else {"url": f"https://example.com/{len(turns)}"})
+        return {"content": "", "thought": "", "tool_calls": [{"name": name, "arguments": args}],
+                "prompt_tokens": 1, "completion_tokens": 1}
+
+    monkeypatch.setattr(ba.BaseAgent, "_call_llm", _fake)
+    seen = []
+
+    async def _exec(tool_name, arguments, agent_id=None, task_id=None, granted=None):
+        if tool_name == "fetch_url":
+            return {"success": False, "error": "Server returned HTTP 403."}
+        return {"success": True, "results": []}
+
+    monkeypatch.setattr(ba.tool_registry, "execute", _exec)
+
+    async def _capture(self, messages, tool_schemas, task):
+        seen.extend(m for m in messages if m.get("role") == "tool")
+        return await _fake(self, messages, tool_schemas, task)
+
+    monkeypatch.setattr(ba.BaseAgent, "_call_llm", _capture)
+    researcher.tools = ["web_search", "fetch_url"]
+    await researcher.run(Task(id="t6", description="price it"))
+
+    advice = [m for m in seen if "different site" in str(m.get("content"))]
+    assert advice, "a failed page must say to try another source"
+    assert "HTTP 403" in str(advice[0]["content"]), "the real error is kept"
+
+
+@pytest.mark.asyncio
 async def test_an_identical_observing_call_is_not_run_twice(researcher, monkeypatch):
     """
     Observed: the same 30,000-row query issued ten times in one step, each
