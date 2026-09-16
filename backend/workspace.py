@@ -163,6 +163,37 @@ class MissionWorkspace:
         """The final synthesis, as the mission's headline file."""
         return self._write("report.md", text or "")
 
+    # Written by the mission itself and not by any step, so they survive
+    # `discard_step_files`.
+    KEPT_FILES = ("report.md", "mission.json", "trace.jsonl")
+
+    def discard_step_files(self) -> List[str]:
+        """
+        Delete the per-step files, leaving the report as the mission's record.
+
+        The report carries every artifact in full, so the separate copies are a
+        second place to look for the same text. Called only once the report is
+        written -- during the run the files are real, because that is how a
+        resumed mission recovers what finished steps produced.
+
+        The artifacts stay in memory: the workspace is what the completion
+        payload and the office panel read.
+        """
+        removed: List[str] = []
+        if not self.dir:
+            return removed
+        for name in list(self.artifacts):
+            if name in self.KEPT_FILES:
+                continue
+            path = os.path.join(self.dir, _safe_name(name))
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+                    removed.append(name)
+            except OSError as exc:
+                logger.warning("[%s] could not remove %s: %s", self.mission_id, name, exc)
+        return removed
+
     def save_manifest(self, payload: Dict[str, Any]) -> Optional[str]:
         """
         Goal, plan, per-step status and totals for one run.

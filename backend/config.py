@@ -163,6 +163,11 @@ class Settings(BaseSettings):
     # mission.json describing the run. Without this the workspace was purely
     # in-memory and the result only ever existed in the open browser tab.
     persist_missions: bool = True
+    # One file per mission on disk: `report.md`, which carries every artifact in
+    # full. The per-step files are still written while the mission runs -- that
+    # is how a resume recovers finished work -- and removed once the report is
+    # saved. Set False to keep them as separate files as well.
+    single_file_output: bool = True
     missions_path: str = os.path.join(os.path.dirname(__file__), "data", "missions")
 
     # Files a user drops with a task, before a mission exists to own them. They

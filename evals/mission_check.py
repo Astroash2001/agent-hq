@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -193,6 +194,24 @@ def _figure_forms(value: Any) -> List[str]:
     return [str(value)]
 
 
+# How the report names an artifact it carries: the deliverable, then the rest.
+_EMBEDDED = re.compile(r"^## (?:\U0001F4C4|\U0001F4CE) (\S+)\s*\n(.*?)(?=\n---\s*\n|\n## |\Z)",
+                       re.S | re.M)
+
+
+def embedded_artifacts(source) -> Dict[str, str]:
+    """
+    The artifacts carried inside `report.md`, by name.
+
+    A finished mission keeps one file: the report holds every artifact in full,
+    so the separate copies are removed. Everything the rules check -- the
+    promised files, their figures, whether two steps filed the same content --
+    is still there, one level in.
+    """
+    report = source.artifact("report.md") or ""
+    return {name: body.strip() for name, body in _EMBEDDED.findall(report)}
+
+
 def check_mission(source, spec: Optional[Dict[str, Any]] = None) -> List[Result]:
     results: List[Result] = []
     manifest = source.manifest()
@@ -202,6 +221,11 @@ def check_mission(source, spec: Optional[Dict[str, Any]] = None) -> List[Result]
     steps = manifest.get("steps") or []
     spans = parse_trace(source.trace_text())
     views = step_views(spans)
+    carried = embedded_artifacts(source)
+
+    def artifact(name: str) -> str:
+        """One artifact's text, from its own file or from inside the report."""
+        return source.artifact(name) or carried.get(name) or ""
 
     # 1. The status the mission gave itself.
     outcome = manifest.get("outcome")
@@ -235,7 +259,7 @@ def check_mission(source, spec: Optional[Dict[str, Any]] = None) -> List[Result]
         name = step.get("produces")
         if not name:
             continue
-        body = source.artifact(name)
+        body = artifact(name)
         if not body or not body.strip():
             missing.append(f"{step.get('id')}: {name}")
         else:
@@ -323,7 +347,7 @@ def check_mission(source, spec: Optional[Dict[str, Any]] = None) -> List[Result]
         results.append(Result(WARN, "budget", f"{spent:,} tokens against a {budget:,} budget"))
 
     if spec:
-        results.extend(_check_spec(source, spec, steps, views, bodies))
+        results.extend(_check_spec(source, spec, steps, views, bodies, artifact))
     return results
 
 
@@ -351,21 +375,22 @@ def _recheck_provenance(source, manifest, views) -> Optional[List[str]]:
                    or str(attrs.get("tool_error", "")).startswith("SQL error"))
         if reached:
             attempted.append((attrs.get("args") or {}).get("query", ""))
+    carried = embedded_artifacts(source)
     bodies = []
     for name in manifest.get("artifacts") or []:
-        body = source.artifact(name)
+        body = source.artifact(name) or carried.get(name)
         if body:
             bodies.append((name, body))
     return provenance.unexecuted_sql(bodies, attempted)
 
 
-def _check_spec(source, spec, steps, views, bodies) -> List[Result]:
+def _check_spec(source, spec, steps, views, bodies, artifact) -> List[Result]:
     results: List[Result] = []
 
     target = spec.get("figures_in")
     truth = spec.get("_truth") or {}
     if target and truth:
-        text = bodies.get(target) or source.artifact(target) or ""
+        text = bodies.get(target) or artifact(target)
         absent = [f"{key}={truth[key]}" for key in spec.get("required_figures", truth.keys())
                   if key in truth and not any(f in text for f in _figure_forms(truth[key]))]
         results.append(Result(FAIL if absent else PASS, "figures",

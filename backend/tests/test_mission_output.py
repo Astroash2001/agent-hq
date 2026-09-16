@@ -208,6 +208,31 @@ async def test_the_report_carries_every_file_so_nothing_must_be_opened(missions,
 
 
 @pytest.mark.asyncio
+async def test_only_the_report_is_left_on_disk(missions):
+    """
+    One mission, one file. The report carries every artifact in full, so the
+    separate copies are a second place to look for the same text -- but they
+    exist while the mission runs, because that is what a resume recovers
+    finished work from.
+    """
+    w = MissionWorkspace("m_single")
+    await w.put("costs.md", "COSTS", "researcher", "Alice", "s1")
+    await w.put("plan.md", "PLAN", "creative", "Eve", "s2")
+    w.save_report("# the whole mission")
+    w.save_manifest({"mission_id": "m_single"})
+
+    during = sorted(os.listdir(w.dir))
+    assert "costs.md" in during and "plan.md" in during, "files are real while it runs"
+
+    dropped = w.discard_step_files()
+
+    assert sorted(dropped) == ["costs.md", "plan.md"]
+    assert sorted(os.listdir(w.dir)) == ["mission.json", "report.md"]
+    # In memory they survive: the completion payload and the office read these.
+    assert w.get("plan.md").content == "PLAN"
+
+
+@pytest.mark.asyncio
 async def test_write_file_files_into_the_workspace(missions):
     w = MissionWorkspace("m7")
     file_ops.bind_workspace(w, "creative", "Eve", "s1")

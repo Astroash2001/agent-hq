@@ -69,6 +69,34 @@ def _levels(results):
     return {r.rule: r.level for r in results}
 
 
+def test_the_rules_read_artifacts_carried_inside_the_report(scratch):
+    """
+    A finished mission keeps one file. Everything the rules check is still
+    there, one level in: the report holds each artifact in full.
+    """
+    root = os.path.join(scratch, "embedded")
+    source = _write_mission(root)
+    report = ("# Briefing\n\n## ✅ The answer\n\nshort\n\n---\n"
+              "## 📄 scouting_report.md\n\nTotal goals: 111,520\n\n---\n"
+              "## 📎 extraction.md\n\n# Extraction\nSELECT 1\n\n---\n"
+              "## 📎 guardrails.md\n\n# Guardrails\n\n---\n")
+    for name in ("extraction.md", "guardrails.md", "scouting_report.md"):
+        os.remove(os.path.join(root, name))
+    with open(os.path.join(root, "report.md"), "w", encoding="utf-8") as fh:
+        fh.write(report)
+
+    carried = mc.embedded_artifacts(source)
+    assert set(carried) == {"scouting_report.md", "extraction.md", "guardrails.md"}
+
+    levels = _levels(mc.check_mission(source))
+    assert levels["artifacts"] == mc.PASS, "promised artifacts are found in the report"
+    assert levels["distinct"] == mc.PASS
+
+    spec = {"figures_in": "scouting_report.md", "_truth": {"total_goals": 111520}}
+    by_rule = {r.rule: r for r in mc.check_mission(source, spec)}
+    assert by_rule["figures"].level == mc.PASS
+
+
 def test_a_clean_mission_passes_every_rule(scratch):
     levels = _levels(mc.check_mission(_write_mission(os.path.join(scratch, "ok"))))
     assert mc.FAIL not in levels.values(), levels

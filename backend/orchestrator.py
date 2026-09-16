@@ -646,6 +646,15 @@ class Orchestrator:
             "artifacts": [a.name for a in workspace.artifacts.values()],
         })
 
+        # The report carries every artifact in full, so the per-step copies are
+        # a second place to look for the same text. Removed only now: during the
+        # run they are what a resumed mission recovers finished work from.
+        if settings.single_file_output:
+            dropped = workspace.discard_step_files()
+            if dropped:
+                logger.info("[%s] kept report.md; folded %d step file(s) into it",
+                            task_id, len(dropped))
+
         await event_bus.emit(Event(
             type=EventType.TASK_COMPLETED,
             task_id=task_id,
