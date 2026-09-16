@@ -1055,6 +1055,10 @@ class RetroHUD {
         const activeTab = document.getElementById('outTabFiles')?.dataset.active === 'true' ? 'files' : 'report';
 
         const container = document.createElement('div');
+        // A4 at 96dpi minus the 10mm margins, so html2canvas lays the page out
+        // at the width it will be printed at. Rendering the panel's own width
+        // and scaling afterwards is what sliced headings in half.
+        container.style.width = '718px';
         container.style.padding = '24px 28px';
         container.style.color = '#0f172a';
         container.style.background = '#ffffff';
@@ -1092,7 +1096,20 @@ class RetroHUD {
         }
 
         if (!bodyHtml) {
-            bodyHtml = `<div style="margin-top: 10px;">${reportEl.innerHTML}</div>`;
+            // The mission's own files live inside <details> in the report. A
+            // collapsed section prints as its one-line summary, so the PDF
+            // held the answer and none of the evidence.
+            const opened = reportEl.cloneNode(true);
+            opened.querySelectorAll('details').forEach(d => {
+                d.open = true;
+                const summary = d.querySelector('summary');
+                if (summary) {
+                    const heading = document.createElement('h2');
+                    heading.innerHTML = summary.innerHTML;
+                    summary.replaceWith(heading);
+                }
+            });
+            bodyHtml = `<div style="margin-top: 10px;">${opened.innerHTML}</div>`;
         }
 
         container.innerHTML = `
@@ -1114,11 +1131,24 @@ class RetroHUD {
             <div class="pdf-content-body">
                 ${bodyHtml}
             </div>
-            <div style="margin-top: 36px; padding-top: 12px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8;">
-                <span>Verified AgentHQ Output &middot; Zero-Hallucination Extraction</span>
-                <span>Page 1 of 1</span>
+            <div style="margin-top: 28px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8;">
+                Produced by AgentHQ. Figures are the mission's own; check the status line above before relying on them.
             </div>
         `;
+
+        // A page break may fall between blocks, never through one. Without
+        // this a heading was cut down the middle by the page edge.
+        const keepWhole = container.querySelectorAll(
+            'tr, pre, blockquote, img, h1, h2, h3, h4');
+        keepWhole.forEach(el => {
+            el.style.pageBreakInside = 'avoid';
+            el.style.breakInside = 'avoid';
+        });
+        container.querySelectorAll('h1, h2, h3, h4').forEach(h => {
+            h.style.pageBreakAfter = 'avoid';
+            h.style.breakAfter = 'avoid';
+            h.style.pageBreakInside = 'avoid';
+        });
 
         container.querySelectorAll('table').forEach(t => {
             t.style.width = '100%';
@@ -1156,14 +1186,32 @@ class RetroHUD {
 
         if (typeof html2pdf !== 'undefined') {
             const opt = {
-                margin: [10, 10, 10, 10],
+                margin: [12, 10, 14, 10],
                 filename: filename,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
+                html2canvas: { scale: 2, useCORS: true, letterRendering: true,
+                               logging: false, windowWidth: 718 },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                // 'avoid-all' pushes every element away from a break, which on
+                // a report this long walks content off the page edge. CSS rules
+                // above say what must stay whole; legacy honours them.
+                pagebreak: { mode: ['css', 'legacy'] }
             };
-            html2pdf().set(opt).from(container).save().then(() => {
+            html2pdf().set(opt).from(container).toPdf().get('pdf').then(pdf => {
+                // The footer used to read "Page 1 of 1" on every page of a
+                // twenty-page report, because it was written into the HTML.
+                const pages = pdf.internal.getNumberOfPages();
+                const width = pdf.internal.pageSize.getWidth();
+                const height = pdf.internal.pageSize.getHeight();
+                for (let page = 1; page <= pages; page++) {
+                    pdf.setPage(page);
+                    pdf.setFontSize(8);
+                    pdf.setTextColor(148, 163, 184);
+                    pdf.text('AgentHQ mission report', 10, height - 6);
+                    pdf.text(`Page ${page} of ${pages}`, width - 10, height - 6, { align: 'right' });
+                }
+                return pdf.save(filename);
+            }).then(() => {
                 this.addTerminalLog(`Downloaded ${filename} successfully.`, 'SUCCESS');
             }).catch(err => {
                 console.error('html2pdf error:', err);
@@ -1180,7 +1228,7 @@ class RetroHUD {
             this.addTerminalLog('Popup blocked. Please allow popups to download PDF.', 'WARN');
             return;
         }
-        printWin.document.write(`<!DOCTYPE html><html><head><title>${this.escapeHtml(filename)}</title><style>@page{margin:15mm;size:A4 portrait;}body{margin:0;padding:0;}</style></head><body>${container.innerHTML}<script>window.onload=function(){window.focus();window.print();setTimeout(function(){window.close();},1000);};<\/script></body></html>`);
+        printWin.document.write(`<!DOCTYPE html><html><head><title>${this.escapeHtml(filename)}</title><style>@page{margin:15mm;size:A4 portrait;}body{margin:0;padding:0;}details{display:block;}summary{font-weight:700;font-size:15px;margin:18px 0 8px;}tr,pre,blockquote,h1,h2,h3,h4{page-break-inside:avoid;}h1,h2,h3,h4{page-break-after:avoid;}</style></head><body>${container.innerHTML}<script>window.onload=function(){window.focus();window.print();setTimeout(function(){window.close();},1000);};<\/script></body></html>`);
         printWin.document.close();
         this.addTerminalLog(`Print dialogue opened for ${filename}.`, 'SUCCESS');
     }
