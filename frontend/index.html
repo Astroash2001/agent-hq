@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260917b">
+    <link rel="stylesheet" href="css/style.css?v=20260917c">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
@@ -185,13 +185,17 @@
                     <div class="hud-card-actions">
                         <button class="hud-icon-btn" id="outExpandBtn"
                                 title="Expand output" aria-label="Expand output">&#9974;</button>
+                        <!-- Two download arrows side by side at 11px read as one
+                             button drawn twice: a user after the zip clicked this
+                             one and got the print dialogue. The printer is the
+                             only shape that says "this opens print" at this size. -->
                         <button class="hud-icon-btn" id="downloadPdfBtn"
-                                title="Print or save the report as PDF" aria-label="Print or save the report as PDF">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                title="Print / save the report as PDF" aria-label="Print or save the report as PDF">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         </button>
                         <button class="hud-icon-btn" id="downloadAllBtn"
-                                title="Download all files as a zip" aria-label="Download all files as a zip">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h16"/><path d="M12 4v10"/><polyline points="7 9 12 14 17 9"/><rect x="3" y="2" width="6" height="3" rx="1"/></svg>
+                                title="Download every file as a .zip" aria-label="Download every file as a zip">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         </button>
                         <button class="hud-icon-btn" id="closeMemoBtn"
                                 title="Close output" aria-label="Close output">&times;</button>
@@ -238,12 +242,12 @@
         <div class="panel-overlay-host" id="outOverlayHost"></div>
     </div>
 
-    <script src="js/auth.js?v=20260917b"></script>
-    <script src="js/office_map.js?v=20260917b"></script>
-    <script src="js/canvas.js?v=20260917b"></script>
-    <script src="js/hud.js?v=20260917b"></script>
+    <script src="js/auth.js?v=20260917c"></script>
+    <script src="js/office_map.js?v=20260917c"></script>
+    <script src="js/canvas.js?v=20260917c"></script>
+    <script src="js/hud.js?v=20260917c"></script>
     <!-- Before app.js: app.js constructs the replay driver on load. -->
-    <script src="js/replay.js?v=20260917b"></script>
-    <script src="js/app.js?v=20260917b"></script>
+    <script src="js/replay.js?v=20260917c"></script>
+    <script src="js/app.js?v=20260917c"></script>
 </body>
 </html>
