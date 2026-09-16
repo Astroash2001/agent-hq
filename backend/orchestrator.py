@@ -46,6 +46,22 @@ RECOVERY_BANNER = (
 )
 
 
+# A single artifact's share of the report. Generous: the point of one document
+# is that nothing has to be opened separately, and a mission produces a handful
+# of markdown files, not a corpus.
+MAX_EMBEDDED_ARTIFACT_CHARS = 60000
+
+
+def _artifact_body(artifact) -> str:
+    """One artifact's text for the report, trimmed only if it is enormous."""
+    body = (artifact.content or "").strip()
+    if len(body) <= MAX_EMBEDDED_ARTIFACT_CHARS:
+        return body
+    return (body[:MAX_EMBEDDED_ARTIFACT_CHARS]
+            + f"\n\n_[{len(body) - MAX_EMBEDDED_ARTIFACT_CHARS:,} characters not shown "
+              f"here; the whole file is in the download]_")
+
+
 class StepDeadlineExceeded(Exception):
     """A step ran past `settings.step_timeout_sec` and was stopped.
 
@@ -2208,6 +2224,23 @@ class Orchestrator:
                      for s in self._unverified_steps(workspace.mission_id, plan)]
         return await synthesis.conclude(user_prompt, artifacts, failures)
 
+    @staticmethod
+    def _final_artifact(plan: Plan, workspace: MissionWorkspace):
+        """
+        The file the mission was asked for: the last plan step's own output.
+
+        Walked backwards, because the deliverable is what the graph ends on --
+        a meeting's decision or an intermediate extraction is evidence for it,
+        not the answer. Falls back to the last artifact filed.
+        """
+        for step in reversed(plan.steps):
+            if step.produces:
+                art = workspace.get(step.produces)
+                if art is not None and (art.content or "").strip():
+                    return art
+        names = workspace.names()
+        return workspace.get(names[-1]) if names else None
+
     def _unverified_steps(self, task_id: str, plan: Plan) -> List[PlanStep]:
         """Completed steps whose final review verdict was 'revise'."""
         rows = self._step_telemetry.get(task_id, {})
@@ -2296,6 +2329,18 @@ class Orchestrator:
             lines.append("")
         lines.append("---")
 
+        # The deliverable itself, in full, in the report. It used to live behind
+        # a files tab, so a reader who wanted the thing they asked for had to go
+        # looking for it -- and on a hosted instance with no disk, the files are
+        # gone at the next restart while this one document is what gets saved,
+        # printed or pasted on.
+        deliverable = self._final_artifact(plan, workspace)
+        if deliverable is not None:
+            lines.append(f"## 📄 {deliverable.name}\n")
+            lines.append(_artifact_body(deliverable))
+            lines.append("")
+            lines.append("---")
+
         if unexecuted:
             # Placed with the finding, not in the audit trail: a query printed
             # beside a figure is the reader's evidence for that figure.
@@ -2311,9 +2356,23 @@ class Orchestrator:
         # at the answer for a reader who wants only that, and opens in one click
         # for a reader who wants to check it. Markdown viewers that do not
         # render HTML simply show it all, which is the old behaviour.
-        lines.append(f"<details><summary><b>How this was produced</b> — "
-                     f"{len(results)} specialist(s), {duration_sec:.0f}s, "
-                     f"{planner_label}, and every file produced</summary>\n")
+        lines.append(f"<details><summary><b>Everything behind it</b> — the "
+                     f"working files, and how {len(results)} specialist(s) "
+                     f"produced this in {duration_sec:.0f}s ({planner_label})"
+                     f"</summary>\n")
+
+        # Every other file, whole, in the order they were produced. The report
+        # is then the single document a reader can keep.
+        for name in workspace.names():
+            if deliverable is not None and name == deliverable.name:
+                continue
+            art = workspace.get(name)
+            if art is None or not (art.content or "").strip():
+                continue
+            lines.append(f"## 📎 {name}\n")
+            lines.append(_artifact_body(art))
+            lines.append("")
+            lines.append("---")
 
         lines.append("## 🗺️ Execution Graph\n")
 

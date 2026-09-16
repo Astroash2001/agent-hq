@@ -166,6 +166,48 @@ async def test_the_briefing_leads_with_the_answer_and_folds_the_rest(missions, m
 
 
 @pytest.mark.asyncio
+async def test_the_report_carries_every_file_so_nothing_must_be_opened(missions, monkeypatch):
+    """
+    The deliverable used to live behind a files tab, so a reader who wanted the
+    thing they asked for went looking for it -- and on a hosted instance with
+    no disk the files are gone at the next restart, while this one document is
+    what gets saved or printed.
+    """
+    import synthesis
+
+    orch = Orchestrator()
+    workspace = MissionWorkspace("m_one_report")
+    await workspace.put("costs.md", "COSTS BODY\n" + ("c " * 40), "researcher", "Alice", "s1")
+    await workspace.put("plan.md", "PLAN BODY\n" + ("p " * 40), "creative", "Eve", "s2")
+
+    plan = Plan(goal="Plan it", source="llm", steps=[
+        PlanStep(id="s1", agent_id="researcher", description="Price it", produces="costs.md"),
+        PlanStep(id="s2", agent_id="creative", description="Write it", produces="plan.md")])
+    for step in plan.steps:
+        step.status = "completed"
+
+    async def conclusion(*args, **kwargs):
+        return synthesis.Conclusion(text="SHORT ANSWER", skipped=False)
+
+    monkeypatch.setattr(synthesis, "conclude", conclusion)
+    orch._provenance_checkable = False
+
+    text = await orch._synthesize_results(
+        "Plan it", [{"step_id": "s2", "agent_name": "Eve", "subtask": "Write",
+                     "result": "done", "consumes": [], "tools_used": []}],
+        9.0, plan, workspace)
+
+    details_at = text.index("<details>")
+    # The last step's own file is the deliverable, and it is above the fold.
+    assert "## 📄 plan.md" in text[:details_at]
+    assert "PLAN BODY" in text[:details_at]
+    # Everything else is in the same document, below it.
+    assert "## 📎 costs.md" in text[details_at:]
+    assert "COSTS BODY" in text[details_at:]
+    assert text.count("PLAN BODY") == 1, "the deliverable is not repeated"
+
+
+@pytest.mark.asyncio
 async def test_write_file_files_into_the_workspace(missions):
     w = MissionWorkspace("m7")
     file_ops.bind_workspace(w, "creative", "Eve", "s1")
