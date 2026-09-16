@@ -237,6 +237,9 @@ async def test_a_step_that_promises_a_file_is_told_to_lead_with_the_answer(jail,
 
     assert "Lead with the answer" in seen["description"]
     assert "table or" in seen["description"]
+    # A report named the top scorer "Üñïcodé Plåyer 9971"; the file says
+    # "Ünïcodé". The tool had it right and the model retyped it.
+    assert "character for character" in " ".join(seen["description"].split())
 
 
 # ----------------------------------------------------------------- 3. status

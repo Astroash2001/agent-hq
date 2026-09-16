@@ -269,6 +269,7 @@ async def test_a_meeting_traces_every_attendee_and_hands_the_chair_their_words(
 
     async def _chair_run(task, context="", hints="", goal="", extra_tools=None):
         seen_context["context"] = context
+        seen_context["extra_tools"] = list(extra_tools or [])
         return "Recorded: table 2 needs a source before we ship."
 
     monkeypatch.setattr(chair, "run", _chair_run)
@@ -297,6 +298,12 @@ async def test_a_meeting_traces_every_attendee_and_hands_the_chair_their_words(
     assert "Bob objects" in seen_context["context"]
     assert "Eve objects" in seen_context["context"]
     assert "do not quietly drop" in seen_context["context"]
+
+    # The room can open the documents it is judging. A meeting asked to rule on
+    # "was the instruction in this file honoured" was chaired by the boss, who
+    # holds no tools, and ruled "undetermined -- the file could not be obtained".
+    assert set(seen_context["extra_tools"]) == {
+        "review_artifacts", "record_decision", "read_file", "search_workspace"}
 
 
 @pytest.mark.asyncio

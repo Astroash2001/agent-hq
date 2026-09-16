@@ -1534,7 +1534,14 @@ class Orchestrator:
                     context=chair_context,
                     hints=hints,
                     goal=goal,
-                    extra_tools=["review_artifacts", "record_decision"],
+                    # read_file and search_workspace as well as the table's own
+                    # pair: a meeting asked to rule on "was the instruction in
+                    # this file honoured" was chaired by the boss, who holds no
+                    # tools, so the ruling came back "undetermined -- the file
+                    # could not be obtained". A room that cannot open the
+                    # document it is judging is not a review.
+                    extra_tools=["review_artifacts", "record_decision",
+                                 "read_file", "search_workspace"],
                 )
         finally:
             meeting_tools.bind_workspace(None)
@@ -1934,7 +1941,15 @@ class Orchestrator:
                 f"reader can take in at once -- the result itself, as a table or "
                 f"a short list when there is more than one figure, name or pick. "
                 f"Method, SQL, evidence and caveats come after it, and anything "
-                f"you could not obtain is stated plainly at the end."
+                f"you could not obtain is stated plainly at the end.\n"
+                # A report once named the top scorer "Üñïcodé Plåyer 9971"; the
+                # file says "Ünïcodé". The tool returned it correctly and the
+                # model retyped it. Names, ids and codes are the fields where
+                # that is silent and wrong rather than merely untidy.
+                f"Copy names, identifiers, codes and quoted text character for "
+                f"character from the tool output you were given. Do not retype "
+                f"them from memory, correct their spelling, or normalise their "
+                f"accents, capitals or leading zeros."
             )
 
         # Citations are asked for only when they were obtainable. Whether a
