@@ -1035,6 +1035,19 @@ class RetroHUD {
         });
     }
 
+    /**
+     * The report as a PDF, printed rather than screenshotted.
+     *
+     * html2pdf rendered the whole report into one bitmap and sliced it at fixed
+     * heights: an eleven-page export was eleven images, 2.6MB, with no
+     * selectable text and headings cut in half wherever a slice line fell.
+     * CSS page-break rules cannot help once the page is a picture.
+     *
+     * The browser's own print engine paginates real text, honours
+     * page-break-inside, embeds fonts, and has no canvas height limit. The
+     * reader gets the print dialogue and chooses "Save as PDF"; the file is a
+     * fraction of the size and can be searched.
+     */
     downloadReportAsPdf() {
         const goal = this.missionGoal || 'AgentHQ Mission Deliverable';
         const reportEl = this.memoBodyContent;
@@ -1043,194 +1056,76 @@ class RetroHUD {
             return;
         }
 
-        this.addTerminalLog('Generating PDF deliverable...', 'INFO');
-
         const slug = goal
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '_')
             .replace(/^_+|_+$/g, '')
             .slice(0, 40) || 'agenthq_report';
-        const filename = `${slug}.pdf`;
 
-        const activeTab = document.getElementById('outTabFiles')?.dataset.active === 'true' ? 'files' : 'report';
-
-        const container = document.createElement('div');
-        // A4 at 96dpi minus the 10mm margins, so html2canvas lays the page out
-        // at the width it will be printed at. Rendering the panel's own width
-        // and scaling afterwards is what sliced headings in half.
-        container.style.width = '718px';
-        container.style.padding = '24px 28px';
-        container.style.color = '#0f172a';
-        container.style.background = '#ffffff';
-        container.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
-        container.style.lineHeight = '1.6';
-        container.style.fontSize = '13px';
-
-        const now = new Date().toLocaleString(undefined, { 
-            dateStyle: 'medium', 
-            timeStyle: 'short' 
-        });
-
-        let bodyHtml = '';
-        if (activeTab === 'files') {
-            const outFiles = document.getElementById('outFiles');
-            if (outFiles && outFiles.children.length) {
-                bodyHtml = `
-                    <h2 style="font-size: 16px; color: #1e3a8a; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 6px; margin-top: 18px;">Mission Deliverable Files</h2>
-                    ${Array.from(outFiles.querySelectorAll('.out-file')).map(f => {
-                        const name = f.querySelector('.out-file-name')?.innerText || 'File';
-                        const meta = f.querySelector('.out-file-meta')?.innerText || '';
-                        const content = f.querySelector('.out-file-body')?.innerHTML || '';
-                        return `
-                            <div style="margin-top: 20px; page-break-inside: avoid;">
-                                <div style="font-weight: 700; font-size: 13.5px; color: #1e293b; display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
-                                    <span>📄 ${this.escapeHtml(name)}</span>
-                                    <span style="font-size: 11px; color: #64748b;">${this.escapeHtml(meta)}</span>
-                                </div>
-                                <div style="margin-top: 10px;">${content}</div>
-                            </div>
-                        `;
-                    }).join('')}
-                `;
+        // The mission's own files sit inside <details>. A collapsed section
+        // prints as its one-line summary, so the PDF held the answer and none
+        // of the evidence.
+        const body = reportEl.cloneNode(true);
+        body.querySelectorAll('details').forEach(d => {
+            d.open = true;
+            const summary = d.querySelector('summary');
+            if (summary) {
+                const heading = document.createElement('h2');
+                heading.innerHTML = summary.innerHTML;
+                summary.replaceWith(heading);
             }
-        }
-
-        if (!bodyHtml) {
-            // The mission's own files live inside <details> in the report. A
-            // collapsed section prints as its one-line summary, so the PDF
-            // held the answer and none of the evidence.
-            const opened = reportEl.cloneNode(true);
-            opened.querySelectorAll('details').forEach(d => {
-                d.open = true;
-                const summary = d.querySelector('summary');
-                if (summary) {
-                    const heading = document.createElement('h2');
-                    heading.innerHTML = summary.innerHTML;
-                    summary.replaceWith(heading);
-                }
-            });
-            bodyHtml = `<div style="margin-top: 10px;">${opened.innerHTML}</div>`;
-        }
-
-        container.innerHTML = `
-            <div style="border-bottom: 2.5px solid #2563eb; padding-bottom: 12px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end;">
-                <div>
-                    <div style="font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: -0.5px;">AgentHQ Executive Deliverable</div>
-                    <div style="font-size: 12px; color: #64748b; margin-top: 3px;">Autonomous AI Multi-Agent Intelligence Platform</div>
-                </div>
-                <div style="text-align: right; font-size: 11px; color: #64748b;">
-                    <div>${this.escapeHtml(now)}</div>
-                    <div style="font-weight: 700; color: #2563eb; margin-top: 2px;">AUTHENTICATED REPORT</div>
-                </div>
-            </div>
-            ${goal ? `
-            <div style="background: #f8fafc; border-left: 4px solid #2563eb; padding: 10px 14px; margin-bottom: 20px; border-radius: 0 6px 6px 0;">
-                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px;">Mission Goal</div>
-                <div style="font-size: 13.5px; font-weight: 600; color: #0f172a; margin-top: 2px;">${this.escapeHtml(goal)}</div>
-            </div>` : ''}
-            <div class="pdf-content-body">
-                ${bodyHtml}
-            </div>
-            <div style="margin-top: 28px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8;">
-                Produced by AgentHQ. Figures are the mission's own; check the status line above before relying on them.
-            </div>
-        `;
-
-        // A page break may fall between blocks, never through one. Without
-        // this a heading was cut down the middle by the page edge.
-        const keepWhole = container.querySelectorAll(
-            'tr, pre, blockquote, img, h1, h2, h3, h4');
-        keepWhole.forEach(el => {
-            el.style.pageBreakInside = 'avoid';
-            el.style.breakInside = 'avoid';
-        });
-        container.querySelectorAll('h1, h2, h3, h4').forEach(h => {
-            h.style.pageBreakAfter = 'avoid';
-            h.style.breakAfter = 'avoid';
-            h.style.pageBreakInside = 'avoid';
         });
 
-        container.querySelectorAll('table').forEach(t => {
-            t.style.width = '100%';
-            t.style.borderCollapse = 'collapse';
-            t.style.marginTop = '14px';
-            t.style.marginBottom = '14px';
-            t.style.fontSize = '12px';
-        });
-        container.querySelectorAll('th').forEach(th => {
-            th.style.background = '#f1f5f9';
-            th.style.border = '1px solid #cbd5e1';
-            th.style.padding = '8px 10px';
-            th.style.fontWeight = '700';
-            th.style.textAlign = 'left';
-            th.style.color = '#0f172a';
-        });
-        container.querySelectorAll('td').forEach(td => {
-            td.style.border = '1px solid #e2e8f0';
-            td.style.padding = '7px 10px';
-            td.style.color = '#334155';
-        });
-        container.querySelectorAll('pre').forEach(p => {
-            p.style.background = '#f8fafc';
-            p.style.border = '1px solid #e2e8f0';
-            p.style.padding = '10px 12px';
-            p.style.borderRadius = '4px';
-            p.style.fontSize = '11.5px';
-            p.style.whiteSpace = 'pre-wrap';
-            p.style.wordBreak = 'break-all';
-        });
-        container.querySelectorAll('a').forEach(a => {
-            a.style.color = '#2563eb';
-            a.style.textDecoration = 'none';
-        });
-
-        if (typeof html2pdf !== 'undefined') {
-            const opt = {
-                margin: [12, 10, 14, 10],
-                filename: filename,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true, letterRendering: true,
-                               logging: false, windowWidth: 718 },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                // 'avoid-all' pushes every element away from a break, which on
-                // a report this long walks content off the page edge. CSS rules
-                // above say what must stay whole; legacy honours them.
-                pagebreak: { mode: ['css', 'legacy'] }
-            };
-            html2pdf().set(opt).from(container).toPdf().get('pdf').then(pdf => {
-                // The footer used to read "Page 1 of 1" on every page of a
-                // twenty-page report, because it was written into the HTML.
-                const pages = pdf.internal.getNumberOfPages();
-                const width = pdf.internal.pageSize.getWidth();
-                const height = pdf.internal.pageSize.getHeight();
-                for (let page = 1; page <= pages; page++) {
-                    pdf.setPage(page);
-                    pdf.setFontSize(8);
-                    pdf.setTextColor(148, 163, 184);
-                    pdf.text('AgentHQ mission report', 10, height - 6);
-                    pdf.text(`Page ${page} of ${pages}`, width - 10, height - 6, { align: 'right' });
-                }
-                return pdf.save(filename);
-            }).then(() => {
-                this.addTerminalLog(`Downloaded ${filename} successfully.`, 'SUCCESS');
-            }).catch(err => {
-                console.error('html2pdf error:', err);
-                this.printFallback(container, filename);
-            });
-        } else {
-            this.printFallback(container, filename);
-        }
-    }
-
-    printFallback(container, filename) {
         const printWin = window.open('', '_blank');
         if (!printWin) {
-            this.addTerminalLog('Popup blocked. Please allow popups to download PDF.', 'WARN');
+            this.addTerminalLog('Popup blocked. Allow popups to export the report.', 'WARN');
             return;
         }
-        printWin.document.write(`<!DOCTYPE html><html><head><title>${this.escapeHtml(filename)}</title><style>@page{margin:15mm;size:A4 portrait;}body{margin:0;padding:0;}details{display:block;}summary{font-weight:700;font-size:15px;margin:18px 0 8px;}tr,pre,blockquote,h1,h2,h3,h4{page-break-inside:avoid;}h1,h2,h3,h4{page-break-after:avoid;}</style></head><body>${container.innerHTML}<script>window.onload=function(){window.focus();window.print();setTimeout(function(){window.close();},1000);};<\/script></body></html>`);
+
+        const now = new Date().toLocaleString(undefined,
+            { dateStyle: 'medium', timeStyle: 'short' });
+        printWin.document.write(`<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+<title>${this.escapeHtml(slug)}</title>
+<style>
+  @page { size: A4 portrait; margin: 16mm 14mm; }
+  body { margin: 0; color: #0f172a; background: #fff; font-size: 11pt; line-height: 1.55;
+         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  .masthead { border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 18px; }
+  .masthead h1 { font-size: 17pt; margin: 0; color: #1e3a8a; }
+  .masthead .sub { font-size: 9pt; color: #64748b; margin-top: 4px; }
+  .goal { background: #f8fafc; border-left: 4px solid #2563eb; padding: 9px 12px; margin-bottom: 18px; }
+  .goal .label { font-size: 8pt; text-transform: uppercase; letter-spacing: .5px; color: #64748b; font-weight: 700; }
+  h1, h2, h3, h4 { color: #1e293b; page-break-after: avoid; break-after: avoid;
+                   page-break-inside: avoid; margin: 18px 0 8px; }
+  h1 { font-size: 15pt; } h2 { font-size: 13pt; } h3 { font-size: 11.5pt; }
+  p, li { orphans: 3; widows: 3; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 9.5pt; }
+  th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+  td { border: 1px solid #e2e8f0; padding: 6px 8px; vertical-align: top; }
+  tr, blockquote, pre { page-break-inside: avoid; break-inside: avoid; }
+  thead { display: table-header-group; }
+  pre { background: #f8fafc; border: 1px solid #e2e8f0; padding: 9px 11px; border-radius: 4px;
+        font-size: 9pt; white-space: pre-wrap; word-break: break-word; }
+  code { font-size: 9.5pt; }
+  a { color: #2563eb; text-decoration: none; word-break: break-word; }
+  details { display: block; }
+  hr { border: 0; border-top: 1px solid #e2e8f0; margin: 16px 0; }
+  .foot { margin-top: 22px; padding-top: 8px; border-top: 1px solid #e2e8f0;
+          font-size: 8.5pt; color: #94a3b8; }
+</style></head><body>
+<div class="masthead">
+  <h1>AgentHQ mission report</h1>
+  <div class="sub">${this.escapeHtml(now)}</div>
+</div>
+<div class="goal"><div class="label">Mission goal</div>${this.escapeHtml(goal)}</div>
+${body.innerHTML}
+<div class="foot">Produced by AgentHQ. Figures are the mission's own; check the status line above before relying on them.</div>
+<script>window.onload = function () { window.focus(); window.print(); };<\/script>
+</body></html>`);
         printWin.document.close();
-        this.addTerminalLog(`Print dialogue opened for ${filename}.`, 'SUCCESS');
+        this.addTerminalLog(
+            'Report opened for printing — choose "Save as PDF" as the destination.', 'SUCCESS');
     }
 
     /* --- wiring ---------------------------------------------------------- */
