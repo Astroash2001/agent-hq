@@ -44,10 +44,76 @@ ways, in the order people actually use it:
 libraries you build products on. This is one opinionated harness with a face,
 and it is honest about that.
 
+Full rationale for each decision, including the ones that did not work, is in
+[[DECISIONS]].
+
 ---
 
-Full rationale for each, including the ones that did not work, is in
-[[DECISIONS]].
+## What a mission leaves behind
+
+**One file.** A mission used to scatter `extraction.md`, `guardrails.md`,
+`report.md` and a manifest across a directory, and the answer to the question
+asked was in whichever of them you opened last. Now every step's output is
+folded into a single `report.md` and the rest are discarded
+(`single_file_output`, on by default). Its shape is fixed:
+
+```
+You asked → ✅ The answer → outcome → files → 📄 the deliverable, in full
+→ ▸ Everything behind it: 📎 each other artifact, the graph, handoffs, run record
+```
+
+The answer is first because that is what is read; the evidence is folded into a
+`<details>` block because it is what is checked.
+
+**Three artifacts on disk:** `report.md`, `mission.json`, `trace.jsonl`. The
+download button zips all three (`GET /api/missions/{id}/bundle`). The PDF
+button prints the report through the browser — real selectable text, not a
+screenshot of one, which is what the previous html2canvas export produced.
+
+**An outcome you can trust.** A mission that finished with a rejected step is
+`unverified`, not `completed`, and the step is named. SQL an agent printed but
+never executed is recorded as `provenance.unexecuted_sql`. A figure the
+conclusion asserts that appears in no artifact is flagged. An artifact that ends
+mid-sentence is rejected rather than filed.
+
+## Grading a run without reading it
+
+A report is written to look finished, so judging one by reading it finds a
+different problem every time. `evals/mission_check.py` reads the evidence
+underneath instead — `mission.json`, `trace.jsonl`, the artifacts — and applies
+fixed rules, so the same run gets the same verdict whoever asks:
+
+```bash
+python -m evals.mission_check --latest 3
+python -m evals.mission_check --base-url https://your-app.onrender.com --latest 1
+python -m evals.mission_check --latest 1 --spec evals/fixtures/scouting_rules.json
+```
+
+Generic rules cover outcome, verdicts, artifact attribution, tool use, sandbox
+refusals, SQL provenance, grounding and budget. A `--spec` adds rules for one
+known task: figures that must match an answer key, text that must not appear,
+tools a step must have called successfully. Standard library only, and exit 1
+on any FAIL, so CI or a script can gate on it.
+
+## Running it hosted
+
+`render.yaml` and the `Dockerfile` deploy it as-is. Two settings decide who may
+drive it:
+
+- `AGENTHQ_API_TOKEN` — a bearer token the frontend prompts for and stores. With
+  `ENVIRONMENT=production` and no token set, the server **refuses to start**
+  rather than come up open by accident.
+- `ALLOW_UNAUTHENTICATED=true` — the deliberate override for a public demo. It
+  is a real decision: every visitor's mission spends your provider credit, so
+  set a spending cap at the provider before you use it.
+
+`max_concurrent_missions` (1 by default) is what stops a public URL from running
+ten missions at once on one free instance. Mission ids are validated and the
+resolved path is checked against the missions directory, because `%2e%2e%2f` in
+that position once served `memory.json`.
+
+On a free plan there is no disk: missions are wiped on sleep and on every
+redeploy. Download the bundle if you want to keep one.
 
 ---
 
@@ -82,14 +148,23 @@ python scripts/watch_mission.py --twice     # the second run shows memory recall
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 444 tests, all passing
+cd backend && python -m pytest -q      # 616 passed, 2 skipped
 ```
 
-CI runs the same suite on Python 3.10 and 3.12, plus `ruff check` and the eval
-smoke suite against its committed cassettes.
+CI runs the same suite on Python 3.10 and 3.12, `ruff check`, `node --check` on
+every frontend file, and the eval smoke suite.
+
+**What the eval step in CI does and does not prove.** It runs two tasks end to
+end — planning, scheduling, the workspace, contracts, the run store, the trace
+— and fails if either errors. It does **not** score answer quality: the
+cassettes are recordings of a paid provider and are not committed, so `--replay`
+falls back to the built-in simulator and says `mode=simulate`. Record your own
+with `--suite all --record` and a key. `--require-cassettes` turns that
+fallback into a refusal, which is what to add to CI once recordings exist. See
+[`evals/scorecard.md`](evals/scorecard.md).
 
 There is no JS test runner — adding one would be this project's first node build
-step. Two hand-run validators cover what matters instead:
+step. CI parses every JS file, and two hand-run validators cover the rest:
 
 ```bash
 node tools/check_replay.js      # a real trace.jsonl through the real replay.js
@@ -121,7 +196,10 @@ you only need them to regenerate it. See [[STACK]].
 | Telemetry | `backend/tracing.py`, `backend/pricing.py` | One span per unit of work; real token counts, priced per model |
 | Agent engine | `backend/base_agent.py` | ReAct loop: reason → tool call → observe → repeat |
 | Event fabric | `backend/event_bus.py` | In-memory async pub/sub, 200-event rolling history |
-| Tools | `backend/tool_registry.py`, `backend/tools/` | 10 built-in tools, sandboxed and grant-checked |
+| Tools | `backend/tool_registry.py`, `backend/tools/` | 11 built-in tools, sandboxed and grant-checked |
+| Provenance | `backend/provenance.py` | SQL an agent showed but never ran, and figures with no source |
+| API hardening | `backend/api_guard.py` | Optional bearer token, mission-id validation, concurrency cap |
+| Grading | `evals/mission_check.py` | Grades a finished mission, local or against a deployed URL |
 | Office renderer | `frontend/js/canvas.js` | Tilemap, A* pathing, depth sort, lighting, doors, labels |
 | Office data | `frontend/js/office_map.js` | The whole floor plan as data — 40×24 tiles |
 | HUD | `frontend/js/hud.js` | Dock, terminal, token gauge, DAG panel, cost panel, mission output |
@@ -155,6 +233,7 @@ so an agent without it can still file a deliverable.
 | `search_workspace` | read | Matching lines across the mission's files, with line numbers |
 | `query_data` | read | Read-only SQL over a CSV or JSON file |
 | `calculate` | read | Exact arithmetic, AST-sandboxed |
+| `describe_image` | read | What is in an image in the mission workspace |
 | `write_file` | write | Jailed to the mission workspace |
 | `review_artifacts` / `record_decision` | write | Conference table only |
 
@@ -262,6 +341,16 @@ above. The ones worth knowing up front:
 - **A replay cannot seek backwards.** Dragging the scrubber left replays from
   zero, because the office is a state machine with no inverse for "the agent
   walked to the library".
+- **The eval suite in CI is structural, not graded.** No cassettes are
+  committed, so `--replay` runs the simulator. See the note above and
+  [`evals/scorecard.md`](evals/scorecard.md).
+- **The budget can be overspent by one turn.** It is checked before each of an
+  agent's turns, so a step that crosses the line mid-turn finishes that turn
+  and is then given one closing turn with `write_file` only. The cap is a
+  ceiling with a known overshoot, not a hard stop.
+- **Provenance is not truth.** The harness can prove which query ran, which
+  page was opened and which figure came from which file. Whether the page was
+  right about the world is outside what any of this checks.
 
 ---
 

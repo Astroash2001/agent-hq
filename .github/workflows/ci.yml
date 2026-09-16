@@ -35,17 +35,30 @@ jobs:
         run: |
           cd backend && python -m pytest -q
 
-      # The eval suite running here is the whole point of it being real. Replay
-      # mode serves recorded exchanges and never calls a provider, so this needs
-      # no credential and cannot go red because someone's key expired. Both
-      # smoke tasks have committed cassettes, so this genuinely replays them --
-      # it is not the simulator wearing the word "replay".
+      # The frontend has no test runner, so nothing here was ever parsed by a
+      # machine before it reached a browser. A rewrite of the PDF export in
+      # `hud.js` could have shipped a syntax error and gone green. `node
+      # --check` is not a test suite, but it is the difference between "this
+      # file is valid JavaScript" being checked and being assumed.
+      - name: Check the frontend parses
+        run: |
+          for f in frontend/js/*.js tools/*.js; do node --check "$f"; done
+
+      # What this proves, exactly: two tasks run end to end -- planning,
+      # scheduling, the workspace, contracts, the run store, the trace -- and
+      # neither errors. It does NOT measure answer quality, because no
+      # cassettes are committed (they are recordings of a paid provider) and
+      # `--replay` therefore falls back to the built-in simulator. The step
+      # name says `simulator` so a green tick is not read as a graded suite.
+      #
+      # To make this a real replay: record the cassettes, commit them, and add
+      # `--require-cassettes` here. That flag turns a silent fallback into a
+      # red build, which is the only reason the fallback was ever invisible.
       #
       # No model is named, and naming one here was the bug: this line pinned
       # flash-lite long after the suite was re-recorded against gpt-5-mini.
-      # Each task's cassettes now carry the models they were recorded under
-      # (`_recording.json`), so a replay resolves them from disk and CI cannot
-      # drift from the recording again.
-      - name: Run the eval smoke suite
+      # Each task's cassettes carry the models they were recorded under
+      # (`_recording.json`), so a replay resolves them from disk.
+      - name: Run the eval smoke suite (simulator, structural only)
         run: |
           python -m evals.runner --suite smoke --replay

@@ -554,6 +554,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="call the real provider and write cassettes")
     parser.add_argument("--replay", action="store_true",
                         help="serve from cassettes; a miss is an error (default)")
+    parser.add_argument("--require-cassettes", action="store_true",
+                        help="refuse to start if any task would fall back to "
+                             "the simulator")
     parser.add_argument("--live", action="store_true",
                         help="call the provider without recording. Not deterministic.")
     parser.add_argument("--out", default=None, help="results file path")
@@ -580,6 +583,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         models = [m.strip() for m in args.models.split(",") if m.strip()]
     elif args.model:
         models = [args.model]
+
+    # A `--replay` with no cassette does not fail: it falls back to the
+    # simulator, scores 100% structurally, and prints `mode=simulate` in a line
+    # nobody reads. CI ran that for months under the name "the eval smoke
+    # suite" and was green on a run where no model was ever called. This flag
+    # is how a caller says the recordings are the point of the run.
+    if args.require_cassettes:
+        missing = [t["id"] for t in tasks
+                   if not replay_mod.Cassettes(t["id"]).exists()]
+        if missing:
+            print("no cassettes recorded for: " + ", ".join(sorted(missing)))
+            print("record them with: python -m evals.runner "
+                  f"--suite {args.suite} --record")
+            return 2
 
     print(f"evals: {len(tasks)} task(s), mode={mode}, "
           f"models={[m or settings.default_model for m in models]}, repeat={args.repeat}")

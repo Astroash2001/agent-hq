@@ -478,6 +478,29 @@ def test_the_smoke_suite_is_small_and_real():
     assert set(t["id"] for t in smoke) <= set(t["id"] for t in runner_mod.load_tasks("all"))
 
 
+def test_a_replay_with_no_cassettes_can_be_made_to_refuse(capsys):
+    """
+    `--replay` with nothing recorded runs the simulator, scores 100%
+    structurally and says `mode=simulate` in one line. CI was green on that for
+    months under the name "the eval smoke suite". `--require-cassettes` is how
+    a caller says the recordings are the point, and it must cost nothing: the
+    check runs before the first task, so a missing recording is a refusal
+    rather than a suite that starts and lies.
+    """
+    code = runner_mod.main(["--suite", "smoke", "--replay", "--require-cassettes"])
+    out = capsys.readouterr().out
+
+    recorded = [t["id"] for t in runner_mod.load_tasks("smoke")
+                if replay_mod.Cassettes(t["id"]).exists()]
+    if recorded == [t["id"] for t in runner_mod.load_tasks("smoke")]:
+        pytest.skip("every smoke task has cassettes, so there is nothing to refuse")
+
+    assert code == 2, "a missing recording must not be a pass"
+    assert "no cassettes recorded for" in out
+    assert "--record" in out, "the message must say how to fix it"
+    assert "running " not in out, "it refused before running anything"
+
+
 def test_the_four_required_shapes_are_all_present():
     tags = {tag for t in runner_mod.load_tasks("all") for tag in (t.get("tags") or [])}
     for required in ("research", "code", "meeting", "adversarial"):
