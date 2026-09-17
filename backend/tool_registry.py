@@ -14,6 +14,7 @@ from tools.calculate import calculate
 from tools.query_data import query_data
 from tools.search_workspace import search_workspace
 from tools.describe_image import describe_image
+from tools.render_page import render_available, render_page
 
 logger = logging.getLogger("AgentHQ.ToolRegistry")
 
@@ -355,6 +356,42 @@ class ToolRegistry:
             function=fetch_url,
             risk="execute",
         )
+
+        # 5b. Render page -- only when a browser is actually installed.
+        #
+        # Registered conditionally rather than always-present-and-refusing,
+        # because the catalogue is what the planner and the foundry read. A
+        # tool that exists but cannot work gets planned into a step, hired for,
+        # and then fails mid-mission; a tool that is absent makes the planner
+        # route the step elsewhere and the foundry say plainly that nothing in
+        # this office can do it. The deployed demo runs on 512MB and has no
+        # browser; a laptop does, and gets the capability without a code change.
+        if render_available():
+            self.register(
+                name="render_page",
+                description=(
+                    "Load one web page in a real browser, run its JavaScript, and "
+                    "return the text it displays. Use this ONLY after `fetch_url` "
+                    "returned a page whose figures were missing -- prices, "
+                    "availability and search results are often written into the page "
+                    "after it loads, so they are absent from the HTML `fetch_url` "
+                    "sees. Much slower than `fetch_url`, so do not use it first. "
+                    "Only public http/https addresses can be rendered."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "Full http/https URL to render"},
+                        "wait_for": {"type": "string",
+                                     "description": "Optional CSS selector to wait for before reading the page."},
+                        "max_chars": {"type": "integer",
+                                      "description": "Trim the text to this many characters. Omit for the default."},
+                    },
+                    "required": ["url"]
+                },
+                function=render_page,
+                risk="execute",
+            )
 
         # 6. Calculate
         self.register(

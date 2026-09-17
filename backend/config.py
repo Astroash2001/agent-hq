@@ -363,6 +363,18 @@ class Settings(BaseSettings):
     # where an agent says. See tools/fetch_url.py for why each of these exists.
     fetch_url_timeout: float = 15.0
     fetch_url_max_chars: int = 20000
+
+    # `render_page`, the optional browser. A site that fills its figures in with
+    # JavaScript sends bytes that do not contain them: a recorded mission read
+    # three Airbnb listings whose price area was still "loading Reserve" when
+    # the HTML arrived, and reported the price as unavailable in the world
+    # rather than unreadable by the tool. Rendering the same page shows it.
+    #
+    # The settle is not politeness -- the figure arrives in a request the page
+    # makes after first paint, so a reader that stops at DOMContentLoaded sees
+    # the placeholder and nothing else.
+    render_settle_sec: float = 10.0
+    render_timeout_sec: float = 90.0
     # Every hop is re-checked against the address policy, so this is a cost
     # bound rather than a safety one.
     fetch_url_max_redirects: int = 5

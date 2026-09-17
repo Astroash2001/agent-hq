@@ -117,6 +117,40 @@ def _check_url(url: str) -> Dict[str, Any]:
     return {}
 
 
+# A page whose content is written by JavaScript arrives as a shell: the markup
+# is there, the figures are not. Observed on three Airbnb listings whose price
+# area was still the string "loading" when the HTML landed -- the agent read a
+# complete-looking page, found no price, and reported that no stay could be
+# confirmed under the budget. That is a fact about the instrument written as a
+# fact about the world.
+_SHELL_SIGNS = (
+    "enable javascript", "javascript is required", "loading…", "loading...",
+    "please wait while", "you need to enable javascript",
+)
+
+
+def _looks_unrendered(text: str, html: str) -> bool:
+    """Whether this page probably keeps its content behind JavaScript."""
+    body = (text or "").strip()
+    low = body.lower()
+    if any(sign in low for sign in _SHELL_SIGNS):
+        return True
+    # Lots of markup, almost no words: the shape of an app that has not run yet.
+    return bool(html) and len(html) > 40_000 and len(body) < 0.02 * len(html)
+
+
+def _shell_hint(rendered_available: bool) -> str:
+    if rendered_available:
+        return ("This page appears to build its content with JavaScript, so figures "
+                "such as prices may be missing from what you just read. Call "
+                "`render_page` on the same URL before concluding anything is "
+                "unavailable.")
+    return ("This page appears to build its content with JavaScript, so figures "
+            "such as prices are probably missing from what you just read, and this "
+            "deployment has no browser to render it. Say that the page could not be "
+            "read; do NOT report the figure as unavailable in the world.")
+
+
 def _to_text(body: str, content_type: str) -> str:
     """HTML to something worth putting in a prompt. Plain text passes through."""
     if "html" not in content_type.lower() and not body.lstrip().startswith("<"):
@@ -386,6 +420,14 @@ async def fetch_url(
                 else:
                     hint = ""
                     final_text = text_slice
+
+                if not hint and _looks_unrendered(text, body):
+                    try:
+                        from tools.render_page import render_available
+                        can_render = render_available()
+                    except Exception:                       # noqa: BLE001
+                        can_render = False
+                    hint = _shell_hint(can_render)
 
                 result: Dict[str, Any] = {
                     "success": True,

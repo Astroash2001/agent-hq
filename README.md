@@ -234,8 +234,33 @@ so an agent without it can still file a deliverable.
 | `query_data` | read | Read-only SQL over a CSV or JSON file |
 | `calculate` | read | Exact arithmetic, AST-sandboxed |
 | `describe_image` | read | What is in an image in the mission workspace |
+| `render_page` | execute | One page **with its JavaScript run** — optional, see below |
 | `write_file` | write | Jailed to the mission workspace |
 | `review_artifacts` / `record_decision` | write | Conference table only |
+
+**Some pages are not in their own HTML.** `fetch_url` downloads bytes; a site
+that writes its figures in with JavaScript sends bytes that do not contain
+them. A recorded mission opened three Airbnb listings whose price area still
+read `loading Reserve` when the HTML arrived, found no price, and reported that
+no stay could be confirmed under the budget — a fact about the instrument,
+written as a fact about the world.
+
+Two things came out of that. `fetch_url` now recognises a JavaScript shell and
+says so, and an **optional** `render_page` runs the page in Chromium. It is
+registered only when Playwright *and* a browser are actually installed, because
+the catalogue is what the planner and the foundry read: an absent tool makes the
+planner route elsewhere, while a present-but-broken one gets planned into a step
+and fails mid-mission. Without it the refusal names the limit and forbids the
+wrong conclusion.
+
+```bash
+pip install playwright && python -m playwright install chromium
+```
+
+It is not in `requirements.txt` and not on the deployment: Chromium peaked at
+**829 MB resident** in testing, against a 512 MB instance. Rendering also costs
+about ten times a plain fetch, which is why the tool description tells an agent
+to try `fetch_url` first.
 
 **Nothing runs code.** There is no terminal and no code-execution tool, and
 none can be hired: either one gave a model arbitrary execution as the user
