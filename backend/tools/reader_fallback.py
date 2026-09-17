@@ -32,6 +32,20 @@ from config import settings
 _TOO_THIN = 900
 
 
+def _headers() -> Dict[str, str]:
+    """
+    Request headers, with the key when there is one.
+
+    Keyless requests are rate-limited by IP. A laptop's address is treated
+    generously and a shared datacenter address is not, which is why this
+    fallback read a 403'd fare page locally and salvaged nothing from the
+    deployed instance. With a key the quota follows the account instead.
+    """
+    headers = {"User-Agent": settings.fetch_url_user_agent}
+    if settings.jina_api_key:
+        headers["Authorization"] = f"Bearer {settings.jina_api_key}"
+    return headers
+
 def reader_url(url: str) -> str:
     """The r.jina.ai address for a page, with the scheme kept."""
     return settings.jina_reader_base + url.strip()
@@ -70,15 +84,18 @@ async def read_through_reader(url: str) -> Dict[str, Any]:
     try:
         async with httpx.AsyncClient(
             timeout=settings.jina_reader_timeout, follow_redirects=True,
-            headers={"User-Agent": settings.fetch_url_user_agent},
+            headers=_headers(),
         ) as client:
             response = await client.get(reader_url(url))
     except Exception as exc:                            # noqa: BLE001
         return {"success": False, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
 
     if response.status_code != 200:
-        return {"success": False,
-                "error": f"The reader service answered HTTP {response.status_code}."}
+        detail = f"The reader service answered HTTP {response.status_code}."
+        if response.status_code in (401, 402, 429, 451) and not settings.jina_api_key:
+            detail += (" It rate-limits unauthenticated requests by IP, which a "
+                       "shared server address hits quickly. Set JINA_API_KEY.")
+        return {"success": False, "error": detail}
 
     text = response.text or ""
     if looks_like_a_stub(text):

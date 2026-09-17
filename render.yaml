@@ -52,6 +52,12 @@ services:
         sync: false
       - key: TAVILY_API_KEY
         sync: false
+      # Optional. Lets fetch_url read a page the site refuses it, through
+      # r.jina.ai. Without a key those requests are rate-limited by IP and a
+      # shared server address is throttled hard -- the fallback that salvaged a
+      # 403'd fare page locally salvaged nothing from here.
+      - key: JINA_API_KEY
+        sync: false
       # Required. Gates every /api/ route but /api/health, and the /ws socket.
       - key: AGENTHQ_API_TOKEN
         sync: false

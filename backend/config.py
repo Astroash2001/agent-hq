@@ -389,6 +389,13 @@ class Settings(BaseSettings):
     jina_reader_enabled: bool = True
     jina_reader_base: str = "https://r.jina.ai/"
     jina_reader_timeout: float = 45.0
+    # Optional, and the difference between "works on a laptop" and "works on a
+    # server". Keyless requests are rate-limited per IP, and a shared datacenter
+    # address is throttled far harder than a home one: the same fallback that
+    # returned 22,463 characters of fares locally salvaged nothing from the
+    # deployed instance. An authenticated request is counted against the
+    # account instead, so the instance's address stops being the problem.
+    jina_api_key: str = os.getenv("JINA_API_KEY", "")
     # Every hop is re-checked against the address policy, so this is a cost
     # bound rather than a safety one.
     fetch_url_max_redirects: int = 5

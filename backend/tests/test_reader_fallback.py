@@ -143,3 +143,39 @@ async def test_a_local_browser_wins_over_the_service(monkeypatch):
 
     assert await fu._read_through_service("https://example.com") is None
     assert called == [], "the service must not be contacted when a browser exists"
+
+
+def test_the_key_is_sent_when_there_is_one(monkeypatch):
+    """
+    Keyless requests are rate-limited by IP, and a shared datacenter address is
+    throttled far harder than a laptop's. That is why this fallback read a 403'd
+    fare page locally and salvaged nothing from the deployed instance.
+    """
+    monkeypatch.setattr(settings, "jina_api_key", "")
+    assert "Authorization" not in rf._headers()
+
+    monkeypatch.setattr(settings, "jina_api_key", "jina_secret")
+    assert rf._headers()["Authorization"] == "Bearer jina_secret"
+
+
+@pytest.mark.asyncio
+async def test_a_rate_limit_with_no_key_says_what_to_do(monkeypatch):
+    """An agent told only 'HTTP 429' cannot fix it, and neither can whoever
+    reads the mission report afterwards."""
+    class _Response:
+        status_code = 429
+        text = ""
+
+    class _Client:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def get(self, url): return _Response()
+
+    monkeypatch.setattr(settings, "jina_reader_enabled", True)
+    monkeypatch.setattr(settings, "jina_api_key", "")
+    monkeypatch.setattr(rf.httpx, "AsyncClient", _Client)
+
+    result = await rf.read_through_reader("https://www.abhibus.com/buses/55/Pune-Goa")
+    assert result["success"] is False
+    assert "JINA_API_KEY" in result["error"]
