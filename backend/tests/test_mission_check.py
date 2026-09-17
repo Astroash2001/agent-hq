@@ -97,6 +97,80 @@ def test_the_rules_read_artifacts_carried_inside_the_report(scratch):
     assert by_rule["figures"].level == mc.PASS
 
 
+class _Report:
+    """A mission that is only its report -- enough for the totals rule."""
+
+    def __init__(self, report):
+        self._report = report
+
+    def artifact(self, name):
+        return self._report if name == "report.md" else ""
+
+
+def test_an_answer_that_contradicts_its_own_budget_table_fails():
+    """
+    Observed: a report answering "the trip costs ₹5,320" over a
+    `budget_table.md` whose own total was ₹9,100. Every rule passed --
+    `grounding` asks whether a figure appears in some artifact, never whether
+    the artifacts agree, and a reader takes the first number they see.
+    """
+    source = _Report("## ✅ The answer\n\nThe trip costs **₹5,320** for two "
+                     "and fits the ₹20,000 budget.\n\n## 📎 next\n")
+    result = mc._totals_agree(source, {"budget_table.md": "| **Total** | | **9,100** |"})
+
+    assert result.level == mc.FAIL
+    assert "5,320" in result.detail and "9,100" in result.detail
+
+
+def test_one_file_contradicting_itself_fails():
+    """
+    Where the observed run actually did it: `budget_table.md` opened with
+    "Result: ₹9,100 total" and closed with a table row totalling ₹5,320.
+    Comparing file against file never looked inside either one.
+    """
+    body = ("**Result: ₹9,100 total — well under the ₹20,000 budget.**\n\n"
+            "| Item | Detail | Cost |\n|---|---|---|\n"
+            "| Bus | return for two | 2,320 |\n"
+            "| **Total** | | **₹5,320** |\n")
+    result = mc._totals_agree(_Report(""), {"budget_table.md": body})
+
+    assert result.level == mc.FAIL
+    assert "5,320" in result.detail and "9,100" in result.detail
+    assert "20,000" not in result.detail, "the budget on the line is not a second total"
+
+
+def test_two_files_stating_different_totals_are_a_note_not_a_failure():
+    """
+    One step disputing another's figure is the work, not a defect. A real run
+    had a checking step reject a ₹3,880 headline and verify ₹2,000, and said so
+    in its answer. Failing that would punish the mission for checking itself.
+    """
+    result = mc._totals_agree(_Report(""), {"a.md": "Total 5,000", "b.md": "Total 7,500"})
+    assert result.level == mc.WARN
+    assert "5,000" in result.detail and "7,500" in result.detail
+
+
+def test_an_answer_quoting_the_files_total_passes():
+    source = _Report("## ✅ The answer\n\nThe trip costs **₹18,420** for two.\n")
+    assert mc._totals_agree(source, {"costs.md": "Grand total: ₹18,420"}).level == mc.PASS
+
+
+def test_a_mission_that_priced_nothing_is_not_a_contradiction():
+    """`Not obtained` on a total line states no figure, and a run that honestly
+    priced nothing must not be failed for disagreeing with itself."""
+    source = _Report("## ✅ The answer\n\nNo total could be determined.\n")
+    result = mc._totals_agree(source, {"costs.md": "| Trip total | Not obtained |"})
+    assert result.level == mc.PASS
+
+
+def test_a_subtotal_beside_the_real_total_is_not_a_disagreement():
+    """A file may carry a total per day and a total for the trip; the answer
+    quoting the trip total is right, not inconsistent."""
+    source = _Report("## ✅ The answer\n\nThe trip costs ₹5,000.\n")
+    body = "Day 1 total 2,000\nDay 2 total 3,000\nTrip total 5,000\n"
+    assert mc._totals_agree(source, {"costs.md": body}).level == mc.PASS
+
+
 def test_a_clean_mission_passes_every_rule(scratch):
     levels = _levels(mc.check_mission(_write_mission(os.path.join(scratch, "ok"))))
     assert mc.FAIL not in levels.values(), levels

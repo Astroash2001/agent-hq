@@ -341,6 +341,8 @@ def check_mission(source, spec: Optional[Dict[str, Any]] = None) -> List[Result]
                           ("conclusion figures in no artifact: " + ", ".join(map(str, ungrounded)))
                           if ungrounded else "conclusion figures all appear in artifacts"))
 
+    results.append(_totals_agree(source, bodies))
+
     budget = manifest.get("token_budget")
     spent = manifest.get("total_tokens")
     if budget and spent and spent > budget:
@@ -349,6 +351,127 @@ def check_mission(source, spec: Optional[Dict[str, Any]] = None) -> List[Result]
     if spec:
         results.extend(_check_spec(source, spec, steps, views, bodies, artifact))
     return results
+
+
+_TOTAL_LINE = re.compile(
+    r"^[^\n]*\b(?:grand\s+)?total\b[^\n]*$", re.I | re.M)
+# A money amount: 1,234 / 1234.50 / ₹4,145 / $61. Bare years and counts on a
+# total line are rare enough, and a wrong flag here costs one look.
+_AMOUNT = re.compile(r"(?<![\w.])(?:[₹$£€]\s*)?(\d{1,3}(?:,\d{2,3})+|\d{3,7}(?:\.\d{1,2})?)(?![\w%])")
+
+
+# A total for one part of the work, not for the whole of it. "Day 2 total" and
+# "subtotal" are supposed to differ from each other; only the headline figures
+# have to agree.
+_PART_TOTAL = re.compile(
+    r"\b(?:sub-?total|day\s*\d|night|per\s+\w+|each|leg|item|row|step)\b", re.I)
+
+
+def _totals_on(text: str) -> List[float]:
+    """
+    The headline total each line states, one per line.
+
+    The FIRST amount on the line, not every amount: "Result: ₹9,100 total --
+    well under the ₹20,000 budget" states one total and one budget, and reading
+    both as totals makes every in-budget line contradict itself.
+    """
+    found = []
+    for line in _TOTAL_LINE.findall(text or ""):
+        # A heading row, a per-day subtotal, or a line saying the total could
+        # not be worked out states no headline figure.
+        if re.search(r"not (?:obtained|determined|priced|available)|cannot be", line, re.I):
+            continue
+        if _PART_TOTAL.search(line):
+            continue
+        amounts = _AMOUNT.findall(line)
+        if not amounts:
+            continue
+        try:
+            found.append(float(amounts[0].replace(",", "")))
+        except ValueError:
+            continue
+    return found
+
+
+def _totals_agree(source, bodies: Dict[str, str]) -> Result:
+    """
+    Two files of one mission stating different totals.
+
+    Observed: a report answering "the trip costs ₹5,320" over a `budget_table.md`
+    whose own total was ₹9,100. Every existing rule passed -- `grounding` asks
+    whether a figure appears in some artifact, never whether the artifacts agree
+    with each other, and a reader takes the first number they see.
+    """
+    stated: Dict[str, List[float]] = {}
+    for name, body in (bodies or {}).items():
+        totals = _totals_on(body)
+        if totals:
+            stated[name] = totals
+
+    # A file that contradicts itself, which is where the observed one did it:
+    # `budget_table.md` opened with "Result: ₹9,100 total" and closed with a
+    # table row totalling ₹5,320. Comparing only file against file never looked.
+    for name in sorted(stated):
+        distinct = sorted(set(stated[name]))
+        if len(distinct) > 1:
+            return Result(FAIL, "totals_agree",
+                          f"{name} states {len(distinct)} different totals: "
+                          + ", ".join(f"{v:,.0f}" for v in distinct[:4]))
+
+    # The headline is checked against the evidence, not only file against file:
+    # "the trip costs ₹5,320" never says the word total, which is exactly how it
+    # got past a rule that only read lines calling themselves one. Any amount in
+    # the answer counts, so a headline that quotes the right figure anywhere in
+    # its sentence passes.
+    answer_amounts = _amounts_in(_answer_section(source))
+    every_total = {v for values in stated.values() for v in values}
+    if stated and answer_amounts and not (answer_amounts & every_total):
+        shown = "; ".join(f"{n}: {', '.join(f'{v:,.0f}' for v in sorted(set(stated[n]))[:3])}"
+                          for n in sorted(stated))
+        return Result(FAIL, "totals_agree",
+                      f"the answer states {', '.join(f'{v:,.0f}' for v in sorted(answer_amounts)[:3])} "
+                      f"and no file totals that -- {shown}")
+
+    if len(stated) < 2:
+        return Result(PASS, "totals_agree", "no two files state a total to compare")
+
+    # One file may legitimately carry several totals (a subtotal per day, then
+    # the trip total). Files disagree only when they share no figure at all.
+    names = sorted(stated)
+    shared = set(stated[names[0]])
+    for name in names[1:]:
+        shared &= set(stated[name])
+    if shared:
+        return Result(PASS, "totals_agree",
+                      f"{len(names)} file(s) agree on {sorted(shared)[0]:,.0f}")
+
+    shown = "; ".join(f"{n}: {', '.join(f'{v:,.0f}' for v in sorted(set(stated[n]))[:3])}"
+                      for n in names)
+    # A note, not a failure. One step disputing another's figure is work, not a
+    # defect: a mission whose checking step rejected a headline of ₹3,880 and
+    # verified ₹2,000 is two files disagreeing on purpose, and its answer says
+    # so. The failure case is the disagreement nobody declared, which is the
+    # answer-versus-evidence branch above.
+    return Result(WARN, "totals_agree", f"files state different totals -- {shown}")
+
+
+def _amounts_in(text: str) -> set:
+    """Every money-shaped figure in a block, whatever the line calls itself."""
+    out = set()
+    for raw in _AMOUNT.findall(text or ""):
+        try:
+            out.add(float(raw.replace(",", "")))
+        except ValueError:
+            continue
+    return out
+
+
+def _answer_section(source) -> str:
+    """The `## ✅ The answer` block of the report, where a reader starts."""
+    report = source.artifact("report.md") or ""
+    match = re.search(r"##\s*(?:[^\w\s]\s*)?The answer\b(.*?)(?=\n##\s|\Z)",
+                      report, re.S | re.I)
+    return match.group(1) if match else ""
 
 
 def _recheck_provenance(source, manifest, views) -> Optional[List[str]]:
