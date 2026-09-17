@@ -174,6 +174,46 @@ except ImportError:
 from tools.file_ops import write_file
 
 
+async def _read_through_service(url: str):
+    """
+    One attempt at the reader service, shaped as a `fetch_url` result.
+
+    Returns None when it is not available or could not read the page, so the
+    caller keeps whatever failure it already had. Never raises: this runs on a
+    path that is already handling a failure, and a second exception there would
+    replace a clear "HTTP 403" with a traceback.
+    """
+    try:
+        from tools.render_page import render_available
+        if render_available():
+            return None                 # A local browser is better and first-party.
+        from tools.reader_fallback import read_through_reader
+        second = await read_through_reader(url)
+    except Exception:                                   # noqa: BLE001
+        return None
+    if not second.get("success"):
+        return None
+
+    text = _to_text(second["text"], "text/plain")
+    limit = settings.fetch_url_max_chars
+    truncated = len(text) > limit
+    return {
+        "success": True,
+        "url": url,
+        "final_url": url,
+        "status": 200,
+        "content_type": "text/plain",
+        "chars": len(text[:limit]),
+        "total_chars": len(text),
+        "offset": 0,
+        "truncated": truncated,
+        "text": text[:limit],
+        "read_via": second.get("via", "reader"),
+        "hint": (f"The site refused a direct fetch, so this was read through "
+                 f"{second.get('via', 'the reader service')} instead. Treat it as "
+                 f"the page's own text."),
+    }
+
 async def fetch_url(
     url: str,
     max_chars: int = 0,
@@ -232,11 +272,23 @@ async def fetch_url(
                 content_type = response.headers.get("content-type", "")
                 content_type_clean = content_type.split(";")[0].strip()
                 if response.status_code >= 400:
+                    # A site that refuses this client is the commonest failure,
+                    # commoner than a JavaScript shell: a live fare page answers
+                    # AgentHQ's user agent with 403 and the reader service with
+                    # 22KB of fares. So the second reader is tried here too,
+                    # before an agent is told the page will not load and goes
+                    # looking for a worse source.
+                    salvaged = await _read_through_service(current)
+                    if salvaged is not None:
+                        return salvaged
                     return {
                         "success": False,
                         "url": current,
                         "status": response.status_code,
                         "error": f"Server returned HTTP {response.status_code}.",
+                        "next_step": ("This page did not load. Find the same fact on "
+                                      "a different site rather than reporting it as "
+                                      "unavailable."),
                     }
 
                 body = response.text
@@ -427,7 +479,33 @@ async def fetch_url(
                         can_render = render_available()
                     except Exception:                       # noqa: BLE001
                         can_render = False
-                    hint = _shell_hint(can_render)
+
+                    # No browser here: try the reader service before giving the
+                    # agent a shell. This is the only way a 512MB deployment
+                    # reads a JavaScript page, and it is reached only now --
+                    # after a first-party fetch came back looking unrendered --
+                    # so an ordinary page is never disclosed to a third party.
+                    read_via = ""
+                    if not can_render:
+                        from tools.reader_fallback import read_through_reader
+                        second = await read_through_reader(current)
+                        if second.get("success"):
+                            rendered_text = _to_text(second["text"], "text/plain")
+                            if len(rendered_text) > len(text):
+                                text = rendered_text
+                                total_chars = len(text)
+                                slice_end = min(offset_val + limit, total_chars)
+                                text_slice = text[offset_val:slice_end]
+                                truncated = slice_end < total_chars
+                                final_text = text_slice
+                                read_via = second.get("via", "reader")
+
+                    if read_via:
+                        hint = (f"This page builds its content with JavaScript, so the "
+                                f"text above was read through {read_via} rather than "
+                                f"from the page's own HTML.")
+                    else:
+                        hint = _shell_hint(can_render)
 
                 result: Dict[str, Any] = {
                     "success": True,

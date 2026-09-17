@@ -375,6 +375,20 @@ class Settings(BaseSettings):
     # the placeholder and nothing else.
     render_settle_sec: float = 10.0
     render_timeout_sec: float = 90.0
+
+    # The reader of last resort, for a deployment with no browser.
+    #
+    # r.jina.ai renders a page on someone else's machine and returns its text,
+    # with no key and no install -- which is the only way a 512MB instance
+    # reads a JavaScript page at all. It is a fallback, never the first call:
+    # it is slower than a direct fetch, it is a third party seeing the URL, and
+    # the hostile sites (Airbnb, LinkedIn) bounce it, so a run that depends on
+    # it should still be able to say it could not read the page.
+    #
+    # Set jina_reader_enabled=false to keep every fetch first-party.
+    jina_reader_enabled: bool = True
+    jina_reader_base: str = "https://r.jina.ai/"
+    jina_reader_timeout: float = 45.0
     # Every hop is re-checked against the address policy, so this is a cost
     # bound rather than a safety one.
     fetch_url_max_redirects: int = 5

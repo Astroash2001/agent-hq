@@ -262,6 +262,17 @@ It is not in `requirements.txt` and not on the deployment: Chromium peaked at
 about ten times a plain fetch, which is why the tool description tells an agent
 to try `fetch_url` first.
 
+**Where there is no browser, `fetch_url` falls back to a reader service**
+(`r.jina.ai`, no key, no install), which renders the page elsewhere and returns
+text. It is reached in two places, never first: when a fetched page looks
+unrendered, and when the site refuses the fetch outright. The second is the
+commoner one — a live fare page answers this client with `HTTP 403` and the
+reader with 22,463 characters of fares. The result says which reader produced
+it, a stub response is rejected rather than passed off as the page, and
+`jina_reader_enabled=false` turns it off for a deployment that wants every
+fetch first-party. Airbnb and LinkedIn refuse this path too, and there the
+honest refusal is what the agent gets.
+
 **Nothing runs code.** There is no terminal and no code-execution tool, and
 none can be hired: either one gave a model arbitrary execution as the user
 running the server, which no file sandbox can contain. The coder reads code
