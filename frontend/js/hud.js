@@ -794,6 +794,50 @@ class RetroHUD {
      * `payload` is the whole task.completed body. The second argument is
      * optional so the old one-argument call still works.
      */
+    /**
+     * Repaint the tab for what the mission is doing.
+     *
+     * A mission runs for minutes, and the tab it runs in is usually not the one
+     * being looked at. The title alone is a poor signal -- a tab strip crops it
+     * to a few characters -- so the icon carries the state and the title carries
+     * the count. Drawn here rather than shipped as four files: at 32px the
+     * difference is a fill colour, and four near-identical SVGs is four things
+     * to keep in step with the palette.
+     *
+     * @param {'idle'|'running'|'done'|'failed'} state
+     * @param {string} [label] appended to the tab title, e.g. "2/3"
+     */
+    setTabState(state, label) {
+        const ink = {
+            idle:    ['#fac57f', '#eeb063', '#a9713c'],
+            running: ['#fac57f', '#fac57f', '#c98a4a'],
+            done:    ['#8dff6f', '#67d94e', '#67d94e'],
+            failed:  ['#ff8a7a', '#e5604f', '#e5604f'],
+        }[state] || ['#fac57f', '#eeb063', '#a9713c'];
+
+        const svg =
+            `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">` +
+            `<rect width="32" height="32" rx="6" fill="#120d13"/>` +
+            `<rect x="3" y="3" width="26" height="26" rx="4" fill="none" stroke="${ink[2]}" stroke-width="2"/>` +
+            `<rect x="8" y="9" width="4" height="4" fill="${ink[0]}"/>` +
+            `<rect x="12" y="13" width="4" height="4" fill="${ink[0]}"/>` +
+            `<rect x="8" y="17" width="4" height="4" fill="${ink[0]}"/>` +
+            `<rect x="18" y="17" width="8" height="4" fill="${ink[1]}"/></svg>`;
+
+        let link = document.querySelector('link[rel="icon"]');
+        if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+        }
+        link.type = 'image/svg+xml';
+        link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
+
+        const base = 'AgentHQ — Multi-Agent Office';
+        const mark = { running: '●', done: '✅', failed: '❌' }[state] || '';
+        document.title = mark ? `${mark} ${label ? label + ' ' : ''}${base}` : base;
+    }
+
     showExecutiveMemo(markdownText, payload) {
         if (!this.executiveMemoCard || !this.memoBodyContent) return;
         payload = payload || {};

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!--
+    The office, at 16 pixels.
+
+    Everything in this project is drawn on a grid, so the icon is too: a CRT in
+    its amber frame with a prompt on it. Detail a favicon cannot show is left
+    out rather than shrunk, because a desk and four agents at this size is mud.
+    Colours are the app's own tokens (panel, frame, amber), so the tab and the
+    page are the same object.
+
+    Note for editors: an XML comment may not contain a double hyphen, which is
+    how the first version of this file shipped as a broken image.
+  -->
+  <rect width="32" height="32" rx="6" fill="#120d13"/>
+  <rect x="3" y="3" width="26" height="26" rx="4" fill="none" stroke="#a9713c" stroke-width="2"/>
+  <rect x="8"  y="9"  width="4" height="4" fill="#fac57f"/>
+  <rect x="12" y="13" width="4" height="4" fill="#fac57f"/>
+  <rect x="8"  y="17" width="4" height="4" fill="#fac57f"/>
+  <rect x="18" y="17" width="8" height="4" fill="#eeb063"/>
+</svg>

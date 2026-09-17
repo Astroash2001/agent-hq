@@ -87,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             case 'task.created':
                 hud.addTerminalLog(`Task accepted: '${payload.description}'`, 'ANALYSIS');
+                hud.setTabState?.('running');
                 break;
 
             case 'task.assigned':
@@ -150,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 hud.addTerminalLog(
                     `FAILED ${payload.step_id || 'step'}: ${payload.error || 'unknown error'}`,
                     'ERROR');
+                hud.setTabState?.('failed');
                 break;
 
             // {completed_step, total_steps, wave, failed}
@@ -157,6 +159,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 hud.addTerminalLog(
                     `Step ${payload.completed_step} of ${payload.total_steps} done` +
                     (payload.failed ? ` (${payload.failed} failed)` : ''), 'INFO');
+                // The tab is usually not the one being looked at while a
+                // mission runs, so the step count goes in the title.
+                hud.setTabState?.('running',
+                    `${payload.completed_step}/${payload.total_steps}`);
                 break;
 
             // ---- the floor ------------------------------------------------
@@ -333,6 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ? `Task finished in ${payload.duration_seconds}s — unverified: ${(payload.unverified_steps || []).join(', ')} ended on a 'revise' verdict`
                                 : `Task completed in ${payload.duration_seconds}s`,
                         failed ? 'ERROR' : unverified ? 'WARN' : 'SUCCESS');
+                    hud.setTabState?.(failed ? 'failed' : 'done',
+                                      failed ? `${failed} failed` : '');
                 }
                 hud.stopMissionMeter();
                 hud.showExecutiveMemo(payload.result, payload);
