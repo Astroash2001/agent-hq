@@ -148,7 +148,7 @@ python scripts/watch_mission.py --twice     # the second run shows memory recall
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 616 passed, 2 skipped
+cd backend && python -m pytest -q      # 646 passed, 2 skipped
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, `ruff check`, `node --check` on
