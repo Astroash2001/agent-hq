@@ -15,10 +15,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # optional at the code level -- `tool_registry` registers the tool only where a
 # browser is actually installed, so a host without one simply does not offer it.
 #
-# Installed here because an image is where the decision belongs: Chromium peaked
-# at 829MB resident in testing, so a 512MB host cannot run it and a 16GB one
-# can. Build with BROWSER=0 to leave it out and get the smaller image back.
-ARG BROWSER=1
+# Off by default, because the image's usual home cannot afford it: Chromium
+# peaked at 829MB resident in testing and Render's free instance has 512MB. A
+# browser-enabled image there registers `render_page`, an agent calls it, and
+# the mission dies of OOM. Build with --build-arg BROWSER=1 on a host with the
+# memory for it.
+ARG BROWSER=0
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN if [ "$BROWSER" = "1" ]; then \
         pip install --no-cache-dir playwright==1.63.0 && \
@@ -49,6 +51,6 @@ ENV ENVIRONMENT=production \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -c "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/api/health' % os.environ.get('PORT', '7860'))" || exit 1
+  CMD python -c "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/api/health' % os.environ.get('PORT', '8080'))" || exit 1
 
 CMD ["python", "backend/main.py"]
