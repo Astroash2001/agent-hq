@@ -1,9 +1,7 @@
 FROM python:3.10-slim
 
-# Create the runtime user. UID 1000 on purpose: Hugging Face Spaces runs a
-# Docker container as that id, and a process that cannot write its own mission
-# directory fails at the first artifact rather than at startup.
-RUN groupadd -g 1000 agenthq && useradd -u 1000 -g agenthq -m -d /home/agenthq agenthq
+# Create a non-root system user and home directory
+RUN groupadd -r agenthq && useradd -r -g agenthq -m -d /home/agenthq agenthq
 
 WORKDIR /app
 
