@@ -1,13 +1,30 @@
 FROM python:3.10-slim
 
-# Create a non-root system user and home directory
-RUN groupadd -r agenthq && useradd -r -g agenthq -m -d /home/agenthq agenthq
+# Create the runtime user. UID 1000 on purpose: Hugging Face Spaces runs a
+# Docker container as that id, and a process that cannot write its own mission
+# directory fails at the first artifact rather than at startup.
+RUN groupadd -g 1000 agenthq && useradd -u 1000 -g agenthq -m -d /home/agenthq agenthq
 
 WORKDIR /app
 
 # Install runtime dependencies only (development tools stay in requirements-dev.txt)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# The browser, for `render_page`. Kept out of requirements.txt because it is
+# optional at the code level -- `tool_registry` registers the tool only where a
+# browser is actually installed, so a host without one simply does not offer it.
+#
+# Installed here because an image is where the decision belongs: Chromium peaked
+# at 829MB resident in testing, so a 512MB host cannot run it and a 16GB one
+# can. Build with BROWSER=0 to leave it out and get the smaller image back.
+ARG BROWSER=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN if [ "$BROWSER" = "1" ]; then \
+        pip install --no-cache-dir playwright==1.63.0 && \
+        playwright install --with-deps chromium && \
+        chmod -R a+rX /opt/ms-playwright; \
+    fi
 
 # Copy application source directories
 COPY backend/ ./backend/
@@ -32,6 +49,6 @@ ENV ENVIRONMENT=production \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -c "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/api/health' % os.environ.get('PORT', '8080'))" || exit 1
+  CMD python -c "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/api/health' % os.environ.get('PORT', '7860'))" || exit 1
 
 CMD ["python", "backend/main.py"]
