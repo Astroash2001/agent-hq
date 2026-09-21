@@ -1332,10 +1332,8 @@ class Orchestrator:
             spent = self._mission_tokens_spent(task_id)
             if pending and spent >= settings.max_tokens_budget_per_task:
                 for sid in sorted(pending):
-                    by_id[sid].status = "failed"
-                    self._set_node_status(sid, "failed")
-                    store.upsert_step(task_id, by_id[sid], "failed",
-                                      error="token budget exhausted")
+                    await self._record_unstarted_step(
+                        task_id, by_id[sid], "token budget exhausted", store)
                     failed.add(sid)
                 skipped = len(pending)
                 pending.clear()
@@ -1357,10 +1355,9 @@ class Orchestrator:
                 # Nothing runnable and nothing in flight: everything left is
                 # waiting on something that failed.
                 for sid in sorted(pending):
-                    by_id[sid].status = "failed"
-                    self._set_node_status(sid, "failed")
-                    store.upsert_step(task_id, by_id[sid], "failed",
-                                      error="unreachable after an upstream failure")
+                    await self._record_unstarted_step(
+                        task_id, by_id[sid],
+                        "unreachable after an upstream failure", store)
                     failed.add(sid)
                 if pending:
                     logger.warning("[%s] %d step(s) unreachable after a failure",
@@ -1495,6 +1492,51 @@ class Orchestrator:
 
         self._steps_waiting.pop(task_id, None)
         return results
+
+    async def _record_unstarted_step(self, task_id: str, step: PlanStep,
+                                     reason: str, store) -> None:
+        """
+        A step that failed without ever being dispatched.
+
+        Two routes reach here: everything left depends on something that
+        failed, and the token budget ran out between waves. Both used to write
+        the run store and the manifest and nothing else -- no span, and no
+        per-step event. The consequences were invisible in the two places
+        people look:
+
+          * `trace.jsonl` had no record, so a replay of the mission showed the
+            step as `pending` for ever while the manifest said `failed`. Caught
+            by `tools/check_replay.js` on two stored missions ("never assigned:
+            s3", "manifest says failed, replay ends pending").
+          * The office marked the DAG node red from a live `dag.update`, but no
+            `task.failed` named the step, so the agent's own card never showed
+            it and the log never said which steps died.
+
+        A step span with `status="error"` is what `replay.js` turns back into a
+        `task.failed`, so writing one here is what makes a replayed mission
+        agree with the manifest it came from.
+        """
+        step.status = "failed"
+        self._set_node_status(step.id, "failed")
+        store.upsert_step(task_id, step, "failed", error=reason)
+
+        async with tracing.span("step", f"{step.id}: not started",
+                                step_id=step.id, agent_id=step.agent_id) as node:
+            node.set(not_started=True)
+            node.status = "error"
+            node.error = reason
+
+        specialist = self._agent_by_id(step.agent_id)
+        await event_bus.emit(Event(
+            type=EventType.TASK_FAILED,
+            agent_id=step.agent_id,
+            task_id=task_id,
+            data={
+                "step_id": step.id,
+                "agent_name": getattr(specialist, "name", step.agent_id),
+                "error": reason,
+            }
+        ))
 
     async def _record_step_failure(self, task_id: str, step: PlanStep, goal: str,
                                    outcome: BaseException, store) -> None:

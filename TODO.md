@@ -9,6 +9,15 @@ the codebase, not assumed.
 
 ## Immediate
 
+### The hero GIF shows the old chrome
+
+`docs/hero.gif` was recorded before the interface was rebuilt. The office in it
+is current; the panels around it are not -- brown double frames, a token gauge
+measured against a 10,000 ceiling that no longer exists, and pixel type at every
+size. It is the first thing a reader sees, so it misrepresents the project until
+it is re-recorded. Needs a real mission with a working provider, twenty-five
+seconds of it, at the same crop as the original.
+
 ### No `requirements.txt`
 
 **Done.** Split into `requirements.txt` (fastapi, uvicorn, websockets, pydantic,

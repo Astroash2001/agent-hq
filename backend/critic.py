@@ -7,9 +7,12 @@ the step was asked to do", which needs a model.
 
 Cheap by construction, because criticism that costs more than the work is not
 worth having. One call, no tools, no ReAct loop, temperature 0, and
-`critic_model` defaults to `settings.fallback_model` -- the small model. The
-artifact is truncated before it is sent, since a judgement about whether a
-report answers its brief does not need the whole report.
+`critic_model` defaults to `settings.fallback_model` -- the small model.
+
+A long artifact is sent as an excerpt, since a judgement about whether a report
+answers its brief does not need the whole report. It keeps BOTH ENDS and drops
+the middle, and says so: a head-only cut hid the conclusion and the judge then
+failed the step for not having one.
 
 Skipped entirely when no credential is configured. There is no offline judge:
 the built-in simulator would be grading itself, and a verdict invented by the
@@ -18,7 +21,7 @@ like a measurement.
 """
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import llm
 import token_ledger
@@ -32,6 +35,44 @@ logger = logging.getLogger("AgentHQ.Critic")
 # answers the brief is made in the first couple of pages; sending 20KB costs
 # real money to reach the same verdict.
 MAX_ARTIFACT_CHARS = 6000
+
+# How much of that budget goes to the opening; the rest goes to the CLOSE.
+#
+# A head-only cut throws away the half a reviewer is most likely checking --
+# "finish with a recommendation", "state the total", "end with the sources" --
+# and then reads the absence as the specialist's fault. Observed on a
+# 10,400-character report whose recommendation was complete and correct: the
+# critic saw the first 6,000 characters, reported "visibly truncated", "cut off
+# after 'Its free allowance is 1,000 credits monthly, so 2,000'" and "does not
+# provide the required 200-word recommendation", and rejected both steps until
+# the repair budget ran out. The mission's outcome was `unverified` because the
+# harness cut the artifact and then blamed the agent for the cut.
+_HEAD_FRACTION = 0.6
+
+_EXCERPT_WARNING = (
+    " -- SHOWN AS AN EXCERPT. The middle was removed BY THE HARNESS to fit the"
+    " review budget; the specialist's artifact is complete and continuous. Do"
+    " not judge it for ending abruptly, for a section you cannot see, or for a"
+    " word count you cannot measure"
+)
+
+
+def _excerpt(text: str) -> Tuple[str, bool]:
+    """
+    An artifact cut to the review budget, keeping both ends.
+
+    The middle is the safest thing to drop: an opening states the shape of the
+    work and a close carries the conclusion the instruction asked for. Returns
+    the text to show and whether anything was removed.
+    """
+    if len(text) <= MAX_ARTIFACT_CHARS:
+        return text, False
+    head = int(MAX_ARTIFACT_CHARS * _HEAD_FRACTION)
+    tail = MAX_ARTIFACT_CHARS - head
+    omitted = len(text) - MAX_ARTIFACT_CHARS
+    middle = (f"\n\n[... {omitted:,} characters omitted from the MIDDLE of the "
+              f"artifact by the harness. The artifact continues below ...]\n\n")
+    return text[:head] + middle + text[-tail:], True
 
 CRITIC_SYSTEM_PROMPT = """You are a reviewer inside a multi-agent system. You \
 are given the mission goal, the instruction one specialist was handed, and the \
@@ -60,6 +101,7 @@ so it can be wrong about the data: a column name, a category value, a table or \
 file name. When the artifact shows the instruction's version failed or returned \
 nothing, says why, and uses the correct value instead, that is the right work \
 -- accept it. Do not ask for the instruction's wrong version to be followed.
+- An artifact marked SHOWN AS AN EXCERPT reached you with its middle removed, by the harness and not by the specialist. Judge only what you can see. Never call such an artifact truncated, incomplete, cut off, or ending mid-sentence, and never fail it for a required section, total or word count that would sit in the part you were not shown -- the reason you cannot see it is this budget.
 - `score` is your confidence in the work, 0 to 1.
 - `reasons` are DEFECTS ONLY -- what is wrong or missing, short, specific and concrete, quoting the artifact where useful. Never list strengths, and never describe what the artifact does well: these lines are shown to the specialist and in the mission log as the grounds for the verdict, so a compliment in the first slot reads as "rewrite this" with no defect named. An "accept" carries an empty `reasons`; if the work is good but incomplete, list only what is missing.
 - `guidance` is a direct instruction to the specialist saying what to change. \
@@ -116,13 +158,12 @@ async def critique(
         # spending a model call to agree is waste.
         return Critique(skipped=True, reason_skipped="artifact is empty")
 
-    body = artifact_text[:MAX_ARTIFACT_CHARS]
-    truncated = len(artifact_text) > MAX_ARTIFACT_CHARS
+    body, truncated = _excerpt(artifact_text)
     user = (
         f"Mission goal:\n{goal}\n\n"
         f"Instruction given to the specialist:\n{step_description}\n\n"
         f"Artifact produced"
-        f"{' (truncated to the first %d characters)' % MAX_ARTIFACT_CHARS if truncated else ''}:\n"
+        f"{_EXCERPT_WARNING if truncated else ''}:\n"
         f"---\n{body}\n---\n\n"
         f"Return the JSON judgement."
     )

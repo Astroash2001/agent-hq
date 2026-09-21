@@ -14,12 +14,17 @@ argue at the table while the execution graph fills in and the cost ticks
 up](docs/hero.gif)
 
 *Twenty-five seconds of a real mission: the boss calls a standup, three
-specialists walk to the conference room, and the DAG, token gauge and cost
+specialists walk to the conference room, and the DAG, token count and cost
 panel move as they work. Nothing here is a mock-up.*
+
+> The recording predates the current chrome — the office is the same, the
+> panels around it are not. Re-recording it is [[TODO]].
 
 The office is not decoration. It **is** the observability layer: a queue at the
 ops console is a real `asyncio` queue, and moving a station in the map changes how
-long missions take.
+long missions take. Each agent carries what it is doing above its head -- the
+tool it is running, who it is queued behind, a failure -- so the floor answers
+"what is happening" without reading the log beside it.
 
 > Docs map: [[ARCHITECTURE]] · [[STACK]] · [[DECISIONS]] · [[PROTOCOL]] · [[TODO]]
 
@@ -194,6 +199,8 @@ you only need them to regenerate it. See [[STACK]].
 | Conclusion | `backend/synthesis.py` | What the mission found, drawn from the artifacts |
 | Meetings | `backend/debate.py` | One bounded objection per attendee before the chair decides |
 | Telemetry | `backend/tracing.py`, `backend/pricing.py` | One span per unit of work; real token counts, priced per model |
+| Token accounting | `backend/token_ledger.py` | One ledger per mission that every model call reports into, so planning and review are counted rather than reported as free |
+| Step limits | `backend/step_guard.py` | The token budget and the deadline a running step can see from the inside |
 | Agent engine | `backend/base_agent.py` | ReAct loop: reason → tool call → observe → repeat |
 | Event fabric | `backend/event_bus.py` | In-memory async pub/sub, 200-event rolling history |
 | Tools | `backend/tool_registry.py`, `backend/tools/` | 11 built-in tools, sandboxed and grant-checked |
@@ -387,6 +394,13 @@ above. The ones worth knowing up front:
 - **Provenance is not truth.** The harness can prove which query ran, which
   page was opened and which figure came from which file. Whether the page was
   right about the world is outside what any of this checks.
+- **The reviewer reads an excerpt.** A long artifact reaches the critic as its
+  first 3,600 and last 2,400 characters, with the middle removed and labelled.
+  A defect that lives only in the middle is not seen. Sending the whole thing
+  costs a judgement call's worth of tokens per step, which is the trade.
+- **Search quality varies by provider.** Tavily returns ranked, extracted
+  snippets; the Jina fallback returns five entries of page text. A mission that
+  falls through mid-run is citing two different shapes of source.
 
 ---
 
