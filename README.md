@@ -148,7 +148,7 @@ python scripts/watch_mission.py --twice     # the second run shows memory recall
 
 ```bash
 pip install -r requirements-dev.txt
-cd backend && python -m pytest -q      # 646 passed, 2 skipped
+cd backend && python -m pytest -q      # 681 passed, 2 skipped
 ```
 
 CI runs the same suite on Python 3.10 and 3.12, `ruff check`, `node --check` on
@@ -227,7 +227,7 @@ so an agent without it can still file a deliverable.
 
 | Tool | Risk | What it does |
 |---|---|---|
-| `web_search` | read | Ranked snippets from the live web (Tavily), or an honest refusal |
+| `web_search` | read | Ranked snippets from the live web, or an honest refusal. Tried in order: Tavily, a second Tavily key, then Jina — a spent key falls through instead of ending research for the run |
 | `fetch_url` | execute | One named http/https page or API as text |
 | `read_file` / `list_files` | read | Jailed to the mission and the repo |
 | `search_workspace` | read | Matching lines across the mission's files, with line numbers |

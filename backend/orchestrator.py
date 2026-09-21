@@ -20,6 +20,7 @@ import planner as planner_mod
 import pricing
 import provenance
 import runstore
+import token_ledger
 import step_guard
 import synthesis
 import tracing
@@ -31,7 +32,7 @@ from office import office
 from planner import planner
 from schemas import (AgentManifest, AgentStatus, Artifact, DAGNode, Event,
                      EventType, Plan, PlanStep, Task)
-from tools import file_ops
+from tools import file_ops, web_search
 from workspace import MissionWorkspace
 
 logger = logging.getLogger("AgentHQ.Orchestrator")
@@ -297,6 +298,11 @@ class Orchestrator:
         # resumed mission re-baselines, because its budget governs the work
         # still to be done and not what the process spent before it died.
         self._token_baseline[task_id] = self._tokens_spent()
+        # The ledger opens here too, and for the same reason: the planner's
+        # tokens belong to the mission that asked for them. It counts what the
+        # roster's counters cannot see -- planning, review, synthesis and the
+        # conference table are nobody's step.
+        token_ledger.begin(task_id)
         # A halt belongs to the mission that was running when the button was
         # pressed, not to the id. A resume of that mission starts unhalted --
         # including its wakeup, which `_execute_plan` would otherwise pick up
@@ -321,8 +327,14 @@ class Orchestrator:
         try:
             async with tracing.span("mission", user_prompt[:120],
                                     task_id=task_id, resumed=bool(resumed)) as node:
-                result = await self._run_mission(
-                    task_id, workspace, user_prompt, resumed, seeded)
+                # Every LLM call under here is charged to this mission,
+                # whichever module makes it. `handle_user_input` is its own
+                # asyncio task and steps are dispatched into child tasks, which
+                # copy the context -- so two missions in one process cannot mix
+                # their bills.
+                with token_ledger.mission(task_id):
+                    result = await self._run_mission(
+                        task_id, workspace, user_prompt, resumed, seeded)
                 node.set(cost_usd=result.get("cost_usd", 0.0),
                          steps=len(result.get("subtasks") or []))
                 return result
@@ -609,12 +621,19 @@ class Orchestrator:
             "duration_seconds": round(duration, 2),
             "total_tokens": self._mission_tokens_spent(task_id),
             "token_budget": settings.max_tokens_budget_per_task,
-            # Both figures are now this run's. `total_tokens` is what the budget
-            # gate measured -- every token the roster burned for this mission,
-            # including turns no step could be billed for. `mission_tokens` sums
-            # the per-step rows, so it is the part the breakdown accounts for
-            # and is the smaller of the two whenever the two disagree.
+            # All of these are this run's. `total_tokens` is what the budget
+            # gate measured: the larger of the roster's delta and the mission
+            # ledger, so it includes the calls no step owns. `mission_tokens`
+            # sums the per-step rows, so it is the part the breakdown accounts
+            # for and is the smaller whenever the two disagree --
+            # `overhead_tokens` is most of the difference.
             "mission_tokens": telemetry["mission_tokens"],
+            # What the harness spent around the work: the planner, each step's
+            # reviewer, the synthesis pass and the conference table. These calls
+            # belong to no agent and no step, so until the ledger existed they
+            # were counted nowhere and every figure above understated the run.
+            "overhead_tokens": telemetry["overhead_tokens"],
+            "tokens_by_source": telemetry["tokens_by_source"],
             "cost_usd": telemetry["cost_usd"],
             "unpriced_models": telemetry["unpriced_models"],
             # Figures the conclusion asserts that no artifact contains. Empty is
@@ -980,8 +999,18 @@ class Orchestrator:
             # No baseline means the mission was never registered here -- a unit
             # test driving `_execute_plan` directly, most likely. Charging it
             # the roster's lifetime total is the conservative reading.
-            return self._tokens_spent()
-        return max(0, self._tokens_spent() - baseline)
+            roster = self._tokens_spent()
+        else:
+            roster = max(0, self._tokens_spent() - baseline)
+
+        # Two mission-scoped readings of the same run, and neither contains the
+        # other. The roster's delta sees every agent turn but nothing else:
+        # planning, review, synthesis and the conference table belong to no
+        # agent. The ledger sees every call that went through `llm.acompletion`
+        # but not a simulated turn that never reached it, unless the agent
+        # reported it. Taking the larger is the only direction a budget gate
+        # may fail in -- under-reading spend is how a run overruns its ceiling.
+        return max(roster, token_ledger.total_tokens(task_id))
 
     def _record_step_telemetry(self, task_id: str, step: PlanStep, stats: Dict[str, Any]):
         """
@@ -1071,6 +1100,12 @@ class Orchestrator:
             "mission_tokens": sum(int(r.get("prompt_tokens", 0) or 0)
                                   + int(r.get("completion_tokens", 0) or 0)
                                   for r in per_step),
+            # The whole bill, and the part of it no step owns. Recorded
+            # separately because they answer different questions: what the work
+            # cost, and what running the harness around it cost.
+            "mission_tokens_total": self._mission_tokens_spent(task_id),
+            "overhead_tokens": token_ledger.overhead_tokens(task_id),
+            "tokens_by_source": token_ledger.totals(task_id)["by_source"],
             "unpriced_models": sorted(unpriced),
             # True when any step's numbers came from the simulator rather than
             # a provider, so nothing downstream presents a guess as a reading.
@@ -1124,7 +1159,15 @@ class Orchestrator:
                 "mission_tokens": sum(int(r.get("prompt_tokens", 0) or 0)
                                       + int(r.get("completion_tokens", 0) or 0)
                                       for r in rows.values()),
-                "tokens_estimated": any(r.get("estimated") for r in rows.values()),
+                # `mission_tokens` is the part the per-step breakdown accounts
+                # for. This is the whole bill, including the calls no step owns
+                # -- the planner, each step's reviewer, the synthesis pass and
+                # the conference table. The HUD shows this one; the difference
+                # between them is the mission's overhead.
+                "mission_tokens_total": self._mission_tokens_spent(task_id),
+                "overhead_tokens": token_ledger.overhead_tokens(task_id),
+                "tokens_estimated": (any(r.get("estimated") for r in rows.values())
+                                     or token_ledger.totals(task_id)["estimated"]),
             }
         ))
 
@@ -1152,9 +1195,18 @@ class Orchestrator:
             attempt += 1
             try:
                 async with self._slots:
-                    return await asyncio.wait_for(
-                        self._run_step(step, workspace, task_id, goal),
-                        timeout=settings.step_timeout_sec)
+                    # The same deadline `wait_for` will enforce, published so
+                    # the code inside the step can see it: `llm.py` stops
+                    # sleeping out retries it has no time for, and the repair
+                    # loop stops starting rewrites it cannot finish.
+                    deadline_token = step_guard.bind_deadline(
+                        time.monotonic() + settings.step_timeout_sec)
+                    try:
+                        return await asyncio.wait_for(
+                            self._run_step(step, workspace, task_id, goal),
+                            timeout=settings.step_timeout_sec)
+                    finally:
+                        step_guard.reset_deadline(deadline_token)
 
             except asyncio.TimeoutError:
                 # Deliberately not retried, and deliberately not re-raised as
@@ -1686,8 +1738,13 @@ class Orchestrator:
         budget_token = step_guard.bind_budget(
             lambda: (self._mission_tokens_spent(task_id), ceiling))
         try:
-            return await self._dispatch_under_lock(
-                step, specialist, subtask, workspace, task_id, goal, grant)
+            # Everything this step spends is labelled with the agent that owns
+            # it, tool calls that make their own model calls included. A
+            # meeting relabels its debate turns from inside `debate.py` and
+            # comes back to this label for the chair.
+            with token_ledger.source(f"agent:{step.agent_id}"):
+                return await self._dispatch_under_lock(
+                    step, specialist, subtask, workspace, task_id, goal, grant)
         finally:
             step_guard.reset_budget(budget_token)
 
@@ -1917,7 +1974,8 @@ class Orchestrator:
         reasons: List[str],
         attempt: int,
         source: str,
-        repairing: bool
+        repairing: bool,
+        guidance: str = ""
     ):
         await event_bus.emit(Event(
             type=EventType.STEP_CRITIQUED,
@@ -1929,6 +1987,12 @@ class Orchestrator:
                 "verdict": verdict,
                 "score": round(score, 3) if score is not None else None,
                 "reasons": reasons[:5],
+                # What the specialist was actually told to change. `reasons`
+                # can name strengths as well as defects depending on what the
+                # judge wrote, and the log used to print `reasons[0]` -- so a
+                # rejection could be reported to the user as a compliment.
+                # This is the line that always says what to fix.
+                "guidance": str(guidance or "")[:600],
                 "attempt": attempt,
                 # "contract" is the regex layer, "critic" the model. Worth
                 # distinguishing in the log: one is free and certain, the other
@@ -1996,14 +2060,21 @@ class Orchestrator:
 
         # Citations are asked for only when they were obtainable. Whether a
         # source could be fetched at all depends on this agent's tool grants and
-        # on a Tavily key being set, and a contract that demands one regardless
-        # fails every offline run for a reason the agent cannot fix.
+        # on the search provider actually answering, and a contract that demands
+        # one regardless fails every offline run for a reason the agent cannot
+        # fix.
+        #
+        # `provider_healthy()` and not just a key: a key whose quota is spent is
+        # configured and useless. Observed on a live run -- Tavily answered HTTP
+        # 432 to every search, the agent said plainly that it would not invent
+        # URLs, and the contract rejected it for missing citations until the
+        # repair budget ran out.
         spec = contracts.infer_spec(
             step.produces, step.description,
             # fetch_url counts as well: an agent that can open a page it was
             # given can cite it, and demanding citations only of searchers made
             # the bar depend on which of two reaching-out tools was granted.
-            citations_expected=bool(settings.tavily_api_key)
+            citations_expected=web_search.provider_healthy()
             and bool({"web_search", "fetch_url"} & set(specialist.tools)),
         )
 
@@ -2044,7 +2115,20 @@ class Orchestrator:
             # so the office shows the work was judged and found wanting.
             simulated = bool(stats.get("estimated"))
             budget_left = attempt <= settings.max_repair_attempts
-            can_repair = budget_left and not simulated
+            # And only if the step has time to finish one. A rewrite started
+            # with seconds left is killed by the step deadline mid-flight, and
+            # the step is then recorded as FAILED -- throwing away a first
+            # draft that was merely imperfect. Keeping the draft and marking it
+            # unverified is the better of the two outcomes: the work survives
+            # and the verdict still says nobody vouched for it.
+            left = step_guard.seconds_left()
+            time_for_repair = left is None or left >= settings.repair_min_seconds
+            can_repair = budget_left and not simulated and time_for_repair
+            if budget_left and not simulated and not time_for_repair:
+                logger.warning(
+                    "[%s] %s: %.0fs left, under the %.0fs a repair needs -- "
+                    "keeping the current artifact unverified instead",
+                    task_id, step.id, left, settings.repair_min_seconds)
 
             check = (contracts.check(artifact_text, spec) if settings.contracts_enabled
                      else contracts.CheckResult(ok=True))
@@ -2053,7 +2137,7 @@ class Orchestrator:
                 await self._emit_critique(
                     task_id, step, specialist, verdict="revise", score=None,
                     reasons=check.failures, attempt=attempt, source="contract",
-                    repairing=can_repair)
+                    repairing=can_repair, guidance=check.as_guidance())
                 if can_repair:
                     feedback = check.as_guidance()
                     continue
@@ -2081,7 +2165,7 @@ class Orchestrator:
             await self._emit_critique(
                 task_id, step, specialist, verdict=critique.verdict,
                 score=critique.score, reasons=critique.reasons, attempt=attempt,
-                source="critic",
+                source="critic", guidance=critique.guidance,
                 repairing=can_repair and critique.verdict == "revise")
             if critique.verdict == "revise" and can_repair:
                 feedback = critique.guidance

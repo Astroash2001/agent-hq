@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import llm
 import step_guard
+import token_ledger
 import tracing
 from config import date_context, settings, llm_configured
 from event_bus import event_bus
@@ -318,6 +319,21 @@ class BaseAgent:
             completion_tokens = int(response_data.get("completion_tokens", 0) or 0)
             turn_cost = float(response_data.get("cost_usd", 0.0) or 0.0)
             estimated = bool(response_data.get("estimated"))
+
+            # A real call has already reported itself from inside
+            # `llm.acompletion`. A simulated one never got that far, so it is
+            # recorded here -- flagged, because those counts are invented and
+            # a mission total that hides its guesses is worse than one that
+            # marks them.
+            if estimated:
+                token_ledger.record(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=turn_cost,
+                    model=response_data.get("model", "") or "simulator",
+                    estimated=True,
+                    source_name=f"agent:{self.id}",
+                )
 
             self.token_usage.prompt_tokens += prompt_tokens
             self.token_usage.completion_tokens += completion_tokens

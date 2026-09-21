@@ -54,6 +54,18 @@ class Settings(BaseSettings):
     # its own knowledge instead of retrying an empty tool until its step
     # budget is gone.
     tavily_api_key: str = os.getenv("TAVILY_API_KEY", "")
+    # A second Tavily key, tried when the first is out of quota. The Researcher
+    # plan is 1,000 searches; one key runs out mid-mission and every step after
+    # it answers from model knowledge with no sources, which is what happened
+    # on 2026-09-21. A key on a second account is the cheapest continuity there
+    # is, and an empty value simply skips this provider.
+    tavily_api_key_fallback: str = os.getenv("TAVILY_API_KEY_FALLBACK", "")
+    # The last resort, and it needs no new credential: s.jina.ai searches on
+    # the same JINA_API_KEY the reader fallback already uses. Fewer knobs than
+    # Tavily (no search depth, no direct answer) but it returns ranked results
+    # with URLs, which is what a citation needs.
+    jina_search_enabled: bool = os.getenv("JINA_SEARCH_ENABLED", "true").lower() != "false"
+    jina_search_base: str = "https://s.jina.ai/"
     # "basic" is one credit and fast; "advanced" digs deeper for two.
     search_depth: str = os.getenv("SEARCH_DEPTH", "basic")
     # Hard ceiling on searches per agent task, enforced in the ReAct loop.
@@ -231,6 +243,11 @@ class Settings(BaseSettings):
     # failure -- which matters, because failure recording is what makes the
     # competence rerouting in memory.py real.
     step_timeout_sec: float = 300.0
+    # Least time a repair attempt needs to be worth starting. Under this, the
+    # step keeps the draft it has and records it unverified rather than
+    # beginning a rewrite the step deadline will kill half-written -- which
+    # reported a step as FAILED and discarded a usable first draft with it.
+    repair_min_seconds: float = float(os.getenv("REPAIR_MIN_SECONDS", "120"))
     # Total attempts at a step whose failure looks transient (llm.is_transient
     # decides, so there is one classifier rather than two that drift apart). A
     # step that failed because the agent produced garbage is contracts.py and

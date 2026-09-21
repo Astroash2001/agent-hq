@@ -25,6 +25,8 @@ import re
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import pricing
+import step_guard
+import token_ledger
 import tracing
 from config import settings, llm_route
 
@@ -59,6 +61,22 @@ class LLMResult(NamedTuple):
 
 # Retry these: the provider is busy, throttling, or briefly broken.
 _TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+
+# Transient, but not worth a second attempt on the SAME model: the gateway in
+# front of the model is refusing or unreachable, which is a fact about the
+# endpoint and not about this request. Observed: a mission spent three attempts
+# and two 60-second provider-requested waits on `BadGatewayError`, blew the
+# 900s step deadline, and never reached the fallback model that was configured
+# and working. Switch models first; the chain comes back to nothing lost.
+_GATEWAY_STATUS = {502, 503, 504}
+_GATEWAY_NAMES = ("BadGatewayError", "ServiceUnavailableError", "GatewayTimeout")
+
+
+def is_gateway_fault(exc: Exception) -> bool:
+    status = _status_of(exc)
+    if status in _GATEWAY_STATUS:
+        return True
+    return type(exc).__name__ in _GATEWAY_NAMES
 
 # Never retry these, whatever else they look like. A bad key, a model id that
 # does not exist on this account, or a malformed request will fail identically
@@ -176,6 +194,14 @@ def _backoff(attempt: int) -> float:
     return round(min(base, settings.llm_backoff_max) * random.uniform(0.7, 1.3), 2)
 
 
+def _bounded_timeout(requested: float) -> float:
+    """The requested timeout, or the step's remaining time if that is shorter."""
+    left = step_guard.seconds_left()
+    if left is None:
+        return requested
+    return max(5.0, min(requested, left - 2.0))
+
+
 async def acompletion(
     messages: List[Dict[str, Any]],
     *,
@@ -218,7 +244,12 @@ async def acompletion(
                     "messages": messages,
                     "temperature": settings.temperature if temperature is None else temperature,
                     "max_tokens": settings.max_tokens if max_tokens is None else max_tokens,
-                    "timeout": settings.llm_timeout if timeout is None else timeout,
+                    # Never longer than the step has left: a 180s call
+                    # started with 40s on the clock cannot return in time, and
+                    # spending the remainder waiting for it costs the step the
+                    # chance to file what it already has.
+                    "timeout": _bounded_timeout(
+                        settings.llm_timeout if timeout is None else timeout),
                     # api_base / api_key / User-Agent when a gateway is set;
                     # empty otherwise, so direct-provider routing is unchanged.
                     **llm_route(),
@@ -240,6 +271,17 @@ async def acompletion(
                         cost_usd=cost,
                         priced=pricing.is_priced(current),
                     )
+                    # Charged to whichever mission is in context, whoever
+                    # called. Recording here rather than in each caller is the
+                    # point: the planner, the critic and the reviewer were all
+                    # invisible to the mission's totals precisely because they
+                    # each had to remember to report, and none of them did.
+                    token_ledger.record(
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        cost_usd=cost,
+                        model=current,
+                    )
                     return LLMResult(
                         response=response,
                         model=current,
@@ -259,6 +301,21 @@ async def acompletion(
                 transient = is_transient(exc)
                 final_attempt = attempt >= settings.llm_max_retries
 
+                # The gateway is down, not busy. Go to the next model now
+                # rather than spending this step's remaining time proving the
+                # same endpoint is still down.
+                if transient and is_gateway_fault(exc):
+                    logger.warning("[llm] %s on %s: gateway fault, not retrying "
+                                   "this model", type(exc).__name__, current)
+                    if on_retry:
+                        try:
+                            await on_retry(
+                                f"{current} gateway fault ({type(exc).__name__})"
+                                f" — switching model", "fallback")
+                        except Exception:
+                            pass
+                    break
+
                 if not transient:
                     logger.error("[llm] %s on %s: %s", type(exc).__name__, current, exc)
                     break           # fatal: try the fallback model, not this one again
@@ -273,6 +330,17 @@ async def acompletion(
                 if wait is None:
                     wait = _backoff(attempt)
                 wait = min(wait, settings.llm_retry_max_wait)
+
+                # A wait the step cannot afford is not a retry, it is a slower
+                # failure: the step dies holding whatever it had not filed yet.
+                # Move to the next model instead, and if there is none, raise
+                # now so the caller still has time to save its work.
+                left = step_guard.seconds_left()
+                if left is not None and wait >= max(0.0, left - 5.0):
+                    logger.warning("[llm] %s on %s: %.0fs wait does not fit the "
+                                   "%.0fs left in this step",
+                                   type(exc).__name__, current, wait, left)
+                    break
 
                 note = (f"{current} unavailable ({type(exc).__name__})"
                         f"{' — provider asked for' if asked else ', retrying in'} {wait:.0f}s"

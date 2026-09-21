@@ -177,6 +177,7 @@ Fires once per attempt, from either checker.
 ```json
 { "step_id": "s2", "agent_name": "Alice", "verdict": "revise", "score": 0.4,
   "reasons": ["No figures are given for either chemistry"], "attempt": 1,
+  "guidance": "Add the $/kWh and cycle-life figures for both chemistries.",
   "source": "critic", "repairing": true, "artifact": "research_notes.md" }
 ```
 
@@ -186,7 +187,9 @@ Fires once per attempt, from either checker.
 | `verdict` | `"accept"` or `"revise"` |
 | `score` | 0..1 from the critic; **null** from a contract check, which does not score |
 | `attempt` | 1 on the original dispatch, higher on a repair |
-| `repairing` | whether a re-dispatch follows |
+| `repairing` | whether a re-dispatch follows. **False on a `revise`** means the step completes carrying work its reviewer rejected -- because the repair budget is spent, or because too little of `step_timeout_sec` remains to finish a rewrite (`repair_min_seconds`) |
+| `reasons` | the defects the judge named. Display `guidance` instead where you can: a model asked for `reasons` may lead with what the artifact does *well*, and a log line printing `reasons[0]` then reports a rejection as a compliment |
+| `guidance` | what the specialist was told to change. Always actionable, and the string the repair attempt is actually given |
 
 **`repairing: false` on a `revise` is the case to render loudest.** It means the
 repair budget was spent and the step completes carrying work its reviewer
@@ -238,7 +241,7 @@ All additive — old readers keep working.
 |---|---|
 | `agent.status` | `station_id`, `station_label` on `tool_calling` |
 | `task.assigned` | `step_id`, `produces`, `consumes`, `rationale`, `routed_from`, `attempt` (1 on the original dispatch, higher on a repair) |
-| `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0`. Each node that has **run** also carries `cost_usd`, `duration_sec`, `total_tokens`, `model`, `attempts`, `estimated`; the event carries mission totals `cost_usd`, `mission_tokens`, `tokens_estimated` |
+| `dag.update` | `source` (`"llm"` / `"heuristic"`); node ids are now plan step ids (`s1`, `s2`) instead of `dag_0`. Each node that has **run** also carries `cost_usd`, `duration_sec`, `total_tokens`, `model`, `attempts`, `estimated`; the event carries mission totals `cost_usd`, `mission_tokens`, `mission_tokens_total`, `overhead_tokens`, `tokens_estimated` |
 | `task.progress` | `wave` (which parallel wave just finished), `failed` |
 | `task.completed` | `plan_source`, `artifacts` (index, no bodies), `cost_usd`, `tokens_estimated`, `outcome` (`completed` / `unverified` / `failed` / `halted`), `unverified_steps`, `mission_id` (what the artifact and bundle endpoints address) |
 | `token.update` | `estimated` (the counts are the simulator's, not a provider's), `model` (which model answered) |
@@ -251,8 +254,18 @@ it has not started. The mission totals are **this mission's**: the agents' own
 counters are lifetime totals that climb across every mission the process has
 served.
 
-**Reading `token.update`:** `estimated: true` means no model was called and the
-counts are the built-in simulator's invention. A gauge that renders those the same
+**Which token figure to show:** `mission_tokens_total` is the whole bill and is
+what a HUD should display. `mission_tokens` sums the per-step rows only, and
+`overhead_tokens` is the difference: the planner, each step's reviewer, the
+synthesis pass and the conference table, which belong to no step and were
+counted nowhere before `token_ledger.py` existed.
+
+**Reading `token.update`:** the payload is the **sending agent's lifetime**
+counter -- `base_agent` accumulates it across every mission the process serves
+-- so it is a per-agent running total, not the mission's. Read it by
+subtracting where that agent stood when the mission began, or the figure falls
+whenever a lighter-spending agent takes the next turn. `estimated: true` means
+no model was called and the counts are the built-in simulator's invention. A gauge that renders those the same
 way it renders a real reading is presenting a guess as a measurement -- mark them.
 `cost_usd` on `task.completed` is this mission's spend, summed per step; it is
 `0.0` on the simulator path because nothing was called, not because it was free.
@@ -308,8 +321,8 @@ when a process is killed mid-write -- so the replay driver fetches the briefing
 from here rather than reconstructing it. The name is resolved and checked to be
 inside the mission directory; a name that escapes is a 400.
 
-`mission.json` gained `cost_usd`, `mission_tokens`, `unpriced_models`,
-`tokens_estimated`, and `per_step`, one row per plan step carrying `model`,
+`mission.json` gained `cost_usd`, `mission_tokens`, `overhead_tokens`,
+`tokens_by_source`, `unpriced_models`, `tokens_estimated`, and `per_step`, one row per plan step carrying `model`,
 `prompt_tokens`, `completion_tokens`, `cost_usd`, `duration_sec`, `tool_calls`,
 `retries`, `fell_back`, `estimated` and `status`, plus `verdict` and `quality`
 once the step has been reviewed.
@@ -331,14 +344,23 @@ reduced to their length) and, on failure, `refused` and `tool_error`.
 `python -m evals.mission_check` grades a finished mission from these files,
 locally or through the REST endpoints above (`--base-url`). See `evals/README.md`.
 
-Both token figures are this mission's. `total_tokens` is what the budget gate
-measured -- every token the roster burned between the mission starting and
-finishing, including turns that belong to no single step. `mission_tokens` sums
-the `per_step` rows, so it is the part the breakdown can account for, and is the
-smaller of the two whenever they disagree. Neither is a process-lifetime figure:
-the gate takes a baseline of the roster's counters at mission start and reads the
-difference, so a server that has already run twenty missions offers the
-twenty-first the same allowance as the first.
+Every token figure here is this mission's. `total_tokens` is what the budget
+gate measured: the larger of two mission-scoped readings, because neither
+contains the other. One is the roster's delta -- the agents' counters at the end
+minus a baseline taken at mission start -- which sees every agent turn and no
+overhead. The other is `token_ledger.py`, which records every call that passed
+through `llm.acompletion` whoever made it, so it sees the planner, the critic
+and the synthesis pass, which belong to no agent. Under-reading spend is the one
+direction a budget gate must not fail in, so the gate takes the larger.
+
+`mission_tokens` sums the `per_step` rows, so it is the part the breakdown can
+account for and is the smaller figure whenever they disagree. `overhead_tokens`
+is what the harness spent around the work, and `tokens_by_source` splits the
+ledger by caller (`planner`, `critic`, `synthesis`, `debate`, `agent:<id>`).
+
+None of it is a process-lifetime figure: both readings re-baseline per mission,
+so a server that has already run twenty missions offers the twenty-first the
+same allowance as the first.
 
 A span in `trace.jsonl` is `{span_id, parent_id, kind, name, seq, t_start, t_end,
 duration_sec, status, error, attrs}`. `parent_id` is null on the one mission span

@@ -15,6 +15,7 @@ import api_guard
 import api_missions
 import attachments
 import pricing
+from tools import web_search
 from config import settings
 from event_bus import event_bus
 from memory import memory
@@ -84,6 +85,13 @@ async def lifespan(app: FastAPI):
     # cost panel, mission.json, eval budgets -- and a harness that sells "you
     # can price a run" reporting every run as free is the worst kind of quiet.
     pricing.warn_if_configured_models_are_unpriced()
+    # And whether the search providers can actually answer. A spent Tavily key
+    # looks exactly like a working one until an agent tries it mid-mission:
+    # observed twice on 2026-09-21, fifteen minutes each, researching with a
+    # tool that could not return a single URL. `/usage` is not a search, so
+    # asking costs no quota.
+    for line in await web_search.quota_report():
+        logger.info("[search] %s", line)
     yield
     logger.info("AgentHQ Backend Server shutting down...")
 

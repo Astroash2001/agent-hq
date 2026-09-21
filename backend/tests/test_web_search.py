@@ -27,6 +27,24 @@ class _Resp:
             raise httpx.HTTPStatusError("boom", request=None, response=None)
 
 
+@pytest.fixture(autouse=True)
+def single_provider(monkeypatch):
+    """
+    Pin the chain to Tavily alone.
+
+    Every test in this file asserts what ONE provider does with a given
+    response. `search_web` now falls through to the next provider on a refusal,
+    so without this a 432 would be answered by Jina and the assertions would be
+    describing the fallback. The chain itself is covered in
+    `test_search_fallback.py`.
+    """
+    monkeypatch.setattr(settings, "tavily_api_key_fallback", "")
+    monkeypatch.setattr(settings, "jina_search_enabled", False)
+    web_search.reset_health()
+    yield
+    web_search.reset_health()
+
+
 @pytest.fixture
 def keyed(monkeypatch):
     monkeypatch.setattr(settings, "tavily_api_key", "tvly-test")
@@ -122,15 +140,32 @@ async def test_zero_results_tells_the_agent_to_move_on(keyed, monkeypatch):
 async def test_bad_key_is_reported_not_raised(keyed, monkeypatch):
     _post(monkeypatch, _Resp(401))
     r = await web_search.search_web("q")
-    assert r["success"] is True and r["configured"] is False
+    # `configured` says this deployment HAS a key. A rejected one is a wrong
+    # key, not a missing one, and the two want different fixes from the
+    # operator. What the agent needs -- stop asking -- is in the note, and what
+    # the contract layer needs is `provider_healthy()`.
+    assert r["success"] is True and r["configured"] is True
     assert "rejected" in r["note"]
+    assert "Do not retry" in r["note"]
+    assert web_search.provider_healthy() is False
 
 
 @pytest.mark.asyncio
 async def test_quota_exhausted_is_reported_not_raised(keyed, monkeypatch):
+    """
+    `configured` means "this deployment has a key", not "the last search
+    worked". It used to be False for every refusal, which told the operator a
+    key was missing when the real fault was a spent quota -- and told the agent
+    to write the tool off rather than try again next mission. The note carries
+    the fault; `provider_healthy()` carries whether it is currently answering.
+    """
     _post(monkeypatch, _Resp(429))
     r = await web_search.search_web("q")
-    assert r["configured"] is False and "quota" in r["note"]
+    assert r["configured"] is True
+    assert r["count"] == 0
+    assert "429" in r["note"] or "quota" in r["note"]
+    assert "Do not retry" in r["note"]
+    assert web_search.provider_healthy() is False
 
 
 @pytest.mark.asyncio
@@ -138,13 +173,18 @@ async def test_timeout_does_not_fail_the_step(keyed, monkeypatch):
     _post(monkeypatch, httpx.TimeoutException("slow"))
     r = await web_search.search_web("q")
     assert r["success"] is True and "timed out" in r["note"]
+    assert web_search.provider_healthy() is False
 
 
 @pytest.mark.asyncio
 async def test_unexpected_error_does_not_fail_the_step(keyed, monkeypatch):
     _post(monkeypatch, RuntimeError("provider exploded"))
     r = await web_search.search_web("q")
-    assert r["success"] is True and r["configured"] is False
+    # Still a successful tool call carrying no results, and still a configured
+    # deployment -- the provider broke, the key did not vanish.
+    assert r["success"] is True and r["configured"] is True
+    assert "RuntimeError" in r["note"]
+    assert web_search.provider_healthy() is False
 
 
 @pytest.mark.asyncio

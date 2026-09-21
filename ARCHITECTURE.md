@@ -229,6 +229,42 @@ silently wrong forever while an unpriced model is visible in `mission.json` and
 fixable with one line. Prefix matching is boundary-checked, so `gpt-4o-2024-08-06`
 resolves to `gpt-4o` and `gpt-5.5` does not resolve to `gpt-5`.
 
+### `step_guard.py` — the limits a step obeys from inside
+
+Two ContextVars the orchestrator binds for the length of a step: a reader for
+the mission token budget, and the step's deadline. Both exist because a running
+step used to be unable to see the limits it was about to break. The budget half
+came first (a step kept working for seven minutes past "budget exhausted"); the
+deadline half came from a mission where `llm.py` slept out three 60-second
+provider-requested retries with 90 seconds left on the clock, and where a
+repair attempt was started at 780s of a 900s step and killed mid-write — which
+recorded the step as FAILED and discarded a complete first draft with it.
+
+So `llm.py` now caps both its per-call timeout and its retry waits by
+`seconds_left()`, and the repair loop refuses to start a rewrite it cannot
+finish (`repair_min_seconds`), keeping the draft and marking it unverified
+instead. Unbound — a test, the planner, an agent outside a step — reads `None`,
+which means "no deadline known" and never "no time left".
+
+### `token_ledger.py` — the whole bill, including what no step owns
+
+One ledger per mission that every model call reports into, recorded inside
+`llm.acompletion` so a new caller is counted without having to remember to opt
+in. It exists because the two accountings that came before it each had a blind
+spot: `BaseAgent.token_usage` sees only an agent's own turns (and is a lifetime
+counter), while `Orchestrator._step_telemetry` sees only what a step's agent
+reported. `planner.py`, `critic.py` and `synthesis.py` call the model directly
+and belong to no agent and no step, so one planner call per mission, one
+reviewer call per step and the synthesis pass were spend that the cost panel,
+`mission.json` and the budget gate all reported as zero.
+
+Scope rides in a `ContextVar`, the same trick `tracing.py` uses for parentage:
+`asyncio.create_task` copies the context, so a step dispatched into its own task
+inherits the mission it belongs to and two missions in one process cannot mix
+their bills. `source()` labels the caller, which is what lets a mission separate
+work from overhead. The budget gate reads the larger of this and the roster's
+delta, because under-reading spend is the one direction it must not fail in.
+
 ### `tracing.py` — the run, recorded
 
 Nested spans (`mission` → `step` → `turn` → `tool`/`llm`) written to

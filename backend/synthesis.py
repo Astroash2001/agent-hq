@@ -31,6 +31,7 @@ from typing import List, Optional, Sequence, Tuple
 
 import contracts
 import llm
+import token_ledger
 import tracing
 from config import llm_configured, settings
 
@@ -275,13 +276,14 @@ async def conclude(
 
     try:
         async with tracing.span("synthesis", model_name()) as span:
-            result = await llm.acompletion(
-                [{"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
-                 {"role": "user", "content": user}],
-                model=model_name(),
-                temperature=0.2,
-                max_tokens=settings.synthesis_max_tokens,
-            )
+            with token_ledger.source("synthesis"):
+                result = await llm.acompletion(
+                    [{"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+                     {"role": "user", "content": user}],
+                    model=model_name(),
+                    temperature=0.2,
+                    max_tokens=settings.synthesis_max_tokens,
+                )
             text = _whole_sentences((result.response.choices[0].message.content or "").strip())
             span.set(cost_usd=result.cost_usd,
                      total_tokens=result.total_tokens,

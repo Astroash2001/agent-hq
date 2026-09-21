@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from typing import Any, List, Optional
 
 import llm
+import token_ledger
 import tracing
 from config import date_context, llm_configured, settings
 from event_bus import event_bus
@@ -156,11 +157,12 @@ async def _one_turn(
             return position
 
         try:
-            result = await llm.acompletion(
-                [{"role": "system", "content": system},
-                 {"role": "user", "content": user}],
-                max_tokens=settings.debate_max_tokens,
-            )
+            with token_ledger.source("debate"):
+                result = await llm.acompletion(
+                    [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+                    max_tokens=settings.debate_max_tokens,
+                )
         except Exception as e:
             # Deliberately not respecting llm_strict, for the reason critic.py
             # gives: strict mode exists so a misconfiguration cannot look like

@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 import llm
+import token_ledger
 import tracing
 from config import llm_configured, settings
 from planner import _extract_json
@@ -60,7 +61,7 @@ file name. When the artifact shows the instruction's version failed or returned 
 nothing, says why, and uses the correct value instead, that is the right work \
 -- accept it. Do not ask for the instruction's wrong version to be followed.
 - `score` is your confidence in the work, 0 to 1.
-- `reasons` are short, specific and concrete. Quote the artifact where useful.
+- `reasons` are DEFECTS ONLY -- what is wrong or missing, short, specific and concrete, quoting the artifact where useful. Never list strengths, and never describe what the artifact does well: these lines are shown to the specialist and in the mission log as the grounds for the verdict, so a compliment in the first slot reads as "rewrite this" with no defect named. An "accept" carries an empty `reasons`; if the work is good but incomplete, list only what is missing.
 - `guidance` is a direct instruction to the specialist saying what to change. \
 Write it only for a "revise"; leave it empty for an "accept". It is handed \
 straight to the agent, so address it to them and be specific about what to add \
@@ -128,12 +129,13 @@ async def critique(
 
     try:
         async with tracing.span("critic", model_name()) as span:
-            result = await llm.acompletion(
-                [{"role": "system", "content": CRITIC_SYSTEM_PROMPT},
-                 {"role": "user", "content": user}],
-                model=model_name(),
-                temperature=0.0,
-            )
+            with token_ledger.source("critic"):
+                result = await llm.acompletion(
+                    [{"role": "system", "content": CRITIC_SYSTEM_PROMPT},
+                     {"role": "user", "content": user}],
+                    model=model_name(),
+                    temperature=0.0,
+                )
             payload = _extract_json(result.response.choices[0].message.content or "")
             # The reasons go in the trace too. A span recording only "revise"
             # left a rejected-but-correct extraction undiagnosable: the verdict

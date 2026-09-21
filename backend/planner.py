@@ -18,6 +18,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 import llm
+import token_ledger
 from config import date_context, settings, llm_configured
 from event_bus import event_bus
 from schemas import Event, EventType, Plan, PlanStep
@@ -420,13 +421,14 @@ class Planner:
         # Through llm.acompletion so the planner gets the same retry and
         # fallback as an agent step. It gates the entire mission -- a single
         # transient 429 here used to mean no plan at all.
-        result = await llm.acompletion(
-            [{"role": "system", "content": system},
-             {"role": "user", "content": user}],
-            temperature=settings.planner_temperature,
-            timeout=settings.planner_timeout,
-            on_retry=self._on_retry,
-        )
+        with token_ledger.source("planner"):
+            result = await llm.acompletion(
+                [{"role": "system", "content": system},
+                 {"role": "user", "content": user}],
+                temperature=settings.planner_temperature,
+                timeout=settings.planner_timeout,
+                on_retry=self._on_retry,
+            )
         # `.response` is the provider object; the rest of the LLMResult is the
         # cost of this call, which the mission's trace already recorded as an
         # llm span. Planning is not free and the mission total should say so.
