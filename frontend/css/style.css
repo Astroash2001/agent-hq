@@ -736,21 +736,26 @@ button, input, select { font: inherit; color: inherit; }
 .hud-icon-btn {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
-    flex: 0 0 26px;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
     padding: 0;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    color: var(--text-3);
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    color: var(--text-2);
     font-size: 13px;
     line-height: 1;
     cursor: pointer;
     transition: color .15s, background .15s, border-color .15s;
 }
-.hud-icon-btn .ico { width: 14px; height: 14px; }
-.hud-icon-btn:hover { color: var(--text); background: var(--surface-2); border-color: var(--line); }
+.hud-icon-btn .ico { width: 15px; height: 15px; }
+.hud-icon-btn:hover {
+    color: var(--accent-hi);
+    background: var(--surface-2);
+    border-color: rgba(240, 179, 94, 0.45);
+}
+.hud-icon-btn:active { background: var(--surface-3); }
 
 /* --- idle state ----------------------------------------------------------- */
 
@@ -1142,7 +1147,7 @@ button, input, select { font: inherit; color: inherit; }
 .memo-card[data-expanded="true"] .out-file-body { font-size: 13.5px; line-height: 1.65; }
 .memo-card[data-expanded="true"] .out-goal { font-size: 13px; }
 
-.memo-card[data-expanded="true"] .hud-card-actions { gap: 4px; }
+.memo-card[data-expanded="true"] .hud-card-actions { gap: 6px; }
 .memo-card[data-expanded="true"] .hud-icon-btn { width: 32px; height: 32px; flex: 0 0 32px; }
 .memo-card[data-expanded="true"] .hud-icon-btn .ico { width: 16px; height: 16px; }
 .memo-card[data-expanded="true"] .hud-card-header {

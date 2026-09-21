@@ -1213,13 +1213,21 @@ class RetroHUD {
             // this one into a second ✕ put two identical crosses side by side
             // with different meanings -- one restores the panel, one dismisses
             // it. A shrink glyph says which is which.
-            if (btn) btn.style.display = 'none';
+            if (btn) {
+                btn.innerHTML = '<svg class="ico"><use href="#i-shrink"/></svg>';
+                btn.title = 'Restore the output to the sidebar';
+                btn.setAttribute('aria-label', 'Restore the output to the sidebar');
+            }
         } else {
             const home = this._outHome;
             if (home && home.parent) home.parent.insertBefore(card, home.before);
             overlay.style.display = 'none';
             delete card.dataset.expanded;
-            if (btn) btn.style.display = '';
+            if (btn) {
+                btn.innerHTML = '<svg class="ico"><use href="#i-expand"/></svg>';
+                btn.title = 'Expand output';
+                btn.setAttribute('aria-label', 'Expand output');
+            }
         }
     }
 
