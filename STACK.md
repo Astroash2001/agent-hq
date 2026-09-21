@@ -53,9 +53,11 @@ loaded by `index.html` in dependency order.
 | `Path2D` | Room shell clipping and the bevelled frame |
 | WebSocket | Single connection to `/ws`, backoff reconnect |
 | `marked` (CDN) | Renders the executive-memo Markdown |
-| Google Fonts | `Silkscreen` (pixel headings), `IBM Plex Mono` (body, labels) |
-| CSS custom properties | Palette in `:root`, sampled from reference art |
-| CSS Grid + Flexbox | Two-column app shell, sidebar card rhythm |
+| Google Fonts | `Geist` (interface), `Geist Mono` (figures, log), `Silkscreen` (wordmark only) |
+| CSS custom properties | Palette in `:root`; office colours sampled from the reference art, chrome tokens layered on top of them |
+| CSS Grid + Flexbox | Top bar over a two-column shell; sidebar sections divided by rules, not frames |
+| Inline SVG sprite | One `<defs>` block of line icons, referenced with `<use>` |
+| WebAudio | Optional two-note cue when a mission ends or a step fails; off by default |
 
 The only runtime network dependencies are the `marked` CDN script and Google
 Fonts. Everything else is local.

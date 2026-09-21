@@ -7,232 +7,316 @@
     <!-- Drawn rather than fetched: an external favicon is one more request that
          can 404 on a fresh deployment and leave the tab blank. `hud.js` repaints
          it while a mission runs, so a backgrounded tab still says what happened. -->
-    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260917c">
-    <link rel="apple-touch-icon" href="assets/favicon.svg?v=20260917c">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=20260919a">
+    <link rel="apple-touch-icon" href="assets/favicon.svg?v=20260919a">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20260917c">
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css?v=20260919a">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
-    <div class="app-viewport">
-        <!-- ================= LEFT: office + dock + command bar ================= -->
-        <main class="canvas-panel" role="main" aria-label="Virtual Office Simulation">
-            <div class="canvas-container" id="canvasContainer">
-                <canvas id="officeCanvas" aria-label="Interactive 2D office workspace"></canvas>
-                <div class="canvas-tooltip" id="canvasTooltip" role="tooltip" aria-hidden="true"></div>
+    <!-- One sprite sheet of line icons, referenced with <use>. Inline so they
+         inherit currentColor and cost no request. -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <defs>
+            <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+            <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2.5"/><circle cx="18" cy="5" r="2.5"/><circle cx="12" cy="19" r="2.5"/><path d="M7.3 7.2 11 16.8M16.7 7.2 13 16.8"/></symbol>
+            <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></symbol>
+            <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></symbol>
+            <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+            <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+            <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+            <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></symbol>
+            <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 0 1-2.6-2.6l8.5-8.5"/></symbol>
+            <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+            <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+            <symbol id="i-sound" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></symbol>
+            <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></symbol>
+            <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
+            <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></symbol>
+            <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
+        </defs>
+    </svg>
+
+    <div class="app-shell">
+        <!-- ================= TOP BAR ================= -->
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+                <span class="brand-name">AgentHQ</span>
+                <span class="brand-sub">Multi-agent office</span>
             </div>
 
-            <!-- Agent card dock. Populated by hud.js from the agent manifests. -->
-            <div class="agent-dock" id="agentDock" role="list" aria-label="Agent roster"></div>
-
-            <div class="bottom-command-bar">
-                <form id="promptForm" class="prompt-form" aria-label="Agent command input">
-                    <span class="cmd-indicator" aria-hidden="true">&gt;</span>
-                    <input type="text" id="promptInput"
-                           placeholder="Command Boss Dave or a specialist (e.g. 'Research market trends and write a report')…"
-                           autocomplete="off" required aria-label="Command prompt">
-                    <!-- Attachments. The label is the control: a bare file input
-                         cannot be styled to match the terminal, and hiding it
-                         behind a label is the standard way round that. -->
-                    <input type="file" id="attachInput" multiple hidden
-                           accept=".md,.txt,.csv,.tsv,.json,.yaml,.yml,.log,.py,.js,.ts,.html,.css,.sql,.sh,.ini,.toml,.xml,.rst"
-                           aria-label="Attach files to this task">
-                    <label for="attachInput" class="attach-button" id="attachBtn"
-                           title="Attach a file for the agents to work from (text formats)">ATTACH</label>
-                    <button type="submit" class="dispatch-button" id="dispatchBtn">DISPATCH</button>
-                    <button type="button" class="emergency-button" id="emergencyStopBtn"
-                            title="Emergency stop all agents">HALT</button>
-                </form>
-                <!-- Empty until something is attached; `hidden` rather than
-                     display:none so the office does not reserve a gap for it. -->
-                <div id="attachTray" class="attach-tray" hidden
-                     aria-live="polite" aria-label="Attached files"></div>
+            <!-- What the office is doing right now. hud.setTabState drives it. -->
+            <div class="mission-pill" id="missionPill" data-state="idle" role="status" aria-live="polite">
+                <span class="pill-dot" aria-hidden="true"></span>
+                <span class="pill-text" id="missionPillText">Idle</span>
             </div>
-        </main>
 
-        <!-- ================= RIGHT: amber terminal HUD ================= -->
-        <aside class="hud-sidebar" role="complementary" aria-label="Telemetry and agent controls">
+            <div class="topbar-right">
+                <!-- Tokens this mission has spent. No gauge and no ceiling:
+                     the 10,000 it used to be measured against was a placeholder
+                     the backend never enforced, so the bar read as nearly full
+                     on a run that was nowhere near any real limit. -->
+                <div class="token-meter" title="Tokens used by this mission">
+                    <span class="token-label">Tokens</span>
+                    <span class="token-value" id="tokenUsageValue"
+                          role="status" aria-live="polite">0</span>
+                </div>
+                <button class="icon-btn" id="soundToggleBtn" type="button"
+                        title="Sound cues: off" aria-label="Toggle sound cues" aria-pressed="false">
+                    <svg class="ico"><use href="#i-mute"/></svg>
+                </button>
+                <div class="conn-pill" id="connPill" data-state="connecting"
+                     title="Connection to the AgentHQ server">
+                    <span class="pill-dot" aria-hidden="true"></span>
+                    <span id="connPillText">Connecting</span>
+                </div>
+            </div>
+        </header>
 
-            <!-- 1. LIVE TERMINAL -->
-            <section class="hud-card terminal-card" aria-label="Live terminal console">
-                <div class="terminal-titlebar">
-                    <span class="glyph" aria-hidden="true">&gt;_</span>
-                    <button class="hud-icon-btn" id="clearTerminalBtn"
-                            title="Clear logs" aria-label="Clear terminal logs">&times;</button>
-                </div>
-                <div class="crt-screen" id="terminalLogs" role="log" aria-live="polite">
-                    <div class="terminal-prompt-intro">Live terminal log stream.</div>
-                </div>
-            </section>
-
-            <!-- 2. TOKEN USAGE -->
-            <section class="hud-card token-card" aria-label="Token usage">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">🗄️</span> TOKEN USAGE
-                    </div>
-                    <div class="metric" id="tokenUsageValue">0/10000</div>
-                </div>
-                <!-- 20 segments, filled by hud.js. -->
-                <div class="equalizer-container" id="tokenFuelGauge"
-                     role="meter" aria-valuemin="0" aria-valuemax="10000" aria-valuenow="0"></div>
-            </section>
-
-            <!-- 3. EXECUTION PLAN -- the DAG the planner builds. The backend
-                 has always broadcast plan.created and dag.update; nothing drew
-                 them until now. Hidden until a plan arrives. -->
-            <section class="hud-card plan-card" id="planCard" style="display: none;"
-                     aria-label="Execution plan">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">🗺️</span> EXECUTION PLAN
-                    </div>
-                    <div class="hud-card-actions">
-                        <div class="metric" id="planSource">—</div>
-                        <button class="hud-icon-btn" id="dagExpandBtn"
-                                title="Expand graph" aria-label="Expand graph">⛶</button>
-                    </div>
-                </div>
-                <!-- The DAG as an actual graph. SVG rather than canvas so the
-                     labels stay crisp and each node is a real hoverable node. -->
-                <div class="dag-viewport" id="dagViewport">
-                    <svg id="dagSvg" role="img" aria-label="Execution plan graph"></svg>
-                </div>
-                <div class="dag-legend" id="dagLegend"></div>
-            </section>
-
-            <!-- 4. COST & TELEMETRY -- what the mission is actually spending,
-                 while it spends it. Every figure is per-mission: the agents'
-                 own counters are lifetime totals. Hidden until a plan lands. -->
-            <section class="hud-card cost-card" id="costCard" style="display: none;"
-                     aria-label="Mission cost and telemetry">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">💰</span> MISSION COST
-                    </div>
-                    <div class="metric" id="costTotal" data-estimated="false">$0.0000</div>
+        <div class="app-viewport">
+            <!-- ================= LEFT: office + dock + composer ================= -->
+            <main class="canvas-panel" role="main" aria-label="Virtual Office Simulation">
+                <div class="canvas-container" id="canvasContainer">
+                    <canvas id="officeCanvas" aria-label="Interactive 2D office workspace"></canvas>
+                    <div class="canvas-tooltip" id="canvasTooltip" role="tooltip" aria-hidden="true"></div>
                 </div>
 
-                <div class="cost-figures">
-                    <div class="cost-figure">
-                        <span class="cost-key">ELAPSED</span>
-                        <span class="cost-val" id="costElapsed">0:00</span>
-                    </div>
-                    <div class="cost-figure">
-                        <span class="cost-key">TOKENS</span>
-                        <span class="cost-val" id="costTokens">0</span>
-                    </div>
-                    <div class="cost-figure">
-                        <span class="cost-key">STEPS</span>
-                        <span class="cost-val" id="costSteps" data-failed="false">0/0</span>
-                    </div>
-                </div>
+                <!-- Agent card dock. Populated by hud.js from the agent manifests. -->
+                <div class="agent-dock" id="agentDock" role="list" aria-label="Agent roster"></div>
 
-                <!-- One bar per step, height by wall-clock. The tall one is
-                     where the mission actually went. -->
-                <div class="cost-latency" id="costLatency"
-                     aria-label="Per-step latency"></div>
-                <div class="cost-agents" id="costAgents"></div>
-            </section>
-
-            <!-- 5. TRACE REPLAY -- drive the office from a past mission's
-                 trace.jsonl instead of the live socket. -->
-            <section class="hud-card replay-card" id="replayCard"
-                     aria-label="Past chats, reports, and trace replay">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">⏮</span> PAST CHATS &amp; REPLAY
-                    </div>
-                    <div class="metric" id="replayClock">—</div>
-                </div>
-
-                <div class="replay-row">
-                    <select id="replayMission" class="replay-select"
-                            aria-label="Select a past chat or mission">
-                        <option value="">— Select a past chat / report —</option>
-                    </select>
-                    <button class="hud-icon-btn" id="replayRefreshBtn"
-                            title="Refresh mission list" aria-label="Refresh mission list">⟳</button>
-                </div>
-
-                <div class="replay-row">
-                    <button class="replay-btn" id="replayPlayBtn" disabled>▶ PLAY</button>
-                    <select id="replaySpeed" class="replay-select replay-speed"
-                            aria-label="Replay speed">
-                        <option value="1">1×</option>
-                        <option value="2" selected>2×</option>
-                        <option value="4">4×</option>
-                        <option value="8">8×</option>
-                    </select>
-                    <button class="replay-btn replay-exit" id="replayExitBtn"
-                            style="display:none;">LIVE</button>
-                </div>
-
-                <input type="range" id="replayScrub" class="replay-scrub"
-                       min="0" max="1000" value="0" step="1" disabled
-                       aria-label="Scrub through the trace">
-                <div class="replay-status" id="replayStatus">
-                    Select a past chat / mission above to view its report, files, and conversation.
-                </div>
-            </section>
-
-            <!-- MISSION OUTPUT -- what the user actually asked for. The goal,
-                 the finished report, and every artifact with its real body.
-                 Hidden until a mission completes. -->
-            <section class="hud-card memo-card" id="executiveMemoCard" style="display: none;"
-                     aria-label="Mission output">
-                <div class="hud-card-header">
-                    <div class="card-title-neon">
-                        <span class="header-icon" aria-hidden="true">📜</span> MISSION OUTPUT
-                    </div>
-                    <div class="hud-card-actions">
-                        <button class="hud-icon-btn" id="outExpandBtn"
-                                title="Expand output" aria-label="Expand output">&#9974;</button>
-                        <!-- Two download arrows side by side at 11px read as one
-                             button drawn twice: a user after the zip clicked this
-                             one and got the print dialogue. The printer is the
-                             only shape that says "this opens print" at this size. -->
-                        <button class="hud-icon-btn" id="downloadPdfBtn"
-                                title="Print / save the report as PDF" aria-label="Print or save the report as PDF">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                <div class="bottom-command-bar">
+                    <form id="promptForm" class="prompt-form" aria-label="Agent command input">
+                        <!-- Attachments. The label is the control: a bare file input
+                             cannot be styled, and hiding it behind a label is the
+                             standard way round that. -->
+                        <input type="file" id="attachInput" multiple hidden
+                               accept=".md,.txt,.csv,.tsv,.json,.yaml,.yml,.log,.py,.js,.ts,.html,.css,.sql,.sh,.ini,.toml,.xml,.rst"
+                               aria-label="Attach files to this task">
+                        <label for="attachInput" class="attach-button" id="attachBtn"
+                               title="Attach a file for the agents to work from (text formats)">
+                            <svg class="ico"><use href="#i-clip"/></svg>
+                            <span class="sr-only">Attach</span>
+                        </label>
+                        <input type="text" id="promptInput"
+                               placeholder="Give Boss Dave a goal — e.g. “Compare three heat-pump brands and write a brief”"
+                               autocomplete="off" required aria-label="Command prompt">
+                        <button type="button" class="emergency-button" id="emergencyStopBtn"
+                                title="Emergency stop all agents">
+                            <svg class="ico"><use href="#i-stop"/></svg>
+                            <span>Stop</span>
                         </button>
-                        <button class="hud-icon-btn" id="downloadAllBtn"
-                                title="Download every file as a .zip" aria-label="Download every file as a zip">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <button type="submit" class="dispatch-button" id="dispatchBtn">
+                            <span>Dispatch</span>
+                            <svg class="ico"><use href="#i-send"/></svg>
                         </button>
-                        <button class="hud-icon-btn" id="closeMemoBtn"
-                                title="Close output" aria-label="Close output">&times;</button>
+                    </form>
+                    <!-- Empty until something is attached; `hidden` rather than
+                         display:none so the office does not reserve a gap for it. -->
+                    <div id="attachTray" class="attach-tray" hidden
+                         aria-live="polite" aria-label="Attached files"></div>
+                </div>
+            </main>
+
+            <!-- ================= RIGHT: sidebar ================= -->
+            <aside class="hud-sidebar" role="complementary" aria-label="Telemetry and agent controls">
+
+                <!-- Shown until the first mission starts, so an idle sidebar
+                     explains itself instead of showing empty gauges. -->
+                <section class="hud-card idle-card" id="idleCard" aria-label="Getting started">
+                    <div class="idle-eyebrow">Ready</div>
+                    <h2 class="idle-title">Hand the office a goal.</h2>
+                    <p class="idle-copy">Boss Dave plans it into steps, the specialists walk to the
+                        tools they need, and every step is reviewed before anyone builds on it.</p>
+                    <div class="idle-examples" id="idleExamples">
+                        <button type="button" class="example-chip">Compare solid-state and lithium-ion batteries</button>
+                        <button type="button" class="example-chip">Brief me on this week's EV charging news</button>
+                        <button type="button" class="example-chip">Review a caching bug and propose a fix</button>
                     </div>
-                </div>
+                </section>
 
-                <div class="out-goal" id="outGoal"></div>
-                <div class="out-banner" id="outBanner" style="display: none;"></div>
+                <!-- MISSION COST -- what the mission is actually spending, while
+                     it spends it. Every figure is per-mission: the agents' own
+                     counters are lifetime totals. Hidden until a plan lands. -->
+                <section class="hud-card cost-card" id="costCard" style="display: none;"
+                         aria-label="Mission cost and telemetry">
+                    <div class="hud-card-header">
+                        <div class="card-title-neon">
+                            <svg class="ico" aria-hidden="true"><use href="#i-coins"/></svg> Mission
+                        </div>
+                        <div class="metric metric-strong" id="costTotal" data-estimated="false">$0.0000</div>
+                    </div>
 
-                <div class="out-tabs" role="tablist">
-                    <button class="out-tab" id="outTabReport" role="tab"
-                            data-active="true" aria-selected="true">REPORT</button>
-                    <button class="out-tab" id="outTabFiles" role="tab"
-                            aria-selected="false">FILES <span id="outFileCount">0</span></button>
-                </div>
+                    <div class="cost-figures">
+                        <div class="cost-figure">
+                            <span class="cost-key">Elapsed</span>
+                            <span class="cost-val" id="costElapsed">0:00</span>
+                        </div>
+                        <div class="cost-figure">
+                            <span class="cost-key">Tokens</span>
+                            <span class="cost-val" id="costTokens">0</span>
+                        </div>
+                        <div class="cost-figure">
+                            <span class="cost-key">Steps</span>
+                            <span class="cost-val" id="costSteps" data-failed="false">0/0</span>
+                        </div>
+                    </div>
 
-                <div class="out-pane" id="outPaneReport" role="tabpanel">
-                    <div class="memo-content markdown-body" id="memoBodyContent"></div>
-                </div>
-                <div class="out-pane" id="outPaneFiles" role="tabpanel" style="display: none;">
-                    <div class="out-files" id="outFiles"></div>
-                </div>
-            </section>
-        </aside>
+                    <!-- One bar per step, height by wall-clock. The tall one is
+                         where the mission actually went. -->
+                    <div class="cost-latency" id="costLatency"
+                         aria-label="Per-step latency"></div>
+                    <div class="cost-agents" id="costAgents"></div>
+                </section>
+
+                <!-- EXECUTION PLAN -- the DAG the planner builds. Hidden until a
+                     plan arrives. -->
+                <section class="hud-card plan-card" id="planCard" style="display: none;"
+                         aria-label="Execution plan">
+                    <div class="hud-card-header">
+                        <div class="card-title-neon">
+                            <svg class="ico" aria-hidden="true"><use href="#i-graph"/></svg> Plan
+                        </div>
+                        <div class="hud-card-actions">
+                            <div class="metric" id="planSource">—</div>
+                            <button class="hud-icon-btn" id="dagExpandBtn"
+                                    title="Expand graph" aria-label="Expand graph">
+                                <svg class="ico"><use href="#i-expand"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- SVG rather than canvas so the labels stay crisp and each
+                         node is a real hoverable node. -->
+                    <div class="dag-viewport" id="dagViewport">
+                        <svg id="dagSvg" role="img" aria-label="Execution plan graph"></svg>
+                    </div>
+                    <div class="dag-legend" id="dagLegend"></div>
+                </section>
+
+                <!-- MISSION OUTPUT -- what the user actually asked for. The goal,
+                     the finished report, and every artifact with its real body.
+                     Hidden until a mission produces something. -->
+                <section class="hud-card memo-card" id="executiveMemoCard" style="display: none;"
+                         aria-label="Mission output">
+                    <div class="hud-card-header">
+                        <div class="card-title-neon">
+                            <svg class="ico" aria-hidden="true"><use href="#i-doc"/></svg> Output
+                        </div>
+                        <div class="hud-card-actions">
+                            <button class="hud-icon-btn" id="outExpandBtn"
+                                    title="Expand output" aria-label="Expand output">
+                                <svg class="ico"><use href="#i-expand"/></svg>
+                            </button>
+                            <!-- The printer is the only shape that says "this opens
+                                 print" at this size; a second download arrow was
+                                 mistaken for the zip. -->
+                            <button class="hud-icon-btn" id="downloadPdfBtn"
+                                    title="Print / save the report as PDF" aria-label="Print or save the report as PDF">
+                                <svg class="ico"><use href="#i-print"/></svg>
+                            </button>
+                            <button class="hud-icon-btn" id="downloadAllBtn"
+                                    title="Download every file as a .zip" aria-label="Download every file as a zip">
+                                <svg class="ico"><use href="#i-download"/></svg>
+                            </button>
+                            <button class="hud-icon-btn" id="closeMemoBtn"
+                                    title="Close output" aria-label="Close output">
+                                <svg class="ico"><use href="#i-close"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="out-goal" id="outGoal"></div>
+                    <div class="out-banner" id="outBanner" style="display: none;"></div>
+
+                    <div class="out-tabs" role="tablist">
+                        <button class="out-tab" id="outTabReport" role="tab"
+                                data-active="true" aria-selected="true">Report</button>
+                        <button class="out-tab" id="outTabFiles" role="tab"
+                                aria-selected="false">Files <span class="out-count" id="outFileCount">0</span></button>
+                    </div>
+
+                    <div class="out-pane" id="outPaneReport" role="tabpanel">
+                        <div class="memo-content markdown-body" id="memoBodyContent"></div>
+                    </div>
+                    <div class="out-pane" id="outPaneFiles" role="tabpanel" style="display: none;">
+                        <div class="out-files" id="outFiles"></div>
+                    </div>
+                </section>
+
+                <!-- ACTIVITY -- the live log. -->
+                <section class="hud-card terminal-card" aria-label="Live activity log">
+                    <div class="hud-card-header">
+                        <div class="card-title-neon">
+                            <svg class="ico" aria-hidden="true"><use href="#i-activity"/></svg> Activity
+                        </div>
+                        <div class="hud-card-actions">
+                            <button class="hud-icon-btn" id="clearTerminalBtn"
+                                    title="Clear log" aria-label="Clear activity log">
+                                <svg class="ico"><use href="#i-trash"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="crt-screen" id="terminalLogs" role="log" aria-live="polite"></div>
+                </section>
+
+                <!-- TRACE REPLAY -- drive the office from a past mission's
+                     trace.jsonl instead of the live socket. -->
+                <section class="hud-card replay-card" id="replayCard"
+                         aria-label="Past missions and trace replay">
+                    <div class="hud-card-header">
+                        <div class="card-title-neon">
+                            <svg class="ico" aria-hidden="true"><use href="#i-history"/></svg> History &amp; replay
+                        </div>
+                        <div class="metric" id="replayClock">—</div>
+                    </div>
+
+                    <div class="replay-row">
+                        <select id="replayMission" class="replay-select"
+                                aria-label="Select a past chat or mission">
+                            <option value="">— Select a past chat / report —</option>
+                        </select>
+                        <button class="hud-icon-btn" id="replayRefreshBtn"
+                                title="Refresh mission list" aria-label="Refresh mission list">
+                            <svg class="ico"><use href="#i-refresh"/></svg>
+                        </button>
+                    </div>
+
+                    <div class="replay-row">
+                        <button class="replay-btn" id="replayPlayBtn" disabled>▶ Play</button>
+                        <select id="replaySpeed" class="replay-select replay-speed"
+                                aria-label="Replay speed">
+                            <option value="1">1×</option>
+                            <option value="2" selected>2×</option>
+                            <option value="4">4×</option>
+                            <option value="8">8×</option>
+                        </select>
+                        <button class="replay-btn replay-exit" id="replayExitBtn"
+                                style="display:none;">Back to live</button>
+                    </div>
+
+                    <input type="range" id="replayScrub" class="replay-scrub"
+                           min="0" max="1000" value="0" step="1" disabled
+                           aria-label="Scrub through the trace">
+                    <div class="replay-status" id="replayStatus">
+                        Pick a past mission to reopen its report and files, or replay it through the office.
+                    </div>
+                </section>
+            </aside>
+        </div>
     </div>
 
     <!-- Full-screen graph. The sidebar is narrow; a wide plan needs the room. -->
     <div class="dag-overlay" id="dagOverlay" style="display: none;" role="dialog"
          aria-label="Execution plan graph, expanded">
         <div class="dag-overlay-bar">
-            <span class="card-title-neon">🗺️ EXECUTION PLAN</span>
-            <button class="hud-icon-btn" id="dagCloseBtn" aria-label="Close graph">&times;</button>
+            <span class="card-title-neon">
+                <svg class="ico" aria-hidden="true"><use href="#i-graph"/></svg> Plan
+            </span>
+            <button class="hud-icon-btn" id="dagCloseBtn" aria-label="Close graph">
+                <svg class="ico"><use href="#i-close"/></svg>
+            </button>
         </div>
         <div class="dag-viewport dag-viewport-full" id="dagViewportFull">
             <svg id="dagSvgFull" role="img" aria-label="Execution plan graph"></svg>
@@ -247,12 +331,12 @@
         <div class="panel-overlay-host" id="outOverlayHost"></div>
     </div>
 
-    <script src="js/auth.js?v=20260917c"></script>
-    <script src="js/office_map.js?v=20260917c"></script>
-    <script src="js/canvas.js?v=20260917c"></script>
-    <script src="js/hud.js?v=20260917c"></script>
+    <script src="js/auth.js?v=20260919a"></script>
+    <script src="js/office_map.js?v=20260919a"></script>
+    <script src="js/canvas.js?v=20260919a"></script>
+    <script src="js/hud.js?v=20260919a"></script>
     <!-- Before app.js: app.js constructs the replay driver on load. -->
-    <script src="js/replay.js?v=20260917c"></script>
-    <script src="js/app.js?v=20260917c"></script>
+    <script src="js/replay.js?v=20260919a"></script>
+    <script src="js/app.js?v=20260919a"></script>
 </body>
 </html>

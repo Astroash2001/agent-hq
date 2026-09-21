@@ -29,13 +29,10 @@ const DEFAULT_AGENTS = [
     { id: 'creative',     name: 'Eve',       verb: 'Generating',  icon: '💡', sprite: 'eve'       }
 ];
 
-const GAUGE_SEGMENTS = 20;
-
 class RetroHUD {
     constructor() {
         this.terminalLogs   = document.getElementById('terminalLogs');
         this.tokenUsageValue = document.getElementById('tokenUsageValue');
-        this.tokenFuelGauge = document.getElementById('tokenFuelGauge');
         this.agentDock      = document.getElementById('agentDock');
         this.planCard       = document.getElementById('planCard');
         this.planNodes      = [];   // last plan, redrawn when the overlay opens
@@ -43,8 +40,14 @@ class RetroHUD {
         this.executiveMemoCard = document.getElementById('executiveMemoCard');
         this.memoBodyContent   = document.getElementById('memoBodyContent');
 
-        this.currentTokens = 0;
-        this.maxTokens = 10000;
+        // Tokens are counted from two sources that disagree by design, so
+        // both are kept. See `renderTokenTotal`.
+        this.tokens = {
+            authoritative: 0,          // mission_tokens, from dag.update
+            lifetime: new Map(),       // agent id -> its lifetime counter
+            baseline: new Map(),       // agent id -> counter when this mission began
+            estimated: false,
+        };
         this.agents = new Map();
         this.selectedAgentId = null;
 
@@ -57,7 +60,7 @@ class RetroHUD {
 
         // Live mission telemetry, rebuilt from every dag.update.
         this.cost = {
-            startedAt: 0, costUsd: 0, tokens: 0, estimated: false,
+            startedAt: 0, costUsd: 0, tokens: 0, overhead: 0, estimated: false,
             steps: [], byAgent: new Map(), running: false,
         };
         this.costCard    = document.getElementById('costCard');
@@ -65,7 +68,7 @@ class RetroHUD {
 
         this.atlas = null;              // { size, frames, characters }
 
-        this.buildGauge();
+        this.renderTokenTotal();
         this.registerAgents(DEFAULT_AGENTS);
         this.initEventListeners();
         this.loadAtlas();
@@ -139,17 +142,6 @@ class RetroHUD {
     }
 
     /* --- construction ---------------------------------------------------- */
-
-    buildGauge() {
-        if (!this.tokenFuelGauge) return;
-        this.tokenFuelGauge.innerHTML = '';
-        for (let i = 0; i < GAUGE_SEGMENTS; i++) {
-            const seg = document.createElement('div');
-            seg.className = 'eq-seg';
-            this.tokenFuelGauge.appendChild(seg);
-        }
-        this.updateTokens({ total_tokens: 0, max_tokens: this.maxTokens });
-    }
 
     /**
      * Build the dock from agent manifests. Accepts either the backend shape
@@ -272,7 +264,7 @@ class RetroHUD {
 
         agent.state = state;
         card.dataset.state = state;
-        card.querySelector('.dock-status').textContent = state;
+        card.querySelector('.dock-status').textContent = String(state).replace(/_/g, ' ');
 
         if (detail.cwd) {
             agent.cwd = detail.cwd;
@@ -338,7 +330,7 @@ class RetroHUD {
         if (this.planSource) this.planSource.textContent = this.planSourceValue || 'planner';
         this.planNodes = nodes;
 
-        this.drawDag(document.getElementById('dagSvg'), nodes, 300);
+        this.drawDag(document.getElementById('dagSvg'), nodes, 0);
         const overlay = document.getElementById('dagOverlay');
         if (overlay && overlay.style.display !== 'none') {
             this.drawDag(document.getElementById('dagSvgFull'), nodes, 0);
@@ -390,8 +382,8 @@ class RetroHUD {
         const host = svg.parentElement;
         const box = host && host.getBoundingClientRect ? host.getBoundingClientRect() : null;
         const W = Math.max(240, (box && box.width) || 480);
-        const rankH = 92;
-        const H = fixedHeight || Math.max(240, ranks.length * rankH + 40);
+        const rankH = 78;
+        const H = fixedHeight || Math.max(220, ranks.length * rankH + 34);
         const R = 15;
 
         svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -465,8 +457,6 @@ class RetroHUD {
                 Number.isFinite(n.duration_sec) ? `${n.duration_sec}s` : '',
                 Number.isFinite(n.cost_usd) && n.cost_usd > 0
                     ? `$${n.cost_usd.toFixed(4)}${n.estimated ? ' ~est' : ''}` : '',
-                Number.isFinite(n.total_tokens) && n.total_tokens
-                    ? `${n.total_tokens} tok` : '',
             ].filter(Boolean).join(' · ');
 
             const tip = [
@@ -603,9 +593,16 @@ class RetroHUD {
      * would report this run as the sum of every run the process has served.
      */
     startMissionMeter() {
+        this.hideIdleCard();
         this.stepBadges.clear();
+        // The roster's counters never reset, so a new mission starts by
+        // remembering where each agent already stood.
+        this.tokens.authoritative = 0;
+        this.tokens.estimated = false;
+        this.tokens.baseline = new Map(this.tokens.lifetime);
+        this.renderTokenTotal();   // back to zero on screen, not just in state
         this.cost = {
-            startedAt: Date.now(), costUsd: 0, tokens: 0, estimated: false,
+            startedAt: Date.now(), costUsd: 0, tokens: 0, overhead: 0, estimated: false,
             steps: [], byAgent: new Map(), running: true,
         };
         if (this.costCard) this.costCard.style.display = '';
@@ -627,8 +624,22 @@ class RetroHUD {
         if (!this.cost.startedAt) this.startMissionMeter();
 
         this.cost.costUsd = Number(payload.cost_usd || 0);
-        this.cost.tokens = Number(payload.mission_tokens || 0);
-        this.cost.estimated = Boolean(payload.tokens_estimated);
+        // `mission_tokens_total` is the whole bill: the steps plus the calls no
+        // step owns -- the planner, each step's reviewer, the synthesis pass
+        // and the conference table. `mission_tokens` is the step rows alone,
+        // and is the fallback for a trace recorded before the ledger existed.
+        this.cost.tokens = Number(
+            payload.mission_tokens_total ?? payload.mission_tokens ?? 0);
+        this.cost.overhead = Number(payload.overhead_tokens || 0);
+        // Sticky for the rest of the mission, and for the same reason the top
+        // bar's flag is: a run with one simulated turn in it does not become
+        // measured again later. Both figures read one flag, so the panel and
+        // the bar cannot disagree about whether the number is a reading.
+        this.cost.estimated = this.cost.estimated || Boolean(payload.tokens_estimated);
+        // The mission-scoped total, overhead included.
+        this.tokens.authoritative = this.cost.tokens;
+        if (payload.tokens_estimated) this.tokens.estimated = true;
+        this.renderTokenTotal();
 
         this.cost.steps = nodes.map(n => ({
             id: n.id,
@@ -671,13 +682,24 @@ class RetroHUD {
             total.dataset.estimated = String(estimated);
         }
         const tok = document.getElementById('costTokens');
-        if (tok) tok.textContent = `${tokens.toLocaleString()}${estimated ? ' ~' : ''}`;
+        if (tok) {
+            // The overhead is called out rather than buried in the total: it is
+            // the cost of the harness (planning, review, synthesis) as opposed
+            // to the cost of the work, and it used to be reported as zero.
+            const overhead = Number(this.cost.overhead || 0);
+            tok.innerHTML = `${tokens.toLocaleString()}${estimated ? ' ~' : ''}` +
+                (overhead > 0
+                    ? `<span class="cost-note muted" title="Planning, review and synthesis — calls no step owns">` +
+                      `+${overhead.toLocaleString()} overhead</span>`
+                    : '');
+        }
 
         const done = steps.filter(s => s.status === 'completed').length;
         const failed = steps.filter(s => s.status === 'failed').length;
         const stepsEl = document.getElementById('costSteps');
         if (stepsEl) {
-            stepsEl.textContent = `${done}/${steps.length}` + (failed ? ` (${failed} failed)` : '');
+            stepsEl.innerHTML = `${done}/${steps.length}` +
+                (failed ? `<span class="cost-note">${failed} failed</span>` : '');
             stepsEl.dataset.failed = String(Boolean(failed));
         }
         this.renderElapsed();
@@ -689,8 +711,12 @@ class RetroHUD {
             strip.innerHTML = steps.map(s => {
                 const pct = Math.round((s.seconds / slowest) * 100);
                 const agent = this.agents.get(s.agent);
-                const colour = (s.status === 'pending' || !agent || !agent.color)
-                    ? 'var(--frame-dim)' : agent.color;
+                const colour = {
+                    completed: 'var(--ok)',
+                    running:   'var(--accent-hi)',
+                    active:    'var(--accent-hi)',
+                    failed:    'var(--bad)',
+                }[s.status] || '#332b24';
                 const tip = `${s.id} — ${agent ? agent.name : s.agent}: ` +
                             `${s.seconds ? s.seconds + 's' : 'not started'}` +
                             (s.cost ? `, $${s.cost.toFixed(4)}` : '');
@@ -707,7 +733,7 @@ class RetroHUD {
             const most = Math.max(1, ...entries.map(([, v]) => v.tokens));
             rows.innerHTML = entries.map(([id, v]) => {
                 const agent = this.agents.get(id);
-                const colour = (agent && agent.color) || 'var(--amber)';
+                const colour = (agent && agent.color) || 'var(--accent)';
                 return `
                   <div class="cost-agent">
                     <span class="cost-agent-name">${this.escapeHtml(agent ? agent.name : id)}</span>
@@ -738,11 +764,18 @@ class RetroHUD {
         let tagClass = 'tag-analysis';
         if (type === 'SUCCESS') tagClass = 'tag-success';
         if (type === 'ERROR') tagClass = 'tag-error';
+        if (type === 'WARN') tagClass = 'tag-warn';
+        if (type === 'INFO') tagClass = 'tag-info';
 
+        // The level is a coloured dot rather than a trailing "(SUCCESS)": the
+        // word doubled the length of every line to say what the colour says.
+        line.dataset.type = type;
+        line.title = type;
         const body = this.highlight(message);
         line.innerHTML =
-            `<span class="log-time">[${timeStr}]</span> ${body} ` +
-            `<span class="log-tag ${tagClass}">(${this.escapeHtml(type)})</span>`;
+            `<span class="log-time">${timeStr}</span>` +
+            `<span class="log-dot ${tagClass}"></span>` +
+            `<span class="log-body">${body}</span>`;
 
         this.terminalLogs.appendChild(line);
 
@@ -759,26 +792,136 @@ class RetroHUD {
             .replace(/&#39;[^&]*?&#39;/g, m => `<span class="log-string">${m}</span>`);
     }
 
-    /* --- token gauge ----------------------------------------------------- */
+    /* --- tokens ---------------------------------------------------------- */
 
-    updateTokens(tokenData = {}) {
-        const total = tokenData.total_tokens ?? this.currentTokens;
-        const max = tokenData.max_tokens || this.maxTokens;
-        this.currentTokens = total;
-        this.maxTokens = max;
+    /**
+     * One turn's token report, from `token.update`.
+     *
+     * The payload is the SENDING AGENT'S LIFETIME counter, not the mission's:
+     * `base_agent.py` accumulates `token_usage` across every mission the
+     * process serves and dumps the whole thing on every turn. Displaying it
+     * raw -- which the old gauge did -- meant the number was one agent's whole
+     * history, and it FELL whenever a lighter-spending agent took the next
+     * turn. So each agent's counter is read as a running total and scoped to
+     * this mission by subtracting where it stood when the mission began.
+     *
+     * `max_tokens` is ignored. It used to drive a 20-segment gauge against a
+     * 10,000 default that nothing enforced, while the budget the backend
+     * actually applies (`max_tokens_budget_per_task`, 150,000) was never the
+     * number on screen.
+     */
+    updateTokens(tokenData = {}, agentId) {
+        const lifetime = Number(tokenData.total_tokens);
+        if (!agentId && Number.isFinite(lifetime)) {
+            // No sender: the offline simulation, whose figure is already a
+            // mission total rather than one agent's history. Raised rather
+            // than assigned, so a sender-less update cannot drag the figure
+            // back below what `dag.update` has already accounted for.
+            this.tokens.authoritative = Math.max(this.tokens.authoritative, lifetime);
+        } else if (agentId && Number.isFinite(lifetime)) {
+            // First sight of an agent this mission: its counter already holds
+            // work from missions this page never saw, so that reading is the
+            // baseline rather than spend. Costs at most one turn, and the next
+            // dag.update supersedes it anyway.
+            if (!this.tokens.baseline.has(agentId)) {
+                this.tokens.baseline.set(agentId, lifetime);
+            }
+            this.tokens.lifetime.set(agentId, lifetime);
+        }
+        if (tokenData.estimated) this.tokens.estimated = true;
+        this.renderTokenTotal();
+    }
+
+    /**
+     * The top bar's figure: mission-scoped, live, and never under the truth.
+     *
+     * Two sources, neither sufficient alone. `dag.update` carries
+     * `mission_tokens`, which is measured and mission-scoped but only lands
+     * when a step finishes -- a three-minute step would leave the number
+     * frozen. The per-turn deltas above move between those updates but can
+     * miss an agent's first turn. Taking the larger keeps the display moving
+     * without ever reporting less than the accounted figure.
+     */
+    renderTokenTotal() {
+        let live = 0;
+        this.tokens.lifetime.forEach((total, id) => {
+            live += Math.max(0, total - (this.tokens.baseline.get(id) || 0));
+        });
+        const shown = Math.max(this.tokens.authoritative, live);
+        this.currentTokens = shown;
 
         if (this.tokenUsageValue) {
-            this.tokenUsageValue.textContent = `${total}/${max}`;
+            this.tokenUsageValue.textContent =
+                shown.toLocaleString() + (this.tokens.estimated ? ' ~' : '');
+            this.tokenUsageValue.title = this.tokens.estimated
+                ? 'Tokens spent by this mission. Estimated: the provider reported no usage.'
+                : 'Tokens spent by this mission, across every agent.';
         }
-        if (this.tokenFuelGauge) {
-            const ratio = max > 0 ? Math.max(0, Math.min(1, total / max)) : 0;
-            const lit = Math.round(ratio * GAUGE_SEGMENTS);
-            this.tokenFuelGauge.querySelectorAll('.eq-seg').forEach((seg, i) => {
-                seg.dataset.on = String(i < lit);
+    }
+
+    /* --- top bar --------------------------------------------------------- */
+
+    /** The idle card explains an empty sidebar; any mission retires it. */
+    hideIdleCard() {
+        const card = document.getElementById('idleCard');
+        if (card) card.style.display = 'none';
+    }
+
+    /** @param {'connecting'|'live'|'offline'} state */
+    setConnection(state) {
+        const pill = document.getElementById('connPill');
+        const text = document.getElementById('connPillText');
+        if (!pill || !text) return;
+        pill.dataset.state = state;
+        text.textContent = { live: 'Live', offline: 'Offline demo' }[state] || 'Connecting';
+        pill.title = {
+            live: 'Connected to the AgentHQ server',
+            offline: 'No server: dispatching runs a local animation, not a real mission',
+        }[state] || 'Connecting to the AgentHQ server';
+    }
+
+    /**
+     * A short synthesised cue for the moments worth hearing from another tab:
+     * a mission finishing, a step failing. Off by default -- sound nobody asked
+     * for is the fastest way to get a tab closed.
+     */
+    chime(kind) {
+        if (!this.soundOn) return;
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            this._audio = this._audio || new Ctx();
+            const ac = this._audio;
+            const notes = { done: [660, 880], fail: [330, 247], review: [740] }[kind] || [600];
+            notes.forEach((freq, i) => {
+                const t = ac.currentTime + i * 0.13;
+                const osc = ac.createOscillator();
+                const gain = ac.createGain();
+                osc.type = 'triangle';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.exponentialRampToValueAtTime(0.08, t + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.28);
+                osc.connect(gain).connect(ac.destination);
+                osc.start(t);
+                osc.stop(t + 0.3);
             });
-            this.tokenFuelGauge.setAttribute('aria-valuenow', String(total));
-            this.tokenFuelGauge.setAttribute('aria-valuemax', String(max));
-        }
+        } catch (e) { /* audio is a nicety; never let it break the HUD */ }
+    }
+
+    setSound(on) {
+        this.soundOn = Boolean(on);
+        try { localStorage.setItem('agenthq.sound', this.soundOn ? '1' : '0'); } catch (e) { /* private mode */ }
+        this.paintSoundButton();
+        if (this.soundOn) this.chime('review');
+    }
+
+    paintSoundButton() {
+        const btn = document.getElementById('soundToggleBtn');
+        if (!btn) return;
+        btn.setAttribute('aria-pressed', String(this.soundOn));
+        btn.title = `Sound cues: ${this.soundOn ? 'on' : 'off'}`;
+        btn.innerHTML = `<svg class="ico"><use href="#i-${this.soundOn ? 'sound' : 'mute'}"/></svg>`;
     }
 
     /* --- memo ------------------------------------------------------------ */
@@ -833,6 +976,17 @@ class RetroHUD {
         link.type = 'image/svg+xml';
         link.href = 'data:image/svg+xml,' + encodeURIComponent(svg);
 
+        const pill = document.getElementById('missionPill');
+        const pillText = document.getElementById('missionPillText');
+        if (pill && pillText) {
+            pill.dataset.state = state;
+            const word = { running: 'Running', done: 'Complete', failed: 'Failed' }[state] || 'Idle';
+            pillText.textContent = label ? `${word} · ${label}` : word;
+        }
+        if (state !== 'idle') this.hideIdleCard();
+        if (state === 'done') this.chime('done');
+        if (state === 'failed') this.chime('fail');
+
         const base = 'AgentHQ — Multi-Agent Office';
         const mark = { running: '●', done: '✅', failed: '❌' }[state] || '';
         document.title = mark ? `${mark} ${label ? label + ' ' : ''}${base}` : base;
@@ -885,6 +1039,7 @@ class RetroHUD {
             ? marked.parse(String(markdownText || ''))
             : this.escapeHtml(String(markdownText || ''));
 
+        this.hideIdleCard();
         this.renderOutputFiles(files);
         this.liveArtifacts = null;   // the full bodies supersede the running view
         this.executiveMemoCard.style.display = 'flex';
@@ -1001,6 +1156,7 @@ class RetroHUD {
         // Opened on the first artifact, and on the FILES tab, because at this
         // point there is no report to show -- only work.
         this.executiveMemoCard.style.display = 'flex';
+        this.hideIdleCard();
         if (this.liveArtifacts.size === 1) this.selectOutputTab('files');
 
         const goalEl = document.getElementById('outGoal');
@@ -1057,13 +1213,13 @@ class RetroHUD {
             // this one into a second ✕ put two identical crosses side by side
             // with different meanings -- one restores the panel, one dismisses
             // it. A shrink glyph says which is which.
-            if (btn) { btn.textContent = '⤡'; btn.title = 'Restore output to the sidebar'; }
+            if (btn) btn.style.display = 'none';
         } else {
             const home = this._outHome;
             if (home && home.parent) home.parent.insertBefore(card, home.before);
             overlay.style.display = 'none';
             delete card.dataset.expanded;
-            if (btn) { btn.textContent = '⛶'; btn.title = 'Expand output'; }
+            if (btn) btn.style.display = '';
         }
     }
 
@@ -1178,9 +1334,8 @@ ${body.innerHTML}
         const clearBtn = document.getElementById('clearTerminalBtn');
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
-                this.terminalLogs.innerHTML =
-                    '<div class="terminal-prompt-intro">Live terminal log stream.</div>';
-                this.addTerminalLog('Console reset.', 'SUCCESS');
+                this.terminalLogs.innerHTML = '';
+                this.addTerminalLog('Log cleared.', 'INFO');
             });
         }
 
@@ -1242,6 +1397,22 @@ ${body.innerHTML}
                 if (e.target === overlay) overlay.style.display = 'none';
             });
         }
+        // Example goals fill the composer rather than dispatching: a click
+        // should never spend tokens on a prompt the user has not read.
+        document.querySelectorAll('#idleExamples .example-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const input = document.getElementById('promptInput');
+                if (!input) return;
+                input.value = chip.textContent.trim();
+                input.focus();
+            });
+        });
+
+        try { this.soundOn = localStorage.getItem('agenthq.sound') === '1'; } catch (e) { this.soundOn = false; }
+        this.paintSoundButton();
+        const soundBtn = document.getElementById('soundToggleBtn');
+        if (soundBtn) soundBtn.addEventListener('click', () => this.setSound(!this.soundOn));
+
         document.addEventListener('keydown', e => {
             if (e.key !== 'Escape') return;
             if (overlay && overlay.style.display !== 'none') {

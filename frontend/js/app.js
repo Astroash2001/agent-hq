@@ -31,10 +31,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         socket.onopen = () => {
             reconnectAttempts = 0;
+            hud.setConnection('live');
             hud.addTerminalLog('Connected to AI Agent HQ Network.', 'SUCCESS');
         };
 
         socket.onclose = (event) => {
+            // Dispatch falls back to the local animation from here on, and
+            // the top bar has to say so: it looks exactly like a real run.
+            hud.setConnection('offline');
             // 1008: the server refused the token. Ask once, then reconnect with
             // what was entered; a second refusal is left in the log.
             if (event && event.code === 1008) {
@@ -127,10 +131,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case 'tool.called':
+                canvas.setAgentTool(agentId, payload.tool);
                 hud.addTerminalLog(`Executing ${payload.tool}(${JSON.stringify(payload.arguments)})`, 'ANALYSIS');
                 break;
 
             case 'tool.result':
+                canvas.setAgentTool(agentId, null);
                 hud.addTerminalLog(`Finished ${payload.tool} (${payload.duration_ms}ms)`, 'SUCCESS');
                 break;
 
@@ -139,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
 
             case 'token.update':
-                hud.updateTokens(payload);
+                hud.updateTokens(payload, agentId);
                 break;
 
             // ---- failures -------------------------------------------------
@@ -207,13 +213,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // {agent_name, label, station_id, tool, occupied_by, queue_length}
+            // The queue is the office's signature mechanism, so it is drawn on
+            // the floor as well as logged: the waiting agent says who it is
+            // waiting behind until station.acquired clears it.
             case 'station.queued':
+                canvas.setAgentQueued(agentId, payload);
                 hud.addTerminalLog(
                     `${payload.agent_name || agentId} waiting for ${payload.label}` +
                     (payload.occupied_by ? ` (held by ${payload.occupied_by})` : ''), 'INFO');
                 break;
 
             case 'station.acquired':
+                canvas.setAgentQueued(agentId, null);
                 hud.addTerminalLog(
                     `${payload.agent_name || agentId} has ${payload.label || payload.station_id}`,
                     'SUCCESS');
@@ -293,8 +304,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const accepted = payload.verdict === 'accept';
                     const score = (payload.score === null || payload.score === undefined)
                         ? '' : ` (${Math.round(payload.score * 100)}%)`;
-                    const why = (payload.reasons && payload.reasons.length)
-                        ? ` — ${payload.reasons[0]}` : '';
+                    // `guidance` is what the specialist was told to change.
+                    // `reasons[0]` was used here, and a judge that leads with
+                    // what the artifact does WELL then had its compliment
+                    // printed as the grounds for a rejection.
+                    const note = payload.guidance
+                        || (payload.reasons && payload.reasons.length ? payload.reasons[0] : '');
+                    const why = note ? ` — ${note}` : '';
                     // A rejected step that is NOT being repaired has spent its
                     // budget and completes anyway. That reads as an accept
                     // unless it is called out, so it is logged as an error.
@@ -504,6 +520,11 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function simulateStandaloneTask(text) {
         hud.addTerminalLog(`User dispatched: '${text}'`, 'ANALYSIS');
+        // The status pill is driven by task.created/task.completed on the live
+        // path, neither of which exists here -- so the demo used to run with
+        // the bar still reading "Idle".
+        hud.setTabState?.('running');
+        hud.setMissionGoal?.(text);
         canvas.showSpeech('orchestrator', 'Routing subtasks...');
         canvas.updateAgentStatus('orchestrator', 'thinking');
         hud.setAgentState('orchestrator', 'thinking', { progress: 0.15 });
@@ -519,13 +540,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const STEP_MS = 1200;
         roster.forEach((agent, i) => {
             setTimeout(() => {
-                canvas.dispatchTaskOrb('orchestrator', agent.id);
+                // Was `dispatchTaskOrb`, which canvas.js has not had since the
+                // flying dot became a walk. It threw on the first specialist,
+                // so the offline demo animated nobody and reported no tokens.
+                canvas.handOffTask('orchestrator', agent.id);
                 canvas.updateAgentStatus(agent.id, 'active');
                 hud.setAgentState(agent.id, 'active', { progress: (i + 1) / roster.length });
                 hud.addTerminalLog(`${agent.name}: ${agent.verb}…`, 'ANALYSIS');
                 hud.updateTokens({
-                    total_tokens: Math.round(((i + 1) / roster.length) * 7854),
-                    max_tokens: 10000
+                    total_tokens: Math.round(((i + 1) / roster.length) * 7854)
                 });
             }, 1000 + i * STEP_MS);
         });
@@ -534,6 +557,7 @@ document.addEventListener('DOMContentLoaded', () => {
             canvas.agents.forEach(a => canvas.updateAgentStatus(a.id, 'done'));
             hud.agents.forEach(a => hud.setAgentState(a.id, 'done', { progress: 1 }));
             hud.addTerminalLog('Simulation complete.', 'SUCCESS');
+            hud.setTabState?.('done');
             hud.showExecutiveMemo(
                 `# 🎯 Offline Simulation\n\n**Goal:** ${text}\n\n` +
                 roster.map(a => `- **${a.name}**: ${a.verb}.`).join('\n') +

@@ -227,7 +227,7 @@ class TraceReplay {
             this.cursor = 0;
             this.clock = 0;
 
-            if (this.el.play) { this.el.play.disabled = false; this.el.play.textContent = '▶ PLAY'; }
+            if (this.el.play) { this.el.play.disabled = false; this.el.play.textContent = '▶ Play'; }
             if (this.el.scrub) { this.el.scrub.disabled = false; this.el.scrub.value = '0'; }
             if (this.el.exit) this.el.exit.style.display = '';
             if (this.el.card) this.el.card.dataset.active = 'true';
@@ -493,7 +493,7 @@ class TraceReplay {
         if (this.clock >= this.duration) this.seek(0);
         this.playing = true;
         this._last = performance.now();
-        if (this.el.play) this.el.play.textContent = '❚❚ PAUSE';
+        if (this.el.play) this.el.play.textContent = '❚❚ Pause';
         const step = (now) => {
             if (!this.playing) return;
             const dt = ((now - this._last) / 1000) * this.speed;
@@ -510,7 +510,7 @@ class TraceReplay {
         this.playing = false;
         if (this._raf) cancelAnimationFrame(this._raf);
         this._raf = null;
-        if (this.el.play) this.el.play.textContent = '▶ PLAY';
+        if (this.el.play) this.el.play.textContent = '▶ Play';
     }
 
     /**

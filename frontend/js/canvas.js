@@ -74,16 +74,29 @@ const WALL_CAST        = 'rgba(20, 11, 8, 0.30)';
    the opening half is used -- the door's position is eased both ways, so
    playing the closing frames as well would double the travel. */
 const DOOR_OPEN_FRAMES = 8;
-const VOID             = '#000000';
 
-const LABEL_FONT  = "'IBM Plex Mono', ui-monospace, 'Cascadia Mono', monospace";
+const LABEL_FONT  = "'Geist', ui-sans-serif, system-ui, 'Segoe UI', sans-serif";
 const PLATE_BG    = '#120d13';
 const PLATE_EDGE  = '#8a6a58';
 const PLATE_NAME  = '#e8a94a';
 const PLATE_VERB  = '#ded9d2';
-const BUBBLE_BG   = '#f0f0f0';
-const BUBBLE_EDGE = '#1a1418';
-const BUBBLE_FG   = '#14100f';
+/* Warm paper rather than flat white, so a balloon belongs to a lamplit room. */
+const BUBBLE_BG   = '#f7efe2';
+const BUBBLE_EDGE = '#2a1d14';
+const BUBBLE_FG   = '#1f150d';
+
+/* Status tags: the small pills over a head that say what an agent is doing
+   when it is not saying anything. Same ink as the HUD, so the floor and the
+   sidebar read as one interface. */
+const TAG_BG      = 'rgba(17, 13, 11, 0.9)';
+const TAG_EDGE    = 'rgba(255, 226, 190, 0.18)';
+const TAG_FG      = '#f2e9dd';
+const TAG_MUTED   = '#bfb1a1';
+const TAG_OK      = '#7fd48c';
+const TAG_ACCENT  = '#f0b35e';
+const TAG_BAD     = '#ff7a66';
+// How long a finished or failed tag stays up before the agent goes quiet.
+const DONE_TAG_MS = 4000;
 
 const WALK_SPEED = 2.4;          // tiles per second
 const FRAME_MS = 140;            // per walk frame
@@ -107,7 +120,7 @@ const MIN_TRIP = 2.0;
 class PixelOfficeCanvas {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d', { alpha: false });
+        this.ctx = this.canvas.getContext('2d');
         this.ctx.imageSmoothingEnabled = false;
 
         this.map = OFFICE_MAP;
@@ -492,12 +505,41 @@ class PixelOfficeCanvas {
         const a = this.agents.find(x => x.id === agentId);
         if (!a) return;
         a.state = status;
+        a.stateAt = Date.now();
         if (status === 'active' || status === 'tool_calling') {
             this.sendTo(a, a.seat, false);    // back to its own desk to work
         } else if (status === 'done') {
             // No bubble here: the only thing that pops one is work arriving.
+            a.tool = null;
+            a.queued = null;
             this.spawnCelebration(a.x, a.y);
+        } else if (status === 'error') {
+            // A failure used to look exactly like standing still. It is now an
+            // event: a red burst where it happened and a tag that stays up.
+            a.tool = null;
+            a.queued = null;
+            this.spawnCelebration(a.x, a.y, ['#ff7a66', '#ff9e8c', '#c8503c', '#2a1d14']);
         }
+    }
+
+    /** The tool an agent is running right now, or null when it returns. */
+    setAgentTool(agentId, tool) {
+        const a = this.agents.find(x => x.id === agentId);
+        if (a) a.tool = tool ? { name: String(tool), at: Date.now() } : null;
+    }
+
+    /**
+     * Waiting at a busy station, from station.queued: {label, occupied_by,
+     * queue_length}. Null clears it on station.acquired.
+     */
+    setAgentQueued(agentId, info) {
+        const a = this.agents.find(x => x.id === agentId);
+        if (!a) return;
+        a.queued = info ? {
+            label: info.label || info.station_id || 'station',
+            by: info.occupied_by || '',
+            length: info.queue_length || 0,
+        } : null;
     }
 
     showSpeech(agentId, text) {
@@ -524,7 +566,13 @@ class PixelOfficeCanvas {
         if (!a || typeof x !== 'number' || typeof y !== 'number') return;
         this.liveDriven = true;
         this.sendTo(a, { x, y });
-        if (label) this.showSpeech(agentId, label);
+        // A tag, not a balloon: balloons are kept for what an agent SAYS --
+        // its task, its argument -- so a walk does not drown them out.
+        if (label) this.setHeading(a, label.replace(/^to the /, ''));
+    }
+
+    setHeading(a, label) {
+        a.heading = { label, until: Date.now() + 2500 };
     }
 
     /**
@@ -586,14 +634,14 @@ class PixelOfficeCanvas {
         if (a) this.showSpeech(agentId, `${a.name} reporting.`);
     }
 
-    spawnCelebration(tx, ty) {
+    spawnCelebration(tx, ty, palette = ['#f8c873', '#e08a3c', '#67d94e', '#ece7de']) {
         for (let i = 0; i < 14; i++) {
             this.particles.push({
-                x: tx, y: ty,
+                x: tx, y: ty - 1.2,
                 vx: (Math.random() - 0.5) * 0.09,
                 vy: (-Math.random() * 0.09) - 0.02,
                 life: 1,
-                c: ['#f8c873', '#e08a3c', '#67d94e', '#ece7de'][i % 4]
+                c: palette[i % palette.length]
             });
         }
     }
@@ -876,7 +924,7 @@ class PixelOfficeCanvas {
             } else {
                 const spot = spots[Math.floor(Math.random() * spots.length)];
                 this.sendTo(a, spot);
-                this.showSpeech(a.id, `heading to the ${spot.label}`);
+                this.setHeading(a, spot.label);
             }
             a.idleTimer = 5000 + Math.random() * 8000;
         }
@@ -944,12 +992,13 @@ class PixelOfficeCanvas {
     draw() {
         const ctx = this.ctx;
         ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-        ctx.fillStyle = VOID;
-        ctx.fillRect(0, 0, this.viewW, this.viewH);
+        // Cleared, not filled: the stage behind the canvas is a CSS gradient,
+        // and the office should float on it rather than on a black slab.
+        ctx.clearRect(0, 0, this.viewW, this.viewH);
 
         if (!this.ready) {
-            ctx.fillStyle = '#8a8280';
-            ctx.font = '13px "IBM Plex Mono", monospace';
+            ctx.fillStyle = '#85786b';
+            ctx.font = `13px ${LABEL_FONT}`;
             ctx.textAlign = 'center';
             ctx.fillText('Building office…  run  python tools/build_atlas.py',
                          this.viewW / 2, this.viewH / 2);
@@ -961,6 +1010,18 @@ class PixelOfficeCanvas {
         ctx.scale(this.zoom, this.zoom);
 
         if (!this.shell) this.shell = this.buildShell();
+
+        // A soft contact shadow under the whole building, so it sits on the
+        // stage instead of being pasted onto it. shadowBlur is in screen
+        // pixels whatever the transform, hence the zoom factor.
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 28;
+        ctx.shadowOffsetY = 10;
+        ctx.fillStyle = '#120c09';
+        ctx.fill(this.shell);
+        ctx.restore();
+
         this.drawShellRim(ctx, this.shell);
 
         ctx.save();
@@ -1135,6 +1196,10 @@ class PixelOfficeCanvas {
 
         const idx = moving ? (a.walkFrame % frames.length) : 0;
         const px = a.x * T;
+        // Working at a desk, the figure bobs one world pixel. The atlas has no
+        // typing clip, and frame 0 held still read as paused, not busy.
+        const working = !moving && (a.state === 'active' || a.state === 'tool_calling');
+        const bob = working && (Math.floor(performance.now() / 260 + (a.phase ??= Math.random() * 2)) % 2) ? 1 : 0;
         const py = a.y * T;
 
         // Soft contact shadow so characters sit on the floor instead of floating.
@@ -1146,7 +1211,7 @@ class PixelOfficeCanvas {
         ctx.fill();
         ctx.restore();
 
-        this.drawSprite(frames[idx], px, py, true,
+        this.drawSprite(frames[idx], px, py - bob, true,
                         a.hue ? this.tintedAtlas(a.hue) : null);
 
         // The visitor badge. Two pixels of lanyard and a pale card on the
@@ -1465,11 +1530,112 @@ class PixelOfficeCanvas {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
 
+        const now = Date.now();
         for (const a of this.agents) {
-            if (!a.speech) continue;
             const [sx, sy] = this.toScreen(a.x, a.y);
             // The character sprite stands ~32 world px tall; clear its head.
-            this.drawBubble(ctx, sx, sy - 34 * this.zoom, a.speech.text, fs);
+            const headY = sy - 34 * this.zoom;
+            if (a.speech) {
+                this.drawBubble(ctx, sx, headY, a.speech.text, fs);
+                continue;
+            }
+            const tag = this.statusTag(a, now);
+            if (tag) this.drawTag(ctx, sx, headY - 4, tag, fs);
+        }
+        ctx.restore();
+    }
+
+    /**
+     * What the tag over an agent should say, most urgent first. Null when the
+     * agent has nothing worth a label -- an idle office should be quiet.
+     */
+    statusTag(a, now) {
+        const since = now - (a.stateAt || 0);
+        if (a.state === 'error' && since < DONE_TAG_MS * 2) {
+            return { text: 'Step failed', dot: TAG_BAD, ink: '#ffc2b7' };
+        }
+        if (a.queued) {
+            const behind = a.queued.by ? ` · behind ${a.queued.by}` : '';
+            return { text: `Waiting for ${a.queued.label}${behind}`, dot: TAG_ACCENT, hollow: true };
+        }
+        if (a.tool) {
+            return { text: a.tool.name.replace(/_/g, ' '), dot: TAG_OK, pulse: true };
+        }
+        if (a.state === 'thinking') return { dots: true, dot: TAG_ACCENT };
+        if (a.state === 'done' && since < DONE_TAG_MS) {
+            return { text: 'Done', dot: TAG_OK, check: true };
+        }
+        if (a.heading && (a.path || now < a.heading.until)) {
+            return { text: `→ ${a.heading.label}`, muted: true };
+        }
+        return null;
+    }
+
+    /** A small dark pill with a status dot, drawn in screen space. */
+    drawTag(ctx, sx, bottomY, tag, fs) {
+        const tfs = Math.max(10, Math.round(fs * 0.78));
+        const h = Math.round(tfs * 1.75);
+        const padX = Math.round(tfs * 0.75);
+        const dotR = Math.max(2.5, tfs * 0.26);
+        const gap = Math.round(tfs * 0.5);
+
+        ctx.save();
+        ctx.font = `500 ${tfs}px ${LABEL_FONT}`;
+        const label = tag.dots ? '' : String(tag.text || '');
+        const textW = tag.dots ? tfs * 1.6 : ctx.measureText(label).width;
+        const hasDot = Boolean(tag.dot) && !tag.dots;
+        const w = Math.ceil(padX * 2 + textW + (hasDot ? dotR * 2 + gap : 0));
+        const x = Math.round(sx - w / 2);
+        const y = Math.round(bottomY - h);
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 2;
+        this.roundRectPath(ctx, x, y, w, h, h / 2);
+        ctx.fillStyle = TAG_BG;
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = TAG_EDGE;
+        ctx.stroke();
+
+        const cy = y + h / 2;
+        let cx = x + padX;
+        if (hasDot) {
+            const t = performance.now() / 1000;
+            const alpha = tag.pulse ? 0.55 + 0.45 * Math.sin(t * 5) : 1;
+            ctx.globalAlpha = alpha;
+            ctx.beginPath();
+            ctx.arc(cx + dotR, cy, dotR, 0, Math.PI * 2);
+            if (tag.hollow) {
+                ctx.strokeStyle = tag.dot;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = tag.dot;
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            cx += dotR * 2 + gap;
+        }
+
+        if (tag.dots) {
+            // Three dots rising in turn: thinking, with nothing to say yet.
+            const t = performance.now() / 1000;
+            for (let i = 0; i < 3; i++) {
+                const lift = Math.max(0, Math.sin(t * 6 - i * 0.9)) * tfs * 0.18;
+                ctx.globalAlpha = 0.45 + 0.55 * Math.max(0, Math.sin(t * 6 - i * 0.9));
+                ctx.fillStyle = tag.dot;
+                ctx.beginPath();
+                ctx.arc(cx + tfs * 0.28 + i * tfs * 0.52, cy - lift, tfs * 0.16, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        } else {
+            ctx.fillStyle = tag.ink || (tag.muted ? TAG_MUTED : TAG_FG);
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'left';
+            ctx.fillText(label, cx, cy + 0.5);
         }
         ctx.restore();
     }
@@ -1481,8 +1647,8 @@ class PixelOfficeCanvas {
         const lh = Math.round(fs * 1.3);
         const tail = Math.round(fs * 0.62);
 
-        ctx.font = `${fs}px ${LABEL_FONT}`;
-        const lines = this.wrapText(ctx, text, fs * 13);
+        ctx.font = `500 ${fs}px ${LABEL_FONT}`;
+        const lines = this.wrapText(ctx, text, fs * 14);
         const textW = Math.max(...lines.map(l => ctx.measureText(l).width));
 
         const w = Math.ceil(textW) + padX * 2;

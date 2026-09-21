@@ -1,46 +1,72 @@
 /* ===========================================================================
-   AI Agent HQ — warm pixel office + amber terminal HUD
+   AgentHQ — warm pixel office, quiet chrome.
 
-   Every colour below was sampled directly out of the reference art
-   (final.jpg) rather than eyeballed. Sampling method: background colours are
-   the modal value of a region; foreground/text colours are the 97th
-   brightness percentile of the same region, because the modal colour of a
-   text block is always its backdrop.
+   The office is the product; everything around it steps back. The chrome is
+   one near-black warm surface with hairline rules instead of the old double
+   brown frames, one accent (amber, taken from the office's lamplight), and a
+   type pair that stays out of the art's way: Geist for interface, Geist Mono
+   for figures and logs. The pixel face survives only in the wordmark, where it
+   ties the chrome to the art without competing with it.
+
+   Legacy token names (--amber, --frame-dim, --green, ...) are kept as aliases
+   because hud.js writes a few of them inline into SVG and style attributes.
    =========================================================================== */
 
 :root {
-    /* --- surfaces ------------------------------------------------------- */
-    --bg:            #000000;   /* page, outside the panel */
-    --panel:         #120d13;   /* card interiors */
-    --panel-raised:  #171218;   /* card chrome / sidebar body */
-    --chrome:        #2a232a;   /* terminal title bar */
-    --trough:        #0d0a10;   /* unfilled gauge track */
+    /* --- surfaces, darkest to lightest ---------------------------------- */
+    --bg:          #0b0908;   /* page */
+    --bg-elev:     #100d0b;   /* sidebar, bars */
+    --surface:     #16120f;   /* cards, inputs */
+    --surface-2:   #1d1814;   /* hover, raised */
+    --surface-3:   #262019;   /* pressed, selected */
 
-    /* --- frame --------------------------------------------------------- */
-    --frame:         #a9713c;
-    --frame-dim:     #6b4526;
-    --frame-lit:     #c98a4a;
+    /* --- rules ---------------------------------------------------------- */
+    --line:        rgba(255, 226, 190, 0.07);
+    --line-2:      rgba(255, 226, 190, 0.12);
+    --line-3:      rgba(255, 226, 190, 0.20);
 
-    /* --- ink ----------------------------------------------------------- */
-    --amber:         #eeb063;
-    --amber-bright:  #fac57f;
-    --cream:         #ece7de;
-    --green:         #67d94e;
-    --green-lit:     #8dff6f;
-    --string:        #e4be75;
-    --muted:         #8a8280;
+    /* --- ink ------------------------------------------------------------ */
+    --text:        #f2e9dd;
+    --text-2:      #bfb1a1;
+    --text-3:      #85786b;
 
-    /* --- accents ------------------------------------------------------- */
-    --row-selected:  #473124;
-    --btn-face:      #493733;
-    --gauge-lo:      #e08a3c;
-    --gauge-hi:      #f8c873;
+    /* --- accent and status ---------------------------------------------- */
+    --accent:      #f0b35e;
+    --accent-hi:   #ffc97d;
+    --accent-ink:  #1c1206;
+    --accent-soft: rgba(240, 179, 94, 0.12);
+    --ok:          #7fd48c;
+    --ok-soft:     rgba(127, 212, 140, 0.12);
+    --warn:        #f0b35e;
+    --bad:         #ff7a66;
+    --bad-soft:    rgba(255, 122, 102, 0.12);
+    --info:        #9db8ff;
+    --contract:    #a78bfa;
 
-    --font-pixel: 'Silkscreen', 'Press Start 2P', monospace;
-    --font-mono:  'IBM Plex Mono', ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+    /* --- legacy aliases (read by hud.js) -------------------------------- */
+    --amber:        var(--accent);
+    --amber-bright: var(--accent-hi);
+    --cream:        var(--text);
+    --muted:        var(--text-3);
+    --green:        var(--ok);
+    --green-lit:    #9be6a6;
+    --string:       #e8c889;
+    --frame:        var(--line-3);
+    --frame-dim:    #3a3029;
+    --frame-lit:    var(--accent);
+    --panel:        var(--surface);
+    --trough:       #0d0a09;
 
-    --gap: 10px;
-    --radius: 6px;
+    --font-ui:    'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono:  'Geist Mono', ui-monospace, 'Cascadia Mono', 'SFMono-Regular', monospace;
+    --font-pixel: 'Silkscreen', monospace;
+
+    --gap: 12px;
+    --r-sm: 6px;
+    --r-md: 10px;
+    --r-lg: 14px;
+    --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.75), 0 2px 6px rgba(0, 0, 0, 0.35);
+    --ease: cubic-bezier(.2, .7, .2, 1);
 }
 
 * { box-sizing: border-box; }
@@ -50,25 +76,217 @@ html, body {
     padding: 0;
     height: 100%;
     background: var(--bg);
-    color: var(--cream);
-    font-family: var(--font-mono);
-    /* Pixel art must never be resampled. */
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "ss01", "cv11";
 }
 
 body { overflow: hidden; }
 
+button, input, select { font: inherit; color: inherit; }
+
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.ico {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Thin warm scrollbars everywhere, instead of per-panel copies. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #3a3029 transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: #3a3029;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: #4c3f35; }
+
 /* ===========================================================================
-   Layout — reference is 1376x768 with the sidebar occupying 421px (30.6%).
+   Shell
+   =========================================================================== */
+
+.app-shell {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 52px;
+    padding: 0 18px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--line);
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+/* The favicon's ">_" prompt, drawn in CSS pixels so it stays sharp. */
+.brand-mark {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    border-radius: 7px;
+    background: linear-gradient(180deg, #2a2019, #18120e);
+    box-shadow: inset 0 0 0 1px rgba(240, 179, 94, 0.35), 0 0 18px -4px rgba(240, 179, 94, 0.35);
+}
+.brand-mark i {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: var(--accent-hi);
+}
+.brand-mark i:nth-child(1) { left: 7px;  top: 8px; }
+.brand-mark i:nth-child(2) { left: 10px; top: 11px; }
+.brand-mark i:nth-child(3) { left: 7px;  top: 14px; }
+.brand-mark i:nth-child(4) { left: 13px; top: 14px; width: 6px; background: var(--accent); }
+
+.brand-name {
+    font-family: var(--font-pixel);
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    color: var(--text);
+}
+
+.brand-sub {
+    padding-left: 10px;
+    border-left: 1px solid var(--line-2);
+    color: var(--text-3);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* --- pills ---------------------------------------------------------------- */
+
+.mission-pill,
+.conn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.mission-pill { margin-left: 8px; }
+
+.pill-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-3);
+    flex: 0 0 auto;
+}
+
+.mission-pill[data-state="running"] { color: var(--accent-hi); border-color: rgba(240, 179, 94, 0.3); background: var(--accent-soft); }
+.mission-pill[data-state="running"] .pill-dot { background: var(--accent); animation: pulse 1.4s var(--ease) infinite; }
+.mission-pill[data-state="done"]    { color: var(--ok); border-color: rgba(127, 212, 140, 0.28); background: var(--ok-soft); }
+.mission-pill[data-state="done"] .pill-dot { background: var(--ok); }
+.mission-pill[data-state="failed"]  { color: var(--bad); border-color: rgba(255, 122, 102, 0.3); background: var(--bad-soft); }
+.mission-pill[data-state="failed"] .pill-dot { background: var(--bad); }
+
+.conn-pill { height: 26px; padding: 0 10px; font-size: 11.5px; }
+.conn-pill[data-state="live"] .pill-dot    { background: var(--ok); box-shadow: 0 0 0 3px rgba(127, 212, 140, 0.15); }
+.conn-pill[data-state="offline"] .pill-dot { background: var(--accent); }
+.conn-pill[data-state="connecting"] .pill-dot { animation: pulse 1.2s ease-in-out infinite; }
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240, 179, 94, 0.45); }
+    50%      { box-shadow: 0 0 0 5px rgba(240, 179, 94, 0); }
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.icon-btn {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-3);
+    cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s;
+}
+.icon-btn:hover { color: var(--text); background: var(--surface); border-color: var(--line-2); }
+.icon-btn[aria-pressed="true"] { color: var(--accent-hi); }
+
+/* --- token meter ---------------------------------------------------------- */
+
+.token-meter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-right: 6px;
+}
+
+.token-label {
+    color: var(--text-3);
+    font-size: 11.5px;
+}
+
+.token-value {
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+   Layout
    =========================================================================== */
 
 .app-viewport {
     display: grid;
-    grid-template-columns: 1fr minmax(360px, 30.6%);
-    gap: var(--gap);
-    height: 100vh;
-    padding: var(--gap);
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 28vw, 440px);
+    min-height: 0;
 }
 
 .canvas-panel {
@@ -77,18 +295,34 @@ body { overflow: hidden; }
     gap: var(--gap);
     min-width: 0;
     min-height: 0;
+    padding: 16px 16px 16px 18px;
 }
 
 /* --- the office itself ---------------------------------------------------- */
 
+/* A lit stage: a soft warm pool behind the office so the art floats on
+   something rather than on flat black, and a hairline plus a deep shadow for
+   the edge instead of a coloured frame. */
 .canvas-container {
     position: relative;
     flex: 1;
     min-height: 0;
-    background: #050307;
-    border: 2px solid var(--frame-dim);
-    border-radius: var(--radius);
+    border-radius: var(--r-lg);
+    background:
+        radial-gradient(58% 52% at 50% 46%, rgba(214, 124, 72, 0.18), transparent 72%),
+        radial-gradient(120% 95% at 50% 0%, #1b1411 0%, #100c0a 65%);
+    box-shadow: inset 0 0 0 1px var(--line), var(--shadow-lg);
     overflow: hidden;
+}
+
+/* Faint vignette so the corners fall away like the office lighting does. */
+.canvas-container::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.55);
 }
 
 #officeCanvas {
@@ -96,17 +330,18 @@ body { overflow: hidden; }
     width: 100%;
     height: 100%;
     image-rendering: pixelated;
+    image-rendering: crisp-edges;
 }
 
 .canvas-tooltip {
     position: absolute;
     z-index: 5;
-    padding: 4px 8px;
-    background: var(--panel);
-    border: 1px solid var(--frame);
-    border-radius: 3px;
-    color: var(--cream);
-    font-size: 11px;
+    padding: 5px 9px;
+    background: rgba(22, 18, 15, 0.95);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-size: 11.5px;
     pointer-events: none;
     opacity: 0;
     transition: opacity .12s;
@@ -115,83 +350,79 @@ body { overflow: hidden; }
 .canvas-tooltip[data-visible="true"] { opacity: 1; }
 
 /* ===========================================================================
-   Agent dock — the horizontal card strip. Not present in final.jpg (it comes
-   from the harness reference), so it is styled in final.jpg's chrome to keep
-   one visual language.
+   Agent dock
    =========================================================================== */
 
 .agent-dock {
     display: flex;
-    /* Never shrink. The default (0 1 auto) lets a tight viewport squeeze the
-       dock toward zero, and overflow-y:hidden then clips the cards away
-       entirely. The canvas above has flex:1 + min-height:0, so it yields
-       instead. */
+    /* Never shrink: the canvas above has flex:1 + min-height:0, so it yields
+       instead of the dock being squeezed to nothing. */
     flex: 0 0 auto;
     gap: 8px;
-    padding: 8px;
-    background: var(--panel-raised);
-    border: 2px solid var(--frame-dim);
-    border-radius: var(--radius);
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: thin;
-    scrollbar-color: var(--frame-dim) var(--trough);
+    padding-bottom: 2px;
 }
 
-.agent-dock::-webkit-scrollbar { height: 8px; }
-.agent-dock::-webkit-scrollbar-track { background: var(--trough); }
-.agent-dock::-webkit-scrollbar-thumb {
-    background: var(--frame-dim);
-    border-radius: 4px;
-}
-
+/* Cards share the width while they fit and scroll once contractors arrive,
+   so the fifth card is never clipped at the edge. */
 .dock-card {
+    position: relative;
     display: grid;
-    grid-template-columns: 42px 1fr;
-    gap: 8px;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
     align-items: center;
-    flex: 0 0 228px;
-    padding: 7px 9px;
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
+    flex: 1 0 150px;
+    min-width: 0;
+    padding: 9px 12px 11px 9px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
     cursor: pointer;
-    transition: border-color .15s, background .15s;
+    overflow: hidden;
+    transition: border-color .15s, background .15s, transform .15s var(--ease);
 }
 
-.dock-card:hover { border-color: var(--frame); }
-
-/* A specialist hired for one mission. Set apart from the permanent staff on
-   purpose: the dashed edge reads as temporary, and the badge repeats what the
-   sprite on the floor is already wearing, so the two views agree about who is
-   staff and who is passing through. */
-.dock-card[data-spawned="true"] {
-    border-style: dashed;
-    border-color: #8b5cf6;
-}
-.dock-card[data-spawned="true"] .dock-name::after {
-    content: "🪪";
-    margin-left: 4px;
-    font-size: 9px;
-    opacity: 0.85;
+.dock-card:hover {
+    background: var(--surface-2);
+    border-color: var(--line-2);
 }
 
 .dock-card[data-selected="true"] {
-    background: var(--row-selected);
-    border-color: var(--frame-lit);
+    background: var(--surface-2);
+    border-color: rgba(240, 179, 94, 0.45);
+    box-shadow: 0 0 0 3px rgba(240, 179, 94, 0.08);
 }
 
-/* Portraits are pre-cropped to the silhouette by tools/build_atlas.py and sized
-   by hud.js from the manifest (14x17 at 3x = 42x51). The values here are only
-   the pre-load placeholder. */
+/* A specialist hired for one mission. The dashed edge reads as temporary, and
+   the badge repeats what the sprite on the floor is wearing, so the two views
+   agree about who is staff and who is passing through. */
+.dock-card[data-spawned="true"] {
+    border-style: dashed;
+    border-color: rgba(167, 139, 250, 0.5);
+}
+.dock-card[data-spawned="true"] .dock-name::after {
+    content: "contractor";
+    margin-left: 6px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(167, 139, 250, 0.14);
+    color: var(--contract);
+    font-size: 9.5px;
+    font-weight: 500;
+    vertical-align: 1px;
+}
+
+/* Portraits are pre-cropped by tools/build_atlas.py and sized by hud.js from
+   the manifest. The values here are only the pre-load placeholder. */
 .dock-avatar {
     width: 42px;
     height: 51px;
     align-self: center;
-    background-color: var(--trough);
+    background-color: #1f1915;
     background-repeat: no-repeat;
-    border: 1px solid var(--frame-dim);
-    border-radius: 2px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px var(--line);
     image-rendering: pixelated;
 }
 
@@ -205,10 +436,10 @@ body { overflow: hidden; }
 }
 
 .dock-name {
-    font-family: var(--font-pixel);
-    font-size: 11px;
-    letter-spacing: .04em;
-    color: var(--cream);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -217,39 +448,52 @@ body { overflow: hidden; }
 .dock-status {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
     flex: 0 0 auto;
-    padding: 1px 6px;
-    background: var(--panel-raised);
-    border: 1px solid var(--frame-dim);
-    border-radius: 2px;
-    font-size: 10px;
-    color: var(--muted);
+    color: var(--text-3);
+    font-size: 11px;
+    text-transform: capitalize;
 }
 
 .dock-status::before {
     content: '';
-    width: 7px;
-    height: 7px;
-    background: var(--muted);
-    border-radius: 1px;
+    width: 6px;
+    height: 6px;
+    background: var(--text-3);
+    border-radius: 50%;
 }
 
-.dock-card[data-state="active"]   .dock-status::before,
-.dock-card[data-state="thinking"] .dock-status::before,
-.dock-card[data-state="done"]     .dock-status::before { border-radius: 1px; }
-
-.dock-card[data-state="active"]   .dock-status { color: var(--green); }
-.dock-card[data-state="active"]   .dock-status::before { background: var(--green); }
-.dock-card[data-state="thinking"] .dock-status { color: var(--amber); }
-.dock-card[data-state="thinking"] .dock-status::before { background: var(--amber); }
+.dock-card[data-state="active"]       .dock-status,
+.dock-card[data-state="tool_calling"] .dock-status { color: var(--ok); }
+.dock-card[data-state="active"]       .dock-status::before,
+.dock-card[data-state="tool_calling"] .dock-status::before { background: var(--ok); animation: dotPulse 1.6s ease-in-out infinite; }
+.dock-card[data-state="thinking"] .dock-status { color: var(--accent-hi); }
+.dock-card[data-state="thinking"] .dock-status::before { background: var(--accent); animation: dotPulse 1.6s ease-in-out infinite; }
 .dock-card[data-state="done"]     .dock-status { color: var(--green-lit); }
 .dock-card[data-state="done"]     .dock-status::before { background: var(--green-lit); }
+.dock-card[data-state="error"]    .dock-status { color: var(--bad); }
+.dock-card[data-state="error"]    .dock-status::before { background: var(--bad); }
+
+@keyframes dotPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .35; }
+}
+
+/* A failure is an event, not just a colour: the card flashes once. */
+.dock-card[data-state="error"] {
+    border-color: rgba(255, 122, 102, 0.45);
+    animation: cardAlarm .9s var(--ease) 1;
+}
+@keyframes cardAlarm {
+    0%   { background: rgba(255, 122, 102, 0.28); transform: translateY(-1px); }
+    100% { background: var(--surface); transform: none; }
+}
 
 .dock-path {
-    margin: 3px 0 5px;
-    font-size: 10px;
-    color: var(--muted);
+    margin-top: 2px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-3);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -257,321 +501,633 @@ body { overflow: hidden; }
     text-align: left;
 }
 
+/* A 2px rule along the card's foot rather than a boxed bar. */
 .dock-progress {
-    height: 4px;
-    background: var(--trough);
-    border-radius: 2px;
-    overflow: hidden;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: transparent;
 }
 
 .dock-progress > i {
     display: block;
     height: 100%;
     width: 0;
-    background: linear-gradient(90deg, var(--gauge-lo), var(--gauge-hi));
-    transition: width .3s ease;
+    background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+    transition: width .4s var(--ease);
 }
+.dock-card[data-state="done"]  .dock-progress > i { background: var(--ok); }
+.dock-card[data-state="error"] .dock-progress > i { background: var(--bad); }
 
 /* ===========================================================================
-   Command bar
+   Composer
    =========================================================================== */
 
-.bottom-command-bar {
-    background: var(--panel-raised);
-    border: 2px solid var(--frame-dim);
-    border-radius: var(--radius);
-}
+.bottom-command-bar { flex: 0 0 auto; }
 
 .prompt-form {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-lg);
+    box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+    transition: border-color .15s, box-shadow .15s;
 }
 
-.cmd-indicator {
-    font-family: var(--font-pixel);
-    font-size: 14px;
-    color: var(--amber);
+.prompt-form:focus-within {
+    border-color: rgba(240, 179, 94, 0.5);
+    box-shadow: 0 0 0 4px rgba(240, 179, 94, 0.08), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
 }
 
 #promptInput {
     flex: 1;
     min-width: 0;
-    padding: 8px 10px;
-    background: var(--trough);
-    border: 1px solid var(--frame-dim);
-    border-radius: 3px;
-    color: var(--cream);
-    font-family: var(--font-mono);
-    font-size: 13px;
+    height: 38px;
+    padding: 0 6px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 14px;
 }
 
-#promptInput::placeholder { color: #5c5459; }
-#promptInput:focus {
-    outline: none;
-    border-color: var(--frame);
-}
+#promptInput::placeholder { color: var(--text-3); }
+#promptInput:focus { outline: none; }
 
+.attach-button,
 .dispatch-button,
 .emergency-button {
-    padding: 8px 14px;
-    border-radius: 3px;
-    font-family: var(--font-pixel);
-    font-size: 11px;
-    letter-spacing: .06em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
-    transition: filter .15s;
+    user-select: none;
+    transition: background .15s, color .15s, border-color .15s, filter .15s, transform .08s;
+}
+
+.attach-button {
+    width: 38px;
+    flex: 0 0 38px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-3);
+}
+.attach-button:hover { color: var(--text); background: var(--surface-2); }
+
+.emergency-button {
+    padding: 0 12px;
+    background: transparent;
+    border: 1px solid var(--line-2);
+    color: var(--text-2);
+}
+.emergency-button .ico { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+.emergency-button:hover {
+    color: var(--bad);
+    border-color: rgba(255, 122, 102, 0.45);
+    background: var(--bad-soft);
 }
 
 .dispatch-button {
-    background: var(--btn-face);
-    border: 1px solid var(--frame);
-    color: var(--amber-bright);
+    padding: 0 14px 0 16px;
+    background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+    border: 1px solid rgba(255, 214, 150, 0.6);
+    color: var(--accent-ink);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 6px 16px -8px rgba(240, 179, 94, 0.7);
 }
-
-.emergency-button {
-    background: #3a1c1c;
-    border: 1px solid #8c3a2e;
-    color: #f2a08d;
-}
-
-.dispatch-button:hover,
-.emergency-button:hover { filter: brightness(1.25); }
+.dispatch-button:hover { filter: brightness(1.06); }
+.dispatch-button:active,
+.emergency-button:active { transform: translateY(1px); }
+.dispatch-button .ico { width: 14px; height: 14px; stroke-width: 2.2; }
 
 .dispatch-button:disabled {
     opacity: .5;
     cursor: not-allowed;
 }
 
+/* The whole bar is the drop target, not just the paperclip. */
+.prompt-form.drag-over {
+    border-color: var(--accent);
+    border-style: dashed;
+    background: var(--accent-soft);
+}
+
+.attach-tray {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 0 4px;
+}
+
+.attach-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 6px 0 10px;
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--text);
+}
+
+.attach-chip .size {
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+}
+
+.attach-chip button {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.attach-chip button:hover { color: var(--text); }
+
+/* A rejected file says why, in the same place the accepted ones appear. */
+.attach-chip.error {
+    border-color: rgba(255, 122, 102, 0.45);
+    color: var(--bad);
+}
+
 /* ===========================================================================
-   HUD sidebar
+   Sidebar
    =========================================================================== */
 
 .hud-sidebar {
     display: flex;
     flex-direction: column;
-    gap: var(--gap);
     min-height: 0;
-    padding: 10px;
-    background: var(--panel-raised);
-    /* The reference frame is a double rule: a bright inner line inside a dim
-       outer one. box-shadow draws the inner without a second element. */
-    border: 2px solid var(--frame-dim);
-    border-radius: 8px;
-    box-shadow: inset 0 0 0 1px var(--frame);
+    background: var(--bg-elev);
+    border-left: 1px solid var(--line);
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--frame-dim) var(--trough);
 }
 
+/* Sections are separated by rules, not boxed: a stack of framed cards was the
+   single biggest source of visual noise in the old HUD. */
 .hud-card {
     display: flex;
     flex-direction: column;
     flex: 0 0 auto;
     min-height: 0;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--line);
 }
 
 .hud-card-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 5px;
+    min-height: 24px;
+    margin-bottom: 12px;
 }
 
-/* The title absorbs the slack so everything after it sits hard right.
-   `justify-content: space-between` used to do that job, and it worked while a
-   header had two children -- with three (title, expand, close) it spread the
-   two buttons apart instead of grouping them, which is what made the controls
-   look scattered rather than paired. */
+/* The title absorbs the slack so the actions group hard right. */
 .hud-card-header .card-title-neon { flex: 1 1 auto; min-width: 0; }
 
 .hud-card-actions {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 2px;
     flex: 0 0 auto;
 }
 
 .card-title-neon {
     display: flex;
     align-items: center;
-    gap: 7px;
-    font-family: var(--font-pixel);
-    font-size: 12px;
-    letter-spacing: .04em;
-    color: var(--amber);
+    gap: 8px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-2);
 }
 
-.header-icon { font-size: 13px; }
+.card-title-neon .ico { width: 14px; height: 14px; color: var(--text-3); }
 
 .hud-card-header .metric {
-    font-size: 12px;
-    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
 }
 
-/* --- 1. terminal ---------------------------------------------------------- */
-
-/* The reference gives the terminal roughly twice the slack the queue gets, and
-   between them they fill the column -- capping the terminal instead just leaves
-   dead space under the simulation card. Both grow from a zero basis so the
-   split stays 2:1 whatever the window height. */
-.terminal-card {
-    /* Was `flex: 2 1 0` -- the terminal took twice the free space and the
-       MISSION OUTPUT below it was capped at 220px. That is the wrong way
-       round: the log is a progress indicator you glance at, the output is the
-       thing you actually read. It now takes a fixed slice and the output takes
-       what is left. */
-    flex: 0 0 auto;
-    min-height: 96px;
-    max-height: 168px;
-}
-
-.terminal-titlebar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 5px 8px;
-    background: var(--chrome);
-    border: 1px solid var(--frame-dim);
-    border-bottom: none;
-    border-radius: 5px 5px 0 0;
-}
-
-.terminal-titlebar .glyph {
-    font-family: var(--font-pixel);
-    font-size: 13px;
-    color: var(--amber-bright);
+.hud-card-header .metric-strong {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
 }
 
 .hud-icon-btn {
-    width: 20px;
-    height: 20px;
-    flex: 0 0 20px;
-    padding: 0;
     display: grid;
     place-items: center;
-    /* The glyphs live in different Unicode blocks -- × is text, ⛶ and ⤡ are
-       symbols -- so a font substitution can render them at different weights
-       and baselines inside identically sized boxes. A fixed box with the glyph
-       centred keeps them level whichever font answers. */
-    font-variant-emoji: text;
-    text-align: center;
-    background: var(--btn-face);
-    border: 1px solid var(--frame);
-    border-radius: 3px;
-    color: var(--amber-bright);
-    font-size: 11px;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: var(--text-3);
+    font-size: 13px;
     line-height: 1;
     cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s;
+}
+.hud-icon-btn .ico { width: 14px; height: 14px; }
+.hud-icon-btn:hover { color: var(--text); background: var(--surface-2); border-color: var(--line); }
+
+/* --- idle state ----------------------------------------------------------- */
+
+.idle-card { padding-top: 22px; padding-bottom: 22px; }
+
+.idle-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.idle-eyebrow::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
 }
 
-.hud-icon-btn:hover { filter: brightness(1.3); }
+.idle-title {
+    margin: 10px 0 6px;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+    color: var(--text);
+}
+
+.idle-copy {
+    margin: 0 0 16px;
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.idle-examples {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.example-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    color: var(--text-2);
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: color .15s, background .15s, border-color .15s;
+}
+.example-chip::after {
+    content: '→';
+    color: var(--text-3);
+    transition: transform .15s var(--ease), color .15s;
+}
+.example-chip:hover {
+    color: var(--text);
+    background: var(--surface-2);
+    border-color: var(--line-2);
+}
+.example-chip:hover::after { color: var(--accent); transform: translateX(2px); }
+
+/* --- activity log --------------------------------------------------------- */
+
+/* The log is a progress indicator you glance at; the output is what you read.
+   It takes a fixed slice and the output takes what is left. */
+.terminal-card { flex: 0 0 auto; }
 
 .crt-screen {
-    flex: 1;
-    min-height: 0;
-    padding: 8px 10px;
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 0 0 5px 5px;
-    font-size: 12px;
-    line-height: 1.55;
+    min-height: 120px;
+    max-height: 240px;
+    padding: 4px 0;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.6;
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--frame) var(--trough);
 }
 
-.crt-screen::-webkit-scrollbar { width: 8px; }
-.crt-screen::-webkit-scrollbar-track { background: var(--trough); }
-.crt-screen::-webkit-scrollbar-thumb {
-    background: var(--frame-dim);
-    border-radius: 4px;
+.crt-log-line {
+    display: grid;
+    grid-template-columns: auto 6px 1fr;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 0;
+    color: var(--text-2);
+    word-break: break-word;
 }
-
-.crt-log-line { word-break: break-word; }
-.log-time   { color: var(--muted); }
-.log-agent  { color: var(--cream); }
+.log-time   { color: var(--text-3); font-size: 10.5px; }
+.log-agent  { color: var(--text); }
 .log-string { color: var(--string); }
-.tag-success  { color: var(--green); }
-.tag-analysis { color: var(--green); }
-.tag-error    { color: #f08a72; }
+
+.log-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-3);
+    transform: translateY(-1px);
+}
+.log-dot.tag-success  { background: var(--ok); }
+.log-dot.tag-analysis { background: var(--accent); }
+.log-dot.tag-error    { background: var(--bad); }
+.log-dot.tag-warn     { background: #e8c889; }
+.crt-log-line[data-type="ERROR"] .log-body { color: #ffb4a6; }
 
 .terminal-prompt-intro {
-    margin-bottom: 4px;
-    color: var(--muted);
-    font-size: 11px;
+    color: var(--text-3);
+    font-size: 11.5px;
 }
 
-/* --- 2. token gauge ------------------------------------------------------- */
+/* --- mission cost --------------------------------------------------------- */
 
-.equalizer-container {
+.cost-figures {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.cost-figure {
     display: flex;
-    gap: 2px;
-    height: 26px;
-    padding: 3px;
-    background: var(--trough);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 11px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
 }
+.cost-key {
+    font-size: 11px;
+    color: var(--text-3);
+}
+.cost-val {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.cost-val[data-failed="true"] { color: var(--bad); }
+.cost-note.muted { color: var(--text-3); }
+.cost-note {
+    display: block;
+    color: var(--bad);
+    font-family: var(--font-ui);
+    font-size: 10.5px;
+    font-weight: 500;
+}
+/* An estimated total is a guess. It must not be set in the same type as a
+   reading -- the simulator path invents these. */
+.metric[data-estimated="true"] { color: var(--string); font-style: italic; }
 
-.eq-seg {
+.cost-latency {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 44px;
+    padding: 0 2px;
+    border-bottom: 1px solid var(--line-2);
+}
+.cost-bar {
     flex: 1;
-    border-radius: 1px;
-    /* Not transparent: an empty gauge should still read as a gauge, which it
-       only does if the unlit slots are visible against the trough. */
-    background: #191219;
-    transition: background .25s;
+    min-width: 4px;
+    border-radius: 3px 3px 0 0;
+    opacity: .9;
+    transition: height .35s var(--ease);
+}
+.cost-bar[data-status="pending"] { opacity: .8; }
+.cost-bar[data-status="failed"]  { box-shadow: inset 0 0 0 1px var(--bad); }
+
+.cost-agents { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
+.cost-agent {
+    display: grid;
+    grid-template-columns: 64px 1fr 56px;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text);
+}
+.cost-agent-name { color: var(--text-2); }
+.cost-agent-track {
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 999px;
+    overflow: hidden;
+}
+.cost-agent-fill { display: block; height: 100%; border-radius: inherit; opacity: .9; }
+.cost-agent-num {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+}
+.cost-empty { font-size: 12px; color: var(--text-3); padding: 2px 0; }
+
+/* --- execution plan ------------------------------------------------------- */
+/* Nodes are ranked by dependency depth and joined by real edges; neighbours
+   stay lit on hover while the rest dims. */
+
+.dag-viewport {
+    flex: 1;
+    min-height: 150px;
+    max-height: 340px;
+    background:
+        radial-gradient(circle, rgba(255, 226, 190, 0.05) 1px, transparent 1.2px) 0 0 / 16px 16px,
+        var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    overflow: auto;
+}
+.dag-viewport svg { display: block; }
+
+.dag-edge {
+    fill: none;
+    stroke: #43372e;
+    stroke-width: 1.5;
+    transition: stroke .15s, opacity .15s;
+}
+.dag-edge.lit { stroke: var(--accent-hi); stroke-width: 2.2; }
+.dag-edge.dim { opacity: .18; }
+
+.dag-node { cursor: default; transition: opacity .15s; }
+.dag-node.dim { opacity: .22; }
+.dag-dot { transition: r .15s, filter .15s; stroke-width: 2; }
+.dag-node:hover .dag-dot { filter: brightness(1.25); }
+
+.dag-ring { stroke-width: 1.4; opacity: .75; }
+
+.dag-glyph {
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 700;
+    fill: #16100c;
+    pointer-events: none;
+}
+.dag-label {
+    font-family: var(--font-ui);
+    font-size: 11.5px;
+    font-weight: 600;
+    fill: var(--text);
+    pointer-events: none;
+}
+.dag-sub {
+    font-family: var(--font-ui);
+    font-size: 10.5px;
+    fill: var(--text-3);
+    pointer-events: none;
 }
 
-.eq-seg[data-on="true"] {
-    background: linear-gradient(180deg, var(--gauge-hi), var(--gauge-lo));
+/* The live step pulses, so the eye finds it without hunting. */
+.dag-node[data-status="running"] .dag-dot,
+.dag-node[data-status="active"]  .dag-dot { animation: dagPulse 1.3s ease-in-out infinite; }
+@keyframes dagPulse {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.45) drop-shadow(0 0 6px rgba(240, 179, 94, 0.7)); }
 }
 
-/* --- expanded output panel -------------------------------------------- */
-/* The sidebar is ~500px of a report that can run to several thousand words.
-   The card is moved in here rather than copied, so everything below is about
-   letting the same element breathe rather than restyling a duplicate. */
+/* A failed step flares once on each redraw, then stays red. */
+.dag-node[data-status="failed"] .dag-dot { animation: dagFail 1s ease-out 1; }
+@keyframes dagFail {
+    0%   { filter: drop-shadow(0 0 10px rgba(255, 122, 102, 0.95)); }
+    100% { filter: none; }
+}
 
+.dag-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px 2px 0;
+    font-size: 11.5px;
+    color: var(--text-3);
+}
+.dag-legend span[data-k="completed"] { color: var(--green-lit); }
+.dag-legend span[data-k="running"]   { color: var(--accent-hi); }
+.dag-legend span[data-k="failed"]    { color: var(--bad); }
+
+/* Node badges: memory rerouted it (left), a reviewer scored it (right). Drawn
+   from state kept outside the SVG, because dag.update redraws the graph. */
+.dag-badge text {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 700;
+    fill: #16100c;
+    pointer-events: none;
+}
+.dag-badge-route circle { fill: var(--string); stroke: var(--surface); stroke-width: 1.5; }
+.dag-badge-critique circle { stroke: var(--surface); stroke-width: 1.5; }
+.dag-badge-critique[data-verdict="accept"] circle { fill: var(--green-lit); }
+.dag-badge-critique[data-verdict="revise"] circle { fill: #f0a04a; }
+/* Rejected with no repair left: the step completes carrying work its reviewer
+   turned down, which reads as a pass unless it is drawn as a failure. */
+.dag-badge-critique[data-verdict="revise"][data-repairing="false"] circle { fill: var(--bad); }
+
+.dag-spent {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    fill: var(--text-3);
+    pointer-events: none;
+}
+
+/* --- overlays ------------------------------------------------------------- */
+
+.dag-overlay,
 .panel-overlay {
     position: fixed;
     inset: 0;
     z-index: 60;
     display: flex;
+    padding: 32px;
+    background: rgba(8, 6, 5, 0.72);
+    backdrop-filter: blur(10px) saturate(120%);
+    animation: fadeIn .18s var(--ease);
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.dag-overlay { flex-direction: column; }
+
+.dag-overlay-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line-2);
+    border-bottom: none;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.dag-viewport-full {
+    flex: 1;
+    min-height: 0;
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+    border-color: var(--line-2);
+}
+
+.panel-overlay {
     align-items: center;
     justify-content: center;
-    padding: 26px;
-    background: rgba(0, 0, 0, .82);
-    backdrop-filter: blur(2px);
 }
 
 .panel-overlay-host {
     display: flex;
     flex-direction: column;
     width: 100%;
-    max-width: 1000px;
+    max-width: 960px;
     max-height: 100%;
     min-height: 0;
 }
 
-/* Fill the overlay instead of sitting at sidebar height. */
-/* The output is the panel that grows. `min-height` rather than a fixed height
-   so a one-line answer does not leave a tall empty box, and `flex: 1 1 auto`
-   so a long briefing takes every pixel the terminal and the gauges leave. */
-.memo-card {
-    flex: 1 1 auto;
-    min-height: 300px;
-}
+/* --- mission output ------------------------------------------------------- */
+
+/* The output is the panel that grows: `min-height` so a one-line answer does
+   not leave a tall empty box, `flex: 1 1 auto` so a long briefing takes every
+   pixel the other sections leave. */
+.memo-card { flex: 0 0 auto; }
 
 .memo-card[data-expanded="true"] {
     flex: 1 1 auto;
     min-height: 0;
     max-height: 100%;
-    border-color: var(--frame);
+    padding: 20px 24px;
+    background: var(--bg-elev);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
 }
 
-/* The two panes and their scrollers are capped for the sidebar; expanded,
-   the available height is the only limit that should apply. */
+/* The panes are capped for the sidebar; expanded, the window is the limit. */
 .memo-card[data-expanded="true"] .out-pane { min-height: 0; }
 .memo-card[data-expanded="true"] .memo-content,
 .memo-card[data-expanded="true"] .out-files {
@@ -582,559 +1138,345 @@ body { overflow: hidden; }
 }
 
 /* Long-form text is hard to read at sidebar size; give it room. */
-.memo-card[data-expanded="true"] .memo-content { font-size: 13px; line-height: 1.6; }
-.memo-card[data-expanded="true"] .out-file-body { font-size: 12.5px; line-height: 1.6; }
-.memo-card[data-expanded="true"] .out-goal { font-size: 12px; }
+.memo-card[data-expanded="true"] .memo-content { font-size: 14.5px; line-height: 1.7; padding: 22px 28px; }
+.memo-card[data-expanded="true"] .out-file-body { font-size: 13.5px; line-height: 1.65; }
+.memo-card[data-expanded="true"] .out-goal { font-size: 13px; }
 
-/* --- mission output ---------------------------------------------------------- */
-
-.memo-card { flex: 0 1 auto; min-height: 0; }
+.memo-card[data-expanded="true"] .hud-card-actions { gap: 4px; }
+.memo-card[data-expanded="true"] .hud-icon-btn { width: 32px; height: 32px; flex: 0 0 32px; }
+.memo-card[data-expanded="true"] .hud-icon-btn .ico { width: 16px; height: 16px; }
+.memo-card[data-expanded="true"] .hud-card-header {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 14px;
+}
 
 .memo-content {
     flex: 1;
-    /* A floor, not a ceiling. The old `max-height: 220px` meant a 40-line
-       briefing scrolled inside a box a third of the sidebar's height while
-       empty space sat below it. */
-    min-height: 200px;
-    padding: 9px 11px;
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-    font-size: 12px;
-    line-height: 1.6;
+    /* A floor, not a ceiling: a 40-line briefing should not scroll inside a
+       box a third of the sidebar's height while space sits empty below it. */
+    min-height: 140px;
+    max-height: 340px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 1.65;
     overflow-y: auto;
 }
 
-.memo-content h1,
-.memo-content h2,
-.memo-content h3 {
-    margin: .5em 0 .3em;
-    color: var(--amber);
-    font-family: var(--font-pixel);
-    font-size: 12px;
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+    margin: 1.2em 0 .45em;
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
 }
-
-.memo-content ul { margin: .3em 0; padding-left: 1.1em; }
-.memo-content code {
-    padding: 1px 4px;
-    background: var(--trough);
-    border-radius: 2px;
+.markdown-body h1 { font-size: 1.3em; }
+.markdown-body h2 { font-size: 1.13em; }
+.markdown-body h3 { font-size: 1em; }
+.markdown-body p { margin: .6em 0; }
+.markdown-body strong { color: var(--text); font-weight: 600; }
+.markdown-body a { color: var(--accent-hi); text-decoration: none; border-bottom: 1px solid rgba(240, 179, 94, 0.35); }
+.markdown-body a:hover { border-bottom-color: var(--accent-hi); }
+.markdown-body ul,
+.markdown-body ol { margin: .5em 0; padding-left: 1.3em; }
+.markdown-body li { margin: .2em 0; }
+.markdown-body li::marker { color: var(--text-3); }
+.markdown-body blockquote {
+    margin: .8em 0;
+    padding: .2em 0 .2em 1em;
+    border-left: 2px solid var(--line-3);
+    color: var(--text-3);
+}
+.markdown-body hr { border: 0; border-top: 1px solid var(--line-2); margin: 1.2em 0; }
+.markdown-body code {
+    padding: 1px 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
     color: var(--string);
-}
-
-/* --- narrow viewports ----------------------------------------------------- */
-
-@media (max-width: 900px) {
-    .app-viewport {
-        grid-template-columns: 1fr;
-        grid-template-rows: 1fr auto;
-        overflow-y: auto;
-    }
-    .hud-sidebar { max-height: 55vh; }
-}
-
-/* =========================================================================
-   EXECUTION PLAN
-   The planner's DAG. plan.created draws it; dag.update redraws it after every
-   step, so status is carried on the row rather than animated.
-   ========================================================================= */
-/* --- execution plan: the DAG as a graph ------------------------------- */
-/* Was a flat list, which hid the graph structure entirely. Nodes are ranked
-   by dependency depth and joined by real edges; the visual language follows
-   Obsidian's graph view -- round nodes, curved links, neighbours stay lit on
-   hover while the rest dims. */
-
-.dag-viewport {
-    flex: 1;
-    min-height: 150px;
-    background:
-        radial-gradient(circle at 50% 40%, rgba(169,113,60,.07), transparent 70%),
-        var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-    overflow: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--frame) var(--trough);
-}
-.dag-viewport::-webkit-scrollbar { width: 8px; height: 8px; }
-.dag-viewport::-webkit-scrollbar-track { background: var(--trough); }
-.dag-viewport::-webkit-scrollbar-thumb { background: var(--frame-dim); border-radius: 4px; }
-.dag-viewport svg { display: block; }
-
-.dag-edge {
-    fill: none;
-    stroke: var(--frame-dim);
-    stroke-width: 1.6;
-    transition: stroke .15s, opacity .15s;
-}
-.dag-edge.lit { stroke: var(--amber-bright); stroke-width: 2.4; }
-.dag-edge.dim { opacity: .18; }
-
-.dag-node { cursor: default; transition: opacity .15s; }
-.dag-node.dim { opacity: .22; }
-.dag-dot { transition: r .15s, filter .15s; }
-.dag-node:hover .dag-dot { filter: brightness(1.35); }
-
-.dag-ring { stroke-width: 1.4; opacity: .75; }
-
-.dag-glyph {
     font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 700;
-    fill: #14100f;
-    pointer-events: none;
+    font-size: .88em;
 }
-.dag-label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    fill: var(--cream);
-    pointer-events: none;
-}
-.dag-sub {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    fill: var(--muted);
-    pointer-events: none;
-}
-
-/* A running node pulses, so the eye finds the live step without hunting. */
-.dag-node[data-status="running"] .dag-dot,
-.dag-node[data-status="active"]  .dag-dot { animation: dagPulse 1.15s ease-in-out infinite; }
-@keyframes dagPulse {
-    0%, 100% { filter: brightness(1);   }
-    50%      { filter: brightness(1.55); }
-}
-
-.dag-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 5px 2px 0;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--muted);
-}
-.dag-legend span[data-k="completed"] { color: var(--green-lit); }
-.dag-legend span[data-k="running"]   { color: var(--amber-bright); }
-.dag-legend span[data-k="failed"]    { color: #ff7a5c; }
-
-/* Node badges. The fill of a node says who owns it and the ring says how far
-   it got; these two say what HAPPENED to it -- memory took it off the planner's
-   pick (left), and a reviewer scored it (right). Both are drawn from state kept
-   outside the SVG, because dag.update redraws the whole graph on every status
-   change. */
-.dag-badge text {
-    font-family: var(--font-mono);
-    font-size: 8px;
-    font-weight: 700;
-    fill: #14100f;
-    pointer-events: none;
-}
-.dag-badge-route circle { fill: var(--string); stroke: var(--panel); stroke-width: 1.2; }
-.dag-badge-critique circle { stroke: var(--panel); stroke-width: 1.2; }
-.dag-badge-critique[data-verdict="accept"] circle { fill: var(--green-lit); }
-.dag-badge-critique[data-verdict="revise"] circle { fill: #f0a04a; }
-/* Rejected with no repair left: the step completes carrying work its reviewer
-   turned down, which reads as a pass unless it is drawn as a failure. */
-.dag-badge-critique[data-verdict="revise"][data-repairing="false"] circle { fill: #ff7a5c; }
-
-.dag-spent {
-    font-family: var(--font-mono);
-    font-size: 8.5px;
-    fill: var(--frame);
-    pointer-events: none;
-}
-
-/* --- cost & telemetry -------------------------------------------------- */
-/* Every figure here is per-mission. The agents' own counters are lifetime
-   totals that never reset, so a panel built on those would report this run as
-   the sum of every run the process has served. */
-
-.cost-figures {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    margin-bottom: 8px;
-}
-.cost-figure {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 5px 6px;
-    background: var(--trough);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-}
-.cost-key {
-    font-family: var(--font-pixel);
-    font-size: 7px;
-    letter-spacing: .5px;
-    color: var(--muted);
-}
-.cost-val {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--amber-bright);
-}
-.cost-val[data-failed="true"] { color: #ff7a5c; }
-/* An estimated total is a guess. It must not be set in the same type as a
-   reading -- the simulator path invents these. */
-.metric[data-estimated="true"] { color: var(--string); font-style: italic; }
-
-.cost-latency {
-    display: flex;
-    align-items: flex-end;
-    gap: 3px;
-    height: 42px;
-    padding: 4px 5px;
-    background: var(--trough);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-}
-.cost-bar {
-    flex: 1;
-    min-width: 4px;
-    border-radius: 2px 2px 0 0;
-    opacity: .9;
-    transition: height .25s ease-out;
-}
-.cost-bar[data-status="pending"] { opacity: .35; }
-.cost-bar[data-status="failed"]  { outline: 1px solid #ff7a5c; }
-
-.cost-agents { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-.cost-agent {
-    display: grid;
-    grid-template-columns: 56px 1fr 54px;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--cream);
-}
-.cost-agent-name { color: var(--muted); }
-.cost-agent-track {
-    height: 7px;
-    background: var(--trough);
-    border: 1px solid var(--frame-dim);
-    border-radius: 3px;
-    overflow: hidden;
-}
-.cost-agent-fill { display: block; height: 100%; opacity: .85; }
-.cost-agent-num { text-align: right; color: var(--amber); }
-.cost-empty { font-size: 10px; color: var(--muted); padding: 2px; }
-
-/* --- trace replay ------------------------------------------------------ */
-/* The office stops being a live dashboard and becomes a time-travel debugger:
-   the same renderer, driven from a recorded trace.jsonl instead of the socket. */
-
-.replay-card[data-active="true"] { border-color: var(--frame-lit); }
-.replay-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-.replay-select {
-    flex: 1;
-    min-width: 0;
-    padding: 4px 6px;
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--cream);
-    background: var(--trough);
-    border: 1px solid var(--frame-dim);
-    border-radius: 4px;
-}
-.replay-speed { flex: 0 0 58px; }
-.replay-btn {
-    padding: 4px 10px;
-    font-family: var(--font-pixel);
-    font-size: 8px;
-    letter-spacing: .5px;
-    color: var(--cream);
-    background: var(--btn-face);
-    border: 1px solid var(--frame);
-    border-radius: 4px;
-    cursor: pointer;
-}
-.replay-btn:hover:not(:disabled) { background: var(--row-selected); color: var(--amber-bright); }
-.replay-btn:disabled { opacity: .4; cursor: default; }
-.replay-exit { color: var(--green-lit); }
-
-.replay-scrub {
+.markdown-body pre code { padding: 0; background: none; border: 0; }
+.markdown-body table {
     width: 100%;
-    margin: 2px 0 6px;
-    accent-color: var(--amber);
+    margin: .8em 0;
+    border-collapse: collapse;
+    font-size: .92em;
 }
-.replay-status {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
-    line-height: 1.35;
-    color: var(--muted);
+.markdown-body th,
+.markdown-body td {
+    padding: 6px 9px;
+    border-bottom: 1px solid var(--line-2);
+    text-align: left;
+    vertical-align: top;
 }
-
-/* Full-screen graph: the sidebar is too narrow for a wide plan. */
-.dag-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 60;
-    display: flex;
-    flex-direction: column;
-    padding: 26px;
-    background: rgba(0, 0, 0, .82);
-    backdrop-filter: blur(2px);
-}
-.dag-overlay-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    background: var(--panel-raised);
-    border: 1px solid var(--frame);
-    border-bottom: none;
-    border-radius: var(--radius) var(--radius) 0 0;
-}
-.dag-viewport-full {
-    flex: 1;
-    min-height: 0;
-    border-radius: 0 0 var(--radius) var(--radius);
-    border-color: var(--frame);
-}
-
-/* --- mission output --------------------------------------------------- */
+.markdown-body th { color: var(--text); font-weight: 600; }
 
 .out-goal {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.4;
-    color: var(--cream);
-    padding: 6px 8px;
-    margin-bottom: 6px;
-    background: var(--panel);
-    border-left: 2px solid var(--frame);
-    border-radius: 3px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: var(--accent-soft);
+    border: 1px solid rgba(240, 179, 94, 0.18);
+    border-radius: var(--r-md);
     overflow-wrap: anywhere;
 }
 .out-goal-tag {
-    font-family: var(--font-pixel);
-    font-size: 8px;
-    color: var(--frame-lit);
-    margin-right: 6px;
+    display: block;
+    margin-bottom: 3px;
+    color: var(--accent);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .out-banner {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    line-height: 1.4;
-    padding: 6px 8px;
-    margin-bottom: 6px;
-    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 9px 12px;
+    margin-bottom: 10px;
+    border-radius: var(--r-md);
     overflow-wrap: anywhere;
 }
 .out-banner[data-kind="error"] {
-    color: #ffb2a0;
-    background: rgba(200, 80, 60, .13);
-    border-left: 2px solid #c8503c;
+    color: #ffc2b7;
+    background: var(--bad-soft);
+    border: 1px solid rgba(255, 122, 102, 0.3);
 }
 .out-banner[data-kind="warn"] {
     color: var(--string);
-    background: rgba(169, 113, 60, .12);
-    border-left: 2px solid var(--frame);
+    background: var(--accent-soft);
+    border: 1px solid rgba(240, 179, 94, 0.22);
 }
 
-.out-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
-.out-tab {
-    font-family: var(--font-pixel);
-    font-size: 8px;
-    letter-spacing: .5px;
-    color: var(--muted);
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 3px;
-    padding: 5px 9px;
-    cursor: pointer;
+/* A segmented control, not two boxed buttons. */
+.out-tabs {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 2px;
+    padding: 3px;
+    margin-bottom: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
 }
-.out-tab:hover { color: var(--cream); }
+.out-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color .15s, background .15s;
+}
+.out-tab:hover { color: var(--text); }
 .out-tab[data-active="true"] {
-    color: var(--amber-bright);
-    border-color: var(--frame);
-    background: var(--row-selected);
+    color: var(--text);
+    background: var(--surface-3);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.out-count {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 17px;
 }
 
 .out-pane { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 
 .out-files {
     flex: 1;
-    min-height: 0;
-    min-height: 200px;
+    min-height: 140px;
+    max-height: 340px;
     overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--frame) var(--trough);
 }
-.out-files::-webkit-scrollbar { width: 8px; }
-.out-files::-webkit-scrollbar-track { background: var(--trough); }
-.out-files::-webkit-scrollbar-thumb { background: var(--frame-dim); border-radius: 4px; }
 
 .out-file {
-    background: var(--panel);
-    border: 1px solid var(--frame-dim);
-    border-radius: 3px;
-    margin-bottom: 5px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    margin-bottom: 6px;
+    overflow: hidden;
 }
+.out-file[open] { border-color: var(--line-2); }
 .out-file > summary {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: 10px;
+    padding: 9px 12px;
     cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--cream);
+    list-style: none;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
 }
+.out-file > summary:hover { background: var(--surface-2); }
 .out-file > summary::-webkit-details-marker { display: none; }
-.out-file > summary::before { content: "▸ "; color: var(--frame-lit); }
-.out-file[open] > summary::before { content: "▾ "; }
-.out-file-name { overflow-wrap: anywhere; }
-.out-file-meta { flex: 0 0 auto; font-size: 9.5px; color: var(--muted); }
+.out-file > summary::before {
+    content: "›";
+    display: inline-block;
+    width: 10px;
+    color: var(--text-3);
+    transition: transform .15s var(--ease);
+}
+.out-file[open] > summary::before { transform: rotate(90deg); }
+.out-file-name { flex: 1; overflow-wrap: anywhere; }
+.out-file-meta {
+    flex: 0 0 auto;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 400;
+}
 .out-file-body {
-    padding: 2px 10px 8px;
-    border-top: 1px solid var(--frame-dim);
-    font-size: 11px;
+    padding: 6px 14px 12px;
+    border-top: 1px solid var(--line);
+    color: var(--text-2);
+    font-size: 12.5px;
+    line-height: 1.6;
 }
 .out-file-body pre {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-family: var(--font-mono);
-    font-size: 10.5px;
-    color: var(--cream);
-    margin: 6px 0;
+    font-size: 11.5px;
+    color: var(--text-2);
+    margin: 8px 0;
 }
-.out-clip { color: var(--muted); font-style: italic; font-size: 10px; }
+.out-clip { color: var(--text-3); font-style: italic; font-size: 11px; }
 .out-where {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--muted);
-    padding: 4px 2px 7px;
+    font-size: 11.5px;
+    color: var(--text-3);
+    padding: 2px 2px 10px;
     overflow-wrap: anywhere;
 }
-.out-where code { color: var(--string); }
+.out-where code { color: var(--string); font-family: var(--font-mono); }
+
+/* The running view of the FILES tab: files as each desk finishes them. */
+.out-where.out-live {
+    color: var(--accent-hi);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: var(--accent-soft);
+    border-radius: var(--r-md);
+}
 
 .out-empty {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--muted);
-    padding: 10px 4px;
+    font-size: 12.5px;
+    color: var(--text-3);
+    padding: 12px 4px;
 }
 
-/* ===================== attachments =====================
-   A file dropped with a task. Styled as a sibling of DISPATCH rather than as
-   a separate panel, because it is part of composing the command -- the tray
-   below is the only new box, and it is `hidden` until something is in it. */
+/* --- trace replay --------------------------------------------------------- */
+/* The office stops being a live dashboard and becomes a time-travel debugger:
+   the same renderer, driven from a recorded trace instead of the socket. */
 
-.attach-button {
-    padding: 8px 14px;
-    border-radius: 3px;
-    font-family: var(--font-pixel);
-    font-size: 11px;
-    letter-spacing: .06em;
+/* Last in the column, and pinned there: replay is a place you go, not part
+   of watching a run. */
+.replay-card { margin-top: auto; border-bottom: 0; }
+.replay-card[data-active="true"] { background: linear-gradient(180deg, var(--accent-soft), transparent 70%); }
+.replay-card[data-active="true"] .card-title-neon { color: var(--accent-hi); }
+.replay-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+
+.replay-select {
+    flex: 1;
+    min-width: 0;
+    height: 32px;
+    padding: 0 30px 0 10px;
+    font-size: 12.5px;
+    color: var(--text);
+    background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2385786b' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center / 14px,
+        var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    appearance: none;
     cursor: pointer;
-    transition: filter .15s;
-    background: transparent;
-    border: 1px dashed var(--frame);
-    color: var(--amber-dim, var(--amber-bright));
-    user-select: none;
 }
+.replay-select:hover { border-color: var(--line-3); }
+.replay-select option { background: #1d1814; color: var(--text); }
+.replay-speed { flex: 0 0 68px; }
 
-.attach-button:hover {
-    filter: brightness(1.25);
-    border-style: solid;
-}
-
-/* The whole prompt bar is the drop target, not just the button: dragging a
-   file at a 14px label is a worse experience than dropping it anywhere near. */
-.prompt-form.drag-over {
-    outline: 2px dashed var(--amber-bright);
-    outline-offset: 2px;
-}
-
-.attach-tray {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 6px;
-    padding: 0 4px;
-}
-
-.attach-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 8px;
-    border: 1px solid var(--frame);
-    border-radius: 3px;
-    background: var(--btn-face);
-    font-family: var(--font-mono, monospace);
-    font-size: 11px;
-    color: var(--amber-bright);
-}
-
-.attach-chip .size {
-    opacity: .6;
-    font-size: 10px;
-}
-
-.attach-chip button {
-    background: none;
-    border: none;
-    color: inherit;
+.replay-btn {
+    height: 32px;
+    padding: 0 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
     cursor: pointer;
-    padding: 0 2px;
-    font-size: 13px;
-    line-height: 1;
-    opacity: .7;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.replay-btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--line-3); }
+.replay-btn:disabled { opacity: .4; cursor: default; }
+.replay-exit { color: var(--ok); }
+
+.replay-scrub {
+    width: 100%;
+    margin: 4px 0 8px;
+    accent-color: var(--accent);
+}
+.replay-status {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-3);
 }
 
-.attach-chip button:hover { opacity: 1; }
+/* ===========================================================================
+   Narrow viewports
+   =========================================================================== */
 
-/* A rejected file says why, in the same place the accepted ones appear. */
-.attach-chip.error {
-    border-color: var(--error, #c0392b);
-    color: var(--error, #c0392b);
+@media (max-width: 1100px) {
+    .brand-sub,
+    .token-label { display: none; }
 }
 
-/* The running view of the FILES tab: files as each desk finishes them, before
-   the mission ends and the full bodies replace them. */
-.out-where.out-live {
-    color: var(--amber-bright);
-    border-left: 2px solid var(--amber-bright);
-    padding-left: 6px;
+@media (max-width: 900px) {
+    body { overflow: auto; }
+    .app-shell { height: auto; min-height: 100vh; }
+    .topbar { gap: 10px; padding: 0 14px; }
+    .token-meter { display: none; }
+    .app-viewport { grid-template-columns: 1fr; }
+    .canvas-panel { padding: 12px 16px; }
+    .canvas-container { flex: 0 0 auto; aspect-ratio: 16 / 10; }
+    .hud-sidebar { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+    .emergency-button span { display: none; }
 }
 
-/* Expanded, the panel is the window: its controls belong at the top-right of
-   the overlay, sized for a full screen rather than for a 20px sidebar row. The
-   pair is a fullscreen toggle and a close, and nothing else -- everything that
-   was useful in the sidebar header (the goal line, the tabs) stays in the card
-   body where it already is. */
-.memo-card[data-expanded="true"] .hud-card-actions {
-    gap: 8px;
+@media (max-width: 560px) {
+    .mission-pill { margin-left: 0; }
+    .conn-pill span:last-child { display: none; }
+    .dispatch-button span { display: none; }
+    .dispatch-button { padding: 0 12px; }
 }
 
-.memo-card[data-expanded="true"] .hud-icon-btn {
-    width: 30px;
-    height: 30px;
-    flex: 0 0 30px;
-    font-size: 15px;
-    border-color: var(--frame);
-}
-
-.memo-card[data-expanded="true"] .hud-card-header {
-    padding-bottom: 6px;
-    border-bottom: 1px solid var(--frame-dim);
-    margin-bottom: 8px;
-}
-
-.memo-card[data-expanded="true"] .hud-icon-btn svg {
-    width: 16px;
-    height: 16px;
-}
-
-#downloadPdfBtn:hover {
-    color: var(--amber-bright, #f59e0b);
-    border-color: var(--amber-bright, #f59e0b);
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+    }
 }
