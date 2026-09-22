@@ -132,13 +132,19 @@ def _artifact_block(artifacts: Sequence[Tuple[str, str]]) -> str:
     # results" when the results were in the half it was not shown.
     from workspace import condense
 
+    # A fair share per file, not first-come. Spending the total in order meant
+    # a mission's opening research notes filled the budget and the files
+    # written LAST -- the final report, the recorded decision -- could be
+    # dropped from the conclusion entirely. The same fault took the meeting
+    # table (see debate._fit_room), where three attendees could see only the
+    # first of three files.
+    present = [(n, (b or "").strip()) for n, b in artifacts if (b or "").strip()]
+    share = MAX_TOTAL_CHARS // max(1, len(present))
+
     blocks: List[str] = []
     budget = MAX_TOTAL_CHARS
-    for name, body in artifacts:
-        body = (body or "").strip()
-        if not body:
-            continue
-        limit = min(MAX_ARTIFACT_CHARS, budget)
+    for name, body in present:
+        limit = min(MAX_ARTIFACT_CHARS, share, budget)
         if limit < 200:
             break
         clipped = condense(body, limit)

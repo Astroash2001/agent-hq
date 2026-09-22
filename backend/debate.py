@@ -31,6 +31,7 @@ on the event and in the text handed to the chair.
 """
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
@@ -40,13 +41,49 @@ import tracing
 from config import date_context, llm_configured, settings
 from event_bus import event_bus
 from schemas import Event, EventType
+from workspace import condense
 
 logger = logging.getLogger("AgentHQ.Debate")
 
 # How much of what is on the table each attendee sees. An objection is formed
 # from the shape and the claims of a draft, not from its final appendix, and
 # every extra thousand characters is paid for once per attendee per round.
-MAX_CONTEXT_CHARS = 3000
+MAX_CONTEXT_CHARS = 7500
+
+# The rule `workspace.render_context` separates files with: a blank line, then
+# a "--- name (from author) ---" header.
+_FILE_BREAK = re.compile(r"\n\n(?=--- )")
+
+
+def _fit_room(room_context: str, budget: int = MAX_CONTEXT_CHARS) -> str:
+    """
+    Fit everything on the table into `budget`, giving EVERY file a share.
+
+    This was `room_context[:3000]`: one cut across the whole table. The table
+    is several artifacts concatenated, so the first file's opening used the
+    entire budget and every later file vanished. Observed on a three-provider
+    review: all three attendees objected that `render_research.md` "ends
+    mid-URL" and "covers only Render" -- the Railway and Fly.io notes were on
+    the table and nobody at it could see them. The room argued about a cut the
+    harness had made.
+
+    Each file now gets an equal share, condensed with its opening and its close
+    intact (`workspace.condense`), so a meeting sees every file it was convened
+    to discuss, including each one's conclusion.
+    """
+    text = room_context or ""
+    if len(text) <= budget:
+        return text
+    parts = _FILE_BREAK.split(text)
+    if parts and parts[0].startswith("--- "):
+        head, blocks = "", parts
+    else:
+        head, blocks = parts[0], parts[1:]
+    if not blocks:
+        return condense(text, budget)
+    share = max(400, (budget - len(head)) // len(blocks))
+    kept = [condense(block, share) for block in blocks]
+    return "\n\n".join(([head] if head else []) + kept)
 
 DEBATE_SYSTEM_PROMPT = """You are at the conference table in a multi-agent \
 office. Colleagues have put their work on the table and the chair is about to \
@@ -119,7 +156,13 @@ async def _one_turn(
     user_parts = [f"The mission: {goal}" if goal else "",
                   f"What the room is deciding: {step_description}"]
     if table:
-        user_parts.append(f"On the table:\n{table}")
+        # Said in the prompt, not only in the file markers: a condensed file is
+        # the harness fitting a budget, and an objection to it is an objection
+        # to the harness, which nobody at the table can act on.
+        user_parts.append(
+            "On the table. Long files are condensed to their opening and their "
+            "close, with the middle removed by the harness -- never object that "
+            "a file is cut off, incomplete or ends mid-sentence:\n" + table)
     if earlier:
         user_parts.append(f"Already said in this meeting:\n{earlier}")
 
@@ -250,7 +293,7 @@ async def hold(
         logger.info(f"Debate capped at {seats} of {len(attendees)} attendees "
                     f"(meeting_capacity={settings.meeting_capacity})")
 
-    table = (room_context or "")[:MAX_CONTEXT_CHARS]
+    table = _fit_room(room_context)
     positions: List[Position] = []
 
     for round_index in range(1, settings.debate_rounds + 1):

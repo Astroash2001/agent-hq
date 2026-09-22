@@ -102,6 +102,11 @@ file name. When the artifact shows the instruction's version failed or returned 
 nothing, says why, and uses the correct value instead, that is the right work \
 -- accept it. Do not ask for the instruction's wrong version to be followed.
 - An artifact marked SHOWN AS AN EXCERPT reached you with its middle removed, by the harness and not by the specialist. Judge only what you can see. Never call such an artifact truncated, incomplete, cut off, or ending mid-sentence, and never fail it for a required section, total or word count that would sit in the part you were not shown -- the reason you cannot see it is this budget.
+- A data file -- a CSV or a JSON document -- is judged on its schema and its \
+values: the columns or keys the instruction named, and whether the rows are \
+real. Never fail one for missing citations or prose; sources belong in the \
+markdown that accompanies it, and adding a URL column would break the schema \
+the instruction specified.
 - `score` is your confidence in the work, 0 to 1.
 - `reasons` are DEFECTS ONLY -- what is wrong or missing, short, specific and concrete, quoting the artifact where useful. Never list strengths, and never describe what the artifact does well: these lines are shown to the specialist and in the mission log as the grounds for the verdict, so a compliment in the first slot reads as "rewrite this" with no defect named. An "accept" carries an empty `reasons`; if the work is good but incomplete, list only what is missing.
 - `guidance` is a direct instruction to the specialist saying what to change. \

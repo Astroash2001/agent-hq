@@ -128,8 +128,19 @@ def infer_spec(
         # Working notes feed a later step; they are allowed to be terse.
         spec.min_chars = 120
 
-    if citations_expected and ("research" in name or "research" in text
-                               or "source" in text or "cite" in text):
+    # Citations are a demand on PROSE. A CSV or a JSON document is data: a
+    # four-column providers.csv (provider,monthly_usd,disk_supported,
+    # cold_start_seconds) has no column a URL could honestly go in, so the
+    # only way to satisfy "include the URLs you used" is to corrupt the schema
+    # the instruction specified. Observed: exactly that step rejected twice for
+    # "No sources are cited", a mission marked `unverified` on the strength of
+    # it -- while its companion markdown note, which CAN carry sources, was
+    # never the file being judged. The step's description mentioning a web
+    # search says the work involved one; it says nothing about the format.
+    data_file = spec.expected_format in ("csv", "json")
+    if citations_expected and not data_file and (
+            "research" in name or "research" in text
+            or "source" in text or "cite" in text):
         spec.require_citations = True
 
     # Extract requested schema keys from description (e.g. record: {city, store_name, address, phone...})
