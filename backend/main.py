@@ -139,7 +139,12 @@ async def health_check():
     return {
         "status": "healthy",
         "app": settings.app_name,
-        "agents_count": len(orchestrator.get_manifests())
+        "agents_count": len(orchestrator.get_manifests()),
+        # Which build is answering. Render sets RENDER_GIT_COMMIT at runtime;
+        # without this there was no way to tell whether a pushed fix was live
+        # or the instance was still serving the previous deploy, and a test run
+        # against the old build reads as the fix not working.
+        "commit": (os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_COMMIT") or "")[:7],
     }
 
 
