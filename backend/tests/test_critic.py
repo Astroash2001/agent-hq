@@ -253,11 +253,11 @@ async def _run_one_step(orch, agent, monkeypatch, workspace, critiques=None):
     if critiques is not None:
         seq = list(critiques)
 
-        async def _critique(goal, desc, text):
+        async def _critique(goal, desc, text, **_kw):
             return seq.pop(0) if seq else critic.Critique(skipped=True)
         monkeypatch.setattr(critic, "critique", _critique)
     else:
-        async def _skip(goal, desc, text):
+        async def _skip(goal, desc, text, **_kw):
             return critic.Critique(skipped=True, reason_skipped="test")
         monkeypatch.setattr(critic, "critique", _skip)
 

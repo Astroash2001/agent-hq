@@ -95,3 +95,54 @@ def test_the_csv_from_the_observed_mission_now_passes():
            "Render,7,yes,0\nRailway,5,yes,0\nFly.io,2.02,yes,2\n")
     spec = contracts.infer_spec("providers.csv", _DESC, citations_expected=True)
     assert contracts.check(csv, spec).ok
+
+
+# --- the contractor who was hired and never given the work ------------------
+
+def test_a_producing_step_moves_to_the_contractor_hired_for_it():
+    """
+    The regression. `foundry.find_gaps` drops write_file from a producing
+    step's needs (the orchestrator grants it at dispatch), so the contractor is
+    hired without it. `regrant_steps` used to keep write_file in the SAME
+    step's needs, found the contractor short of it, and left the step with the
+    specialist who could not do the work -- Bob, with no web_search, asked to
+    cross-check against the web.
+    """
+    import planner
+    from schemas import PlanStep
+
+    step = PlanStep(id="s2", agent_id="data_analyst",
+                    description="cross-check providers.csv against the web with SQL",
+                    needs_tools=["web_search", "query_data", "calculate", "write_file"],
+                    produces="providers.csv")
+    tools = {
+        "data_analyst": ["query_data", "calculate", "read_file"],
+        "researcher": ["web_search", "fetch_url", "calculate"],
+        # Hired with exactly what find_gaps reported: no write_file.
+        "hosting_cost_verification_specialist": ["web_search", "query_data", "calculate"],
+    }
+    planner.regrant_steps([step], list(tools), tools)
+    assert step.agent_id == "hosting_cost_verification_specialist"
+
+
+def test_a_step_that_writes_nothing_still_needs_write_file_granted():
+    """The exemption is for PRODUCING steps only, which get write_file anyway."""
+    import planner
+    from schemas import PlanStep
+
+    step = PlanStep(id="s9", agent_id="researcher", description="note it down",
+                    needs_tools=["web_search", "write_file"], produces="")
+    tools = {"researcher": ["web_search"], "creative": ["web_search", "write_file"]}
+    planner.regrant_steps([step], list(tools), tools)
+    assert step.agent_id == "creative"
+
+
+# --- the judge can see what ran ----------------------------------------------
+
+def test_the_critic_is_shown_which_tools_ran():
+    """A step that called calculate three times was failed for 'no evidence'."""
+    import critic
+    assert critic._tool_record(["web_search", "calculate", "calculate", "query_data",
+                                "calculate"]) == "web_search x1, calculate x3, query_data x1"
+    assert critic._tool_record([]) == "none"
+    assert critic._tool_record(None) == "none"

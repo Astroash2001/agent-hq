@@ -2197,7 +2197,9 @@ class Orchestrator:
                         recovered = True
                 break
 
-            critique = await critic.critique(goal, step.description, artifact_text)
+            critique = await critic.critique(
+                goal, step.description, artifact_text,
+                tools_used=list(stats.get("tools_used") or []))
             if critique.skipped:
                 verdict = "accept"
                 break

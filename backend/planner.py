@@ -176,6 +176,18 @@ def regrant_steps(
         # invented: it is ignored rather than treated as a requirement, or every
         # step naming one goes to whichever agent sorts first.
         needed = {t for t in step.needs_tools if t in real_tools}
+        # `_run_step` grants write_file to every step that promises an
+        # artifact, so a producing step is never short of it -- and
+        # `foundry.find_gaps` already applies this rule when deciding what a
+        # contractor must hold. Counting it HERE as well meant the two
+        # disagreed: a contractor was hired without write_file (correctly),
+        # then this found it "missing" write_file and left the step with the
+        # specialist who could not do it. Observed: "Maya" hired for a
+        # web-search-plus-SQL step, never given it, while Bob -- who holds no
+        # web_search -- ran it and was rejected for not cross-checking against
+        # the web. It only surfaced when the plan happened to list write_file.
+        if step.produces:
+            needed.discard("write_file")
         if not needed or needed <= granted.get(step.agent_id, set()):
             continue
         candidates = [aid for aid in valid_agent_ids

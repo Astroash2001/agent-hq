@@ -107,6 +107,11 @@ values: the columns or keys the instruction named, and whether the rows are \
 real. Never fail one for missing citations or prose; sources belong in the \
 markdown that accompanies it, and adding a URL column would break the schema \
 the instruction specified.
+- Process requirements -- "use the calculate tool", "cross-check against a web \
+search", "query it with SQL" -- are answered by the tool record you are given, \
+not by the artifact. If the record shows the tool ran, that requirement is met; \
+if it does not, say which tool is missing. Never ask an artifact to contain \
+evidence of its own process.
 - `score` is your confidence in the work, 0 to 1.
 - `reasons` are DEFECTS ONLY -- what is wrong or missing, short, specific and concrete, quoting the artifact where useful. Never list strengths, and never describe what the artifact does well: these lines are shown to the specialist and in the mission log as the grounds for the verdict, so a compliment in the first slot reads as "rewrite this" with no defect named. An "accept" carries an empty `reasons`; if the work is good but incomplete, list only what is missing.
 - `guidance` is a direct instruction to the specialist saying what to change. \
@@ -139,10 +144,30 @@ def model_name() -> str:
     return (settings.critic_model or "").strip() or settings.fallback_model
 
 
+def _tool_record(tools_used: Optional[List[str]]) -> str:
+    """
+    What the specialist actually ran, as one line: "web_search x2, calculate x3".
+
+    The judge used to see only the artifact, so a process requirement in the
+    instruction -- "cross-check against a live web search", "use the calculate
+    tool" -- could not be checked and was guessed at. Observed: a step that
+    called `calculate` three times rejected for "no evidence that the calculate
+    tool was used", because a CSV has nowhere to show it. The orchestrator has
+    the record; now the judge does too.
+    """
+    if not tools_used:
+        return "none"
+    counts: dict = {}
+    for name in tools_used:
+        counts[name] = counts.get(name, 0) + 1
+    return ", ".join(f"{name} x{n}" for name, n in counts.items())
+
+
 async def critique(
     goal: str,
     step_description: str,
-    artifact_text: Optional[str]
+    artifact_text: Optional[str],
+    tools_used: Optional[List[str]] = None,
 ) -> Critique:
     """
     Ask a small model whether this artifact answers its brief.
@@ -167,6 +192,8 @@ async def critique(
     user = (
         f"Mission goal:\n{goal}\n\n"
         f"Instruction given to the specialist:\n{step_description}\n\n"
+        f"Tools the specialist actually ran in this step (the orchestrator's "
+        f"record, not a claim): {_tool_record(tools_used)}\n\n"
         f"Artifact produced"
         f"{_EXCERPT_WARNING if truncated else ''}:\n"
         f"---\n{body}\n---\n\n"
