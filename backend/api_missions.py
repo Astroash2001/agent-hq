@@ -17,11 +17,13 @@ import json
 import logging
 import os
 import zipfile
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
 
 import runstore
+import sessions
 import tracing
 from api_guard import mission_slots, safe_mission_id
 from config import settings
@@ -47,10 +49,35 @@ def _mission_dir(mission_id: str) -> str:
     return directory
 
 
+def _manifest_owner(directory: str) -> Optional[str]:
+    """The session recorded in a mission's mission.json, or None."""
+    try:
+        with open(os.path.join(directory, "mission.json"), "r", encoding="utf-8") as fh:
+            return json.load(fh).get("session_id")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _require_owner(mission_id: str) -> str:
+    """
+    The mission's directory, if the caller's session started this mission.
+
+    404 rather than 403 for someone else's mission: a different answer would
+    tell a caller that an id they guessed exists.
+    """
+    directory = _mission_dir(mission_id)
+    row = runstore.get_store().get_mission(mission_id)
+    owner = row.get("session_id") if row else _manifest_owner(directory)
+    if not sessions.owns(owner):
+        raise HTTPException(status_code=404, detail=f"no mission '{mission_id}'")
+    return directory
+
+
 @router.get("")
 async def list_missions(limit: int = Query(50, ge=1, le=500)):
-    """Every mission the run store knows about, newest first, merged with on-disk records."""
-    store_missions = runstore.get_store().list_missions(limit)
+    """The caller's missions, newest first, merged with on-disk records."""
+    store_missions = runstore.get_store().list_missions(
+        limit, session_id=sessions.current())
     seen_ids = set()
     valid_missions = []
 
@@ -74,6 +101,13 @@ async def list_missions(limit: int = Query(50, ge=1, le=500)):
                 continue
             entry_dir = os.path.join(settings.missions_path, entry)
             if not os.path.isdir(entry_dir):
+                continue
+            # The store lists only the caller's rows, so an id not seen there
+            # may be another session's mission. Skip it unless it is on disk
+            # only and its manifest names this session.
+            if runstore.get_store().get_mission(entry) is not None:
+                continue
+            if not sessions.owns(_manifest_owner(entry_dir)):
                 continue
             manifest_path = os.path.join(entry_dir, "mission.json")
             trace_path = os.path.join(entry_dir, tracing.TRACE_FILENAME)
@@ -113,7 +147,7 @@ async def get_mission(mission_id: str):
     """
     One mission: its plan, its steps, its report, and artifact details.
     """
-    safe_dir = _mission_dir(mission_id)
+    safe_dir = _require_owner(mission_id)
     mission = runstore.get_store().get_mission(mission_id)
     directory = (mission.get("mission_dir") if mission else None) or safe_dir
     if not os.path.isdir(directory):
@@ -216,7 +250,7 @@ async def get_artifact(mission_id: str, name: str):
     decoding, and a blocklist of shapes is a losing game against a filename that
     reaches the filesystem; comparing the resolved path is not.
     """
-    directory = _mission_dir(mission_id)
+    directory = _require_owner(mission_id)
     target = os.path.realpath(os.path.join(directory, name))
     if os.path.commonpath([directory, target]) != directory or target == directory:
         raise HTTPException(status_code=400, detail="artifact name escapes the mission")
@@ -248,7 +282,7 @@ async def get_bundle(mission_id: str):
     trace, and streaming a temporary file would leave one behind on a killed
     process.
     """
-    directory = _mission_dir(mission_id)
+    directory = _require_owner(mission_id)
     if not os.path.isdir(directory):
         raise HTTPException(status_code=404, detail=f"no mission '{mission_id}'")
 
@@ -279,7 +313,7 @@ async def get_bundle(mission_id: str):
 @router.get("/{mission_id}/trace", response_class=PlainTextResponse)
 async def get_trace(mission_id: str):
     """The mission's spans, as the newline-delimited JSON they were written as."""
-    safe_dir = _mission_dir(mission_id)
+    safe_dir = _require_owner(mission_id)
     mission = runstore.get_store().get_mission(mission_id)
     directory = (mission or {}).get("mission_dir") or safe_dir
     path = os.path.join(directory, tracing.TRACE_FILENAME)
@@ -309,7 +343,7 @@ async def resume_mission(mission_id: str):
     safe_mission_id(mission_id)
     store = runstore.get_store()
     mission = store.get_mission(mission_id)
-    if not mission:
+    if not mission or not sessions.owns(mission.get("session_id")):
         raise HTTPException(status_code=404, detail=f"no mission '{mission_id}'")
     if mission.get("status") == "completed":
         raise HTTPException(

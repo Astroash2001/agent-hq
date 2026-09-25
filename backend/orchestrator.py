@@ -20,6 +20,7 @@ import planner as planner_mod
 import pricing
 import provenance
 import runstore
+import sessions
 import token_ledger
 import step_guard
 import synthesis
@@ -88,6 +89,8 @@ class Orchestrator:
         self.active_tasks: Dict[str, Task] = {}
         self.current_dag: List[DAGNode] = []
         self.current_plan: Optional[Plan] = None
+        # Who started `current_plan`, so /api/plan shows it to that session only.
+        self.current_plan_session: Optional[str] = None
         self.workspaces: Dict[str, MissionWorkspace] = {}
         # Per-mission, per-step cost and latency, keyed task_id -> step_id.
         # Kept here rather than on the agents because an agent's token_usage is
@@ -557,13 +560,15 @@ class Orchestrator:
                       "level": "INFO"}
             ))
         else:
-            store.start_mission(task_id, user_prompt, workspace.dir or "")
+            store.start_mission(task_id, user_prompt, workspace.dir or "",
+                                session_id=sessions.current())
             plan = await planner.plan(user_prompt, self.get_manifests(),
                                       attachments=seeded)
             self._apply_memory_routing(plan, task_id)
             await self._staff_plan(plan, user_prompt, task_id)
             store.record_plan(task_id, plan)
         self.current_plan = plan
+        self.current_plan_session = sessions.current()
 
         await event_bus.emit(Event(
             type=EventType.PLAN_CREATED,
@@ -616,6 +621,9 @@ class Orchestrator:
         workspace.save_manifest({
             "mission_id": task_id,
             "goal": user_prompt,
+            # Read back by /api/missions when the run store has no row for
+            # this mission, so a disk-only mission still has an owner.
+            "session_id": sessions.current(),
             "outcome": outcome,
             "plan_source": plan.source,
             "duration_seconds": round(duration, 2),

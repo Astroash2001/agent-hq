@@ -91,6 +91,10 @@ class Event(BaseModel):
     task_id: Optional[str] = None
     data: Dict[str, Any] = Field(default_factory=dict)
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    # The browser session whose mission produced this event, stamped by the
+    # event bus from `sessions.current()`. None is a system-wide notice that
+    # every socket receives. See sessions.py.
+    session_id: Optional[str] = None
 
 
 class Task(BaseModel):
@@ -224,6 +228,11 @@ class Episode(BaseModel):
     tools_used: List[str] = Field(default_factory=list)
     artifact: str = ""
     tokens: List[str] = Field(default_factory=list, description="Cached lexical index for recall")
+    # Which browser session's mission this came from. Recall is filtered on it,
+    # because a recalled episode's subtask and notes are pasted into the next
+    # prompt -- and from there into what another user reads. None for every
+    # episode written before sessions existed.
+    session_id: Optional[str] = None
     # Semantic index for recall, filled in lazily by `memory._episode_vector`.
     # Deliberately not written to data/memory.json: the vector is reproducible
     # from `tokens` and already lives in the content-addressed embedding cache,

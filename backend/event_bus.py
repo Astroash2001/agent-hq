@@ -1,6 +1,7 @@
-﻿import asyncio
+import asyncio
 import logging
 from typing import Any, Callable, Dict, List, Optional
+import sessions
 from schemas import Event, EventType
 
 logger = logging.getLogger("AgentHQ.EventBus")
@@ -49,6 +50,12 @@ class EventBus:
         Emit an event to all matching subscribers asynchronously without blocking.
         Also appends to rolling history.
         """
+        # Stamp the session here rather than at every emit call: a mission's
+        # task inherits the session of the socket that started it, so this
+        # sees the right one however deep the emitter is.
+        if event.session_id is None:
+            event.session_id = sessions.current()
+
         # Append to rolling history
         self._history.append(event)
         if len(self._history) > self._history_limit:
@@ -66,9 +73,12 @@ class EventBus:
             except Exception as e:
                 logger.error(f"Error dispatching event {event_key} to {cb}: {e}", exc_info=True)
 
-    def get_history(self, limit: int = 50) -> List[Event]:
-        """Return the most recent events."""
-        return self._history[-limit:]
+    def get_history(self, limit: int = 50,
+                    session_id: Optional[str] = None) -> List[Event]:
+        """The most recent events this session may see: its own plus system-wide ones."""
+        visible = [e for e in self._history
+                   if e.session_id is None or e.session_id == session_id]
+        return visible[-limit:]
 
     def clear_history(self):
         """Reset event history."""

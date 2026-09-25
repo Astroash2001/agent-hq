@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS missions (
     started_at   REAL,
     ended_at     REAL,
     cost_usd     REAL DEFAULT 0.0,
-    mission_dir  TEXT
+    mission_dir  TEXT,
+    session_id   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS steps (
@@ -112,6 +113,13 @@ class RunStore:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(_SCHEMA)
+            # A store created before sessions existed has no session_id
+            # column, and CREATE TABLE IF NOT EXISTS will not add it. Its rows
+            # stay NULL: owned by no browser session.
+            columns = {row[1] for row in
+                       self._conn.execute("PRAGMA table_info(missions)")}
+            if "session_id" not in columns:
+                self._conn.execute("ALTER TABLE missions ADD COLUMN session_id TEXT")
             self._conn.commit()
         except (sqlite3.Error, OSError, ValueError) as exc:
             # OSError and ValueError as well as sqlite3.Error: a path that
@@ -151,11 +159,14 @@ class RunStore:
 
     # -------------------------------------------------------------- missions
 
-    def start_mission(self, mission_id: str, goal: str, mission_dir: str = "") -> None:
+    def start_mission(self, mission_id: str, goal: str, mission_dir: str = "",
+                      session_id: Optional[str] = None) -> None:
         self._write(
             "INSERT OR REPLACE INTO missions "
-            "(id, goal, status, started_at, mission_dir) VALUES (?,?,?,?,?)",
-            (mission_id, goal, "running", time.time(), mission_dir or ""))
+            "(id, goal, status, started_at, mission_dir, session_id) "
+            "VALUES (?,?,?,?,?,?)",
+            (mission_id, goal, "running", time.time(), mission_dir or "",
+             session_id))
 
     def record_plan(self, mission_id: str, plan) -> None:
         """
@@ -210,11 +221,14 @@ class RunStore:
         mission["steps"] = self.get_steps(mission_id)
         return mission
 
-    def list_missions(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_missions(self, limit: int = 50,
+                      session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """One session's missions, newest first. `IS` so that None matches NULL."""
         rows = self._read(
             "SELECT id, goal, status, plan_source, started_at, ended_at, "
-            "cost_usd, mission_dir FROM missions "
-            "ORDER BY started_at DESC LIMIT ?", (limit,))
+            "cost_usd, mission_dir, session_id FROM missions "
+            "WHERE session_id IS ? "
+            "ORDER BY started_at DESC LIMIT ?", (session_id, limit))
         return [dict(r) for r in rows]
 
     # ----------------------------------------------------------------- steps

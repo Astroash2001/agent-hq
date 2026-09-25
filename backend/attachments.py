@@ -41,6 +41,7 @@ import os
 import time
 from typing import Any, Dict, List
 
+import sessions
 from config import settings
 
 logger = logging.getLogger("AgentHQ.Attachments")
@@ -162,8 +163,19 @@ def extract_pdf_text(raw: bytes) -> Dict[str, Any]:
 
 
 def staging_dir() -> str:
-    os.makedirs(settings.attachments_path, exist_ok=True)
-    return settings.attachments_path
+    """
+    The caller's own tray: a folder named after its session.
+
+    Per session so one browser cannot list, delete or attach another's staged
+    file by name. `sessions.valid` limits the id to [A-Za-z0-9_-], so it is
+    safe as a path component. A header-less caller uses the root, as before.
+    """
+    session_id = sessions.current()
+    path = settings.attachments_path
+    if session_id:
+        path = os.path.join(path, session_id)
+    os.makedirs(path, exist_ok=True)
+    return path
 
 
 def save(filename: str, raw: bytes) -> Dict[str, Any]:

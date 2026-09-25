@@ -12,10 +12,39 @@
  *
  * The token is kept in this browser's localStorage. Anyone with access to this
  * browser profile can read it, which is the same trust a saved password has.
+ *
+ * Every request also carries this browser's session id (X-Session-Id, or
+ * ?session= on the socket). The server shows each session only the missions,
+ * events and attachments it started, so two people sharing one token do not
+ * see each other's work (backend/sessions.py). The id is random, minted once
+ * and kept in localStorage: clearing site data starts a new, empty history.
  */
 (function () {
     const KEY = 'agenthq_api_token';
+    const SESSION_KEY = 'agenthq_session_id';
     let asked = false;
+
+    // 32 hex characters: inside the server's [A-Za-z0-9_-]{16,64} shape.
+    function mintSession() {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Read once per page. When storage is unavailable (private window), the id
+    // lasts this page only, so a reload starts a fresh session.
+    const sessionId = (function () {
+        try {
+            let id = localStorage.getItem(SESSION_KEY);
+            if (!id || !/^[A-Za-z0-9_-]{16,64}$/.test(id)) {
+                id = mintSession();
+                localStorage.setItem(SESSION_KEY, id);
+            }
+            return id;
+        } catch (e) {
+            return mintSession();
+        }
+    })();
 
     function get() {
         try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; }
@@ -60,10 +89,11 @@
 
     function withToken(init) {
         const token = current();
-        if (!token) return init;
         const next = Object.assign({}, init || {});
         const headers = new Headers((init && init.headers) || {});
-        headers.set('Authorization', `Bearer ${token}`);
+        // Always sent: a server with no token still separates sessions.
+        headers.set('X-Session-Id', sessionId);
+        if (token) headers.set('Authorization', `Bearer ${token}`);
         next.headers = headers;
         return next;
     }
@@ -85,14 +115,15 @@
 
     window.AgentAuth = {
         token: current,
+        session: () => sessionId,
         set,
         clear: () => set(''),
-        /** `wsUrl` with the token appended, when there is one. */
+        /** `wsUrl` with the session id, and the token when there is one. */
         socketUrl(wsUrl) {
             const token = current();
-            if (!token) return wsUrl;
-            const sep = wsUrl.includes('?') ? '&' : '?';
-            return `${wsUrl}${sep}token=${encodeURIComponent(token)}`;
+            let url = `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}session=${encodeURIComponent(sessionId)}`;
+            if (token) url += `&token=${encodeURIComponent(token)}`;
+            return url;
         },
         /** Called when the socket is refused (close code 1008). */
         askAfterSocketRefusal() {

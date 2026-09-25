@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Set
+from typing import Dict, Optional
 
 from fastapi import (FastAPI, File, HTTPException, Request, UploadFile,
                      WebSocket, WebSocketDisconnect, status)
@@ -15,6 +15,7 @@ import api_guard
 import api_missions
 import attachments
 import pricing
+import sessions
 from tools import web_search
 from config import settings
 from event_bus import event_bus
@@ -32,29 +33,34 @@ logger = logging.getLogger("AgentHQ.Server")
 
 
 class ConnectionManager:
-    """Manages active WebSocket connections and broadcasts events."""
+    """Manages active WebSocket connections and routes each event to its session."""
 
     def __init__(self):
-        self.active_connections: Set[WebSocket] = set()
+        # Socket -> the session it belongs to. An event goes only to sockets of
+        # the session that produced it; see sessions.py.
+        self.active_connections: Dict[WebSocket, Optional[str]] = {}
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, session_id: Optional[str] = None):
         await websocket.accept()
-        self.active_connections.add(websocket)
+        self.active_connections[websocket] = session_id
         logger.info(f"WebSocket client connected. Total clients: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.discard(websocket)
+        self.active_connections.pop(websocket, None)
         logger.info(f"WebSocket client disconnected. Total clients: {len(self.active_connections)}")
 
     async def broadcast_event(self, event: Event):
-        """Send an Event to all connected browser clients."""
+        """Send an Event to the sockets of the session that produced it, or to all for a system-wide one."""
         if not self.active_connections:
             return
 
         payload = event.model_dump()
         dead_connections = set()
 
-        for connection in self.active_connections:
+        # Copied: a send yields, and a socket can connect or leave meanwhile.
+        for connection, session_id in list(self.active_connections.items()):
+            if event.session_id is not None and event.session_id != session_id:
+                continue
             try:
                 await connection.send_json(payload)
             except Exception as e:
@@ -111,6 +117,11 @@ app = FastAPI(
     openapi_url=None if _production else "/openapi.json",
 )
 
+# Bind the caller's X-Session-Id for the request, so every read below can
+# filter to the caller's own missions. Added first so it sits inside the token
+# check: an unauthenticated caller learns nothing about header shapes.
+app.middleware("http")(sessions.middleware)
+
 # Token on every /api/ route but the health check. Added before CORS, so CORS
 # wraps it and a 401 still carries the headers a browser needs to read it.
 app.middleware("http")(api_guard.require_token_middleware)
@@ -156,8 +167,9 @@ async def get_agents():
 
 @app.get("/api/history")
 async def get_history():
-    """Return recent event history."""
-    return [e.model_dump() for e in event_bus.get_history(limit=50)]
+    """Return recent event history: the caller's own plus system-wide notices."""
+    return [e.model_dump() for e in
+            event_bus.get_history(limit=50, session_id=sessions.current())]
 
 
 @app.get("/api/office")
@@ -174,8 +186,9 @@ async def get_office():
 
 @app.get("/api/plan")
 async def get_plan():
-    """The execution graph for the mission currently in flight, if any."""
-    if not orchestrator.current_plan:
+    """The execution graph for the mission currently in flight, if the caller started it."""
+    if (not orchestrator.current_plan
+            or not sessions.owns(orchestrator.current_plan_session)):
         return {"plan": None}
     return orchestrator.current_plan.model_dump()
 
@@ -185,12 +198,15 @@ async def get_memory(limit: int = 25):
     """Recent episodes plus each agent's lifetime record."""
     # Both index fields are dropped: `tokens` is noise to a reader, and
     # `embedding` is 256 floats an episode that would dwarf the payload.
+    # Only the caller's own episodes: each carries a goal and notes. The
+    # per-agent stats below are counts and scores, so they stay office-wide.
+    own = [e for e in memory.episodes if sessions.owns(e.session_id)]
     episodes = [e.model_dump(exclude={"tokens", "embedding"})
-                for e in memory.episodes[-limit:]]
+                for e in own[-limit:]]
     episodes.reverse()
     agent_ids = [m["id"] for m in orchestrator.get_manifests()]
     return {
-        "total_episodes": len(memory.episodes),
+        "total_episodes": len(own),
         "episodes": episodes,
         "stats": {aid: memory.stats(aid) for aid in agent_ids}
     }
@@ -265,7 +281,16 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close(code=1008, reason="Unauthorized: invalid or missing API token.")
             return
 
-    await manager.connect(websocket)
+    # The browser's own id when it sent a valid one. Otherwise a fresh one:
+    # that socket then sees only what it starts, never the unowned history.
+    raw_session = websocket.query_params.get(sessions.QUERY_PARAM, "").strip()
+    session_id = raw_session if sessions.valid(raw_session) else sessions.new()
+    # Bound for the life of this handler. A mission is started with
+    # asyncio.create_task from here, and a task copies this context, so
+    # everything the mission emits or records carries this session.
+    sessions.set_current(session_id)
+
+    await manager.connect(websocket, session_id)
 
     try:
         # 1. Send initial handshake with system state and manifests
@@ -280,7 +305,7 @@ async def websocket_endpoint(websocket: WebSocket):
         })
 
         # 2. Replay recent event history so browser displays current status immediately
-        for past_event in event_bus.get_history(limit=30):
+        for past_event in event_bus.get_history(limit=30, session_id=session_id):
             await websocket.send_json(past_event.model_dump())
 
         # 3. Main client message receive loop

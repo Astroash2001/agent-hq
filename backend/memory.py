@@ -41,6 +41,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import embeddings
+import sessions
 from config import settings
 from schemas import Episode
 
@@ -185,7 +186,8 @@ class AgentMemory:
             tools_used=tools_used or [],
             artifact=artifact,
             quality=quality,
-            tokens=tokenize(f"{goal} {subtask}")
+            tokens=tokenize(f"{goal} {subtask}"),
+            session_id=sessions.current(),
         )
         self.episodes.append(episode)
         for token in set(episode.tokens):
@@ -319,7 +321,10 @@ class AgentMemory:
         query_tokens = tokenize(query)
         horizon = getattr(self, "_horizon", None)
         visible = self.episodes if horizon is None else self.episodes[:horizon]
-        mine = [e for e in visible if e.agent_id == agent_id]
+        # Same session only: a recalled subtask and its notes are pasted into
+        # the next prompt, and from there into another user's results.
+        mine = [e for e in visible
+                if e.agent_id == agent_id and sessions.owns(e.session_id)]
         self._warm_vectors(mine)
         scored: List[Tuple[float, Episode]] = []
         for episode in mine:
