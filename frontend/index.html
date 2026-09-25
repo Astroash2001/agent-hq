@@ -92,12 +92,16 @@
                     <form id="promptForm" class="prompt-form" aria-label="Agent command input">
                         <!-- Attachments. The label is the control: a bare file input
                              cannot be styled, and hiding it behind a label is the
-                             standard way round that. -->
+                             standard way round that.
+                             No `accept` filter: the picker shows every file. An
+                             allowlist here drifted from the server once already and
+                             hid PDFs the server accepts. backend/attachments.py
+                             decides, and a refused format comes back with its
+                             reason in the tray and the terminal. -->
                         <input type="file" id="attachInput" multiple hidden
-                               accept=".md,.txt,.csv,.tsv,.json,.yaml,.yml,.log,.py,.js,.ts,.html,.css,.sql,.sh,.ini,.toml,.xml,.rst"
                                aria-label="Attach files to this task">
                         <label for="attachInput" class="attach-button" id="attachBtn"
-                               title="Attach a file for the agents to work from (text formats)">
+                               title="Attach a file for the agents to work from (text, code, PDF or image)">
                             <svg class="ico"><use href="#i-clip"/></svg>
                             <span class="sr-only">Attach</span>
                         </label>
