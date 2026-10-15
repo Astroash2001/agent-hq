@@ -91,6 +91,20 @@ def test_html_becomes_readable_text():
     assert "var x" not in text
 
 
+def test_boilerplate_is_dropped_and_the_article_kept():
+    nav = "".join(f"<li><a href='/s{i}'>Section {i}</a></li>" for i in range(40))
+    article = "".join(
+        f"<p>Paragraph {i} of the report says the fare rose by {i} percent this "
+        f"quarter, driven by fuel costs and demand on the coastal routes.</p>"
+        for i in range(12))
+    html = (f"<html><body><nav><ul>{nav}</ul></nav><main><article><h1>Fares</h1>"
+            f"{article}</article></main><footer>Cookie settings | Privacy</footer>"
+            f"</body></html>")
+    text = _to_text(html, "text/html")
+    assert "Paragraph 11" in text
+    assert "Section 39" not in text and "Cookie settings" not in text
+
+
 class _FakeResponse:
     def __init__(self, text: str, status_code: int = 200, content_type: str = "text/html"):
         self.text = text

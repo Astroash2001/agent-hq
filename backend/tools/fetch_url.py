@@ -26,6 +26,7 @@ import ipaddress
 import logging
 import re
 import socket
+from html import unescape
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
@@ -51,10 +52,12 @@ _TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"[ \t\r\f\v]+")
 _BLANK_LINES = re.compile(r"\n{3,}")
 
-_ENTITIES = {
-    "&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">",
-    "&quot;": '"', "&#39;": "'", "&apos;": "'",
-}
+# Optional, like bs4 below: without it every page goes through `_strip_tags`.
+try:
+    import trafilatura  # type: ignore
+    _TRAFILATURA_AVAILABLE = True
+except ImportError:
+    _TRAFILATURA_AVAILABLE = False
 
 
 def _is_public_address(host: str) -> bool:
@@ -151,15 +154,38 @@ def _shell_hint(rendered_available: bool) -> str:
             "read; do NOT report the figure as unavailable in the world.")
 
 
+def _is_html(body: str, content_type: str) -> bool:
+    return "html" in content_type.lower() or body.lstrip().startswith("<")
+
+
 def _to_text(body: str, content_type: str) -> str:
-    """HTML to something worth putting in a prompt. Plain text passes through."""
-    if "html" not in content_type.lower() and not body.lstrip().startswith("<"):
+    """
+    HTML to something worth putting in a prompt. Plain text passes through.
+
+    The tag strip alone keeps every menu, footer and cookie banner, and on a
+    long page that boilerplate fills `fetch_url_max_chars` before the article
+    does. trafilatura keeps the main content and its tables. It returns None
+    when it finds no main content (tiny pages, app shells), and the tag strip
+    takes over, so nothing that used to come back now comes back empty.
+    """
+    if not _is_html(body, content_type):
         return body
+    if _TRAFILATURA_AVAILABLE:
+        try:
+            main = trafilatura.extract(body, include_tables=True, favor_recall=True)
+        except Exception:                                   # noqa: BLE001
+            main = None
+        if main and main.strip():
+            return main.strip()
+    return _strip_tags(body)
+
+
+def _strip_tags(body: str) -> str:
+    """Every visible word on the page, boilerplate included."""
     text = _DROP_TAGS.sub(" ", body)
-    text = re.sub(r"<br\s*/?>|</p>|</div>|</li>|</h[1-6]>", "\n", text, flags=re.I)
+    text = re.sub(r"<br\s*/?>|</p>|</div>|</li>|</h[1-6]>|</tr>", "\n", text, flags=re.I)
     text = _TAG.sub(" ", text)
-    for entity, char in _ENTITIES.items():
-        text = text.replace(entity, char)
+    text = unescape(text).replace("\xa0", " ")
     text = _WS.sub(" ", text)
     text = "\n".join(line.strip() for line in text.split("\n"))
     return _BLANK_LINES.sub("\n\n", text).strip()
@@ -473,7 +499,10 @@ async def fetch_url(
                     hint = ""
                     final_text = text_slice
 
-                if not hint and _looks_unrendered(text, body):
+                # Judged on every word of the page, not the extract: trafilatura
+                # drops boilerplate, and a short extract of a big page is not a shell.
+                page_words = _strip_tags(body) if is_html else text
+                if not hint and _looks_unrendered(page_words, body):
                     try:
                         from tools.render_page import render_available
                         can_render = render_available()

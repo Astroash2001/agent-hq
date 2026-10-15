@@ -32,7 +32,7 @@ import os
 from typing import Any, Dict
 
 from config import settings
-from tools.fetch_url import _check_url, _to_text
+from tools.fetch_url import _check_url, _strip_tags
 
 # Read once, at import: an agent cannot turn the browser on by asking for it.
 try:                                                    # pragma: no cover
@@ -130,7 +130,9 @@ async def render_page(url: str, wait_for: str = "", max_chars: int = 0) -> Dict[
                 await asyncio.sleep(2)
 
             html = await page.content()
-            text = _to_text(html, "text/html")
+            # Whole page, not a main-content extract: this tool exists to read
+            # figures like a price in a booking widget, which an extractor drops.
+            text = _strip_tags(html)
             title = await page.title()
             final_url = page.url
     except Exception as exc:                            # noqa: BLE001

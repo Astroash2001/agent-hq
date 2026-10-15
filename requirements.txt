@@ -32,3 +32,8 @@ pypdf==4.0.1
 # litellm dependency, pinned here because this project now uses it itself.
 httpx==0.28.1
 beautifulsoup4==4.14.3
+
+# Main-content extraction in tools/fetch_url.py: drops menus, footers and
+# banners so the article, not the boilerplate, fills the character budget.
+# Optional at runtime -- without it fetch_url falls back to a plain tag strip.
+trafilatura==2.3.1
