@@ -56,7 +56,10 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 try:
     import trafilatura  # type: ignore
     _TRAFILATURA_AVAILABLE = True
-except ImportError:
+except ImportError as exc:
+    # Logged, not silent: a missing transitive dependency (lxml_html_clean)
+    # otherwise looks exactly like "trafilatura found nothing".
+    logger.warning("trafilatura unavailable, fetch_url uses the tag strip: %s", exc)
     _TRAFILATURA_AVAILABLE = False
 
 
@@ -173,10 +176,13 @@ def _to_text(body: str, content_type: str) -> str:
     if _TRAFILATURA_AVAILABLE:
         try:
             main = trafilatura.extract(body, include_tables=True, favor_recall=True)
-        except Exception:                                   # noqa: BLE001
+        except Exception as exc:                            # noqa: BLE001
+            logger.warning("trafilatura failed, using the tag strip: %s", exc)
             main = None
         if main and main.strip():
             return main.strip()
+        logger.info("trafilatura found no main content (%d bytes of HTML); "
+                    "using the tag strip", len(body))
     return _strip_tags(body)
 
 
