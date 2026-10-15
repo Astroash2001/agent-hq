@@ -42,6 +42,13 @@ logger = logging.getLogger("AgentHQ.Synthesis")
 # steps must not cost nine times as much to conclude as a mission with one.
 MAX_ARTIFACT_CHARS = 3000
 MAX_TOTAL_CHARS = 12000
+# The deliverable -- the last step's file -- is the answer the conclusion leads
+# with, so it is read first and mostly whole. On an equal share, a mission that
+# also saved three raw pages gave its final report 2,400 characters; the middle
+# went, and the conclusion said the report's own quotes were "not shown".
+# Its own budget, on top of MAX_TOTAL_CHARS: at 8,000 shared, a 9KB report
+# still lost the middle that held one creature's quotes.
+MAX_PRIMARY_CHARS = 16000
 
 # Below this a "conclusion" is a sentence, and a sentence that leads a briefing
 # reads as a finding whether or not it is one. Low enough that a genuinely
@@ -85,6 +92,8 @@ the most useful thing you can write, so do not paper over it.
 for you; the file is not. Never describe an artifact as truncated or incomplete \
 because its excerpt is, and do not claim something is missing from a file when \
 it may be in the part you were not shown -- say you could not see it instead.
+- The file marked (the deliverable) is the mission's final answer. Lead with \
+it; the other files are the evidence it was built from.
 - Do not invent facts that are not in the artifacts. Do not restate the goal back \
 at the reader. Do not describe the plan, the agents or how many steps ran; that \
 is already in the briefing below you.
@@ -117,13 +126,15 @@ def model_name() -> str:
     return (settings.synthesis_model or "").strip() or settings.fallback_model
 
 
-def _artifact_block(artifacts: Sequence[Tuple[str, str]]) -> str:
+def _artifact_block(artifacts: Sequence[Tuple[str, str]], primary: str = "") -> str:
     """
     Render the artifacts for the prompt, newest-truncated to fit the cap.
 
     Each is trimmed to MAX_ARTIFACT_CHARS first, so a single 40KB report cannot
     crowd out the four short ones that disagree with it -- the disagreement is
-    the part a conclusion most needs to see.
+    the part a conclusion most needs to see. `primary`, when named, is the
+    exception: it goes first with up to MAX_PRIMARY_CHARS of its own, and the
+    rest share MAX_TOTAL_CHARS as before.
     """
     # Both ends of each artifact, not the head: a report's findings and its
     # limitations sit at the end. And the marker says the *excerpt* was
@@ -139,21 +150,32 @@ def _artifact_block(artifacts: Sequence[Tuple[str, str]]) -> str:
     # table (see debate._fit_room), where three attendees could see only the
     # first of three files.
     present = [(n, (b or "").strip()) for n, b in artifacts if (b or "").strip()]
-    share = MAX_TOTAL_CHARS // max(1, len(present))
 
     blocks: List[str] = []
     budget = MAX_TOTAL_CHARS
-    for name, body in present:
-        limit = min(MAX_ARTIFACT_CHARS, share, budget)
-        if limit < 200:
-            break
+
+    def add(name: str, body: str, limit: int, label: str = "") -> None:
+        nonlocal budget
         clipped = condense(body, limit)
         if len(body) > limit:
             clipped = (f"[EXCERPT: {name} is {len(body):,} characters in full; this "
                        f"summary copy is shortened. The file itself is complete.]\n"
                        f"{clipped}")
-        blocks.append(f"--- {name} ---\n{clipped}")
+        blocks.append(f"--- {name}{label} ---\n{clipped}")
         budget -= len(clipped)
+
+    lead = next(((n, b) for n, b in present if n == primary), None)
+    if lead:
+        present.remove(lead)
+        add(*lead, limit=MAX_PRIMARY_CHARS, label=" (the deliverable)")
+        budget = MAX_TOTAL_CHARS  # the evidence keeps its full budget
+
+    share = budget // max(1, len(present))
+    for name, body in present:
+        limit = min(MAX_ARTIFACT_CHARS, share, budget)
+        if limit < 200:
+            break
+        add(name, body, limit)
         if budget <= 0:
             break
     return "\n\n".join(blocks)
@@ -250,6 +272,7 @@ async def conclude(
     goal: str,
     artifacts: Sequence[Tuple[str, str]],
     failures: Optional[Sequence[str]] = None,
+    primary: str = "",
 ) -> Conclusion:
     """
     Draw the mission's conclusion from what it produced.
@@ -264,7 +287,7 @@ async def conclude(
     if not llm_configured():
         return Conclusion(reason_skipped="no model configured")
 
-    block = _artifact_block(artifacts)
+    block = _artifact_block(artifacts, primary)
     if not block:
         # Nothing was produced. The step-count line already says so, and a model
         # asked to conclude from nothing will write something that sounds like a

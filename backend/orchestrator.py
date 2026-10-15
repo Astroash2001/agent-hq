@@ -2384,7 +2384,9 @@ class Orchestrator:
         failures += [f"{s.id} ({s.agent_id}): finished, but its reviewer's final "
                      f"verdict was 'revise' -- treat its artifact as unverified"
                      for s in self._unverified_steps(workspace.mission_id, plan)]
-        return await synthesis.conclude(user_prompt, artifacts, failures)
+        final = self._final_artifact(plan, workspace)
+        return await synthesis.conclude(user_prompt, artifacts, failures,
+                                        primary=final.name if final else "")
 
     @staticmethod
     def _final_artifact(plan: Plan, workspace: MissionWorkspace):

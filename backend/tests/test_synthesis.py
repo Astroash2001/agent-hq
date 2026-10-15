@@ -181,6 +181,24 @@ def test_the_total_cap_holds_across_many_artifacts():
     assert len(block) <= synthesis.MAX_TOTAL_CHARS + 500
 
 
+def test_the_deliverable_is_read_whole_beside_raw_page_dumps():
+    """
+    A mission saved three raw Wikipedia pages and a 6KB final report. On an
+    equal share the report got 2,400 characters, its middle went, and the
+    conclusion said the report's own quotes were "not shown".
+    """
+    report = "# Report\n" + "".join(f"quote {i} from the page. " * 10 + "\n" for i in range(25))
+    block = synthesis._artifact_block(
+        [(f"page{i}.txt", "raw page text " * 2000) for i in range(3)]
+        + [("report.md", report)],
+        primary="report.md")
+
+    assert block.startswith("--- report.md (the deliverable) ---")
+    assert "quote 12 from the page" in block, "the middle of the report survives"
+    assert "page2.txt" in block, "the evidence is still shown"
+    assert len(block) <= synthesis.MAX_PRIMARY_CHARS + synthesis.MAX_TOTAL_CHARS + 500
+
+
 def test_a_conclusion_cut_by_the_token_ceiling_loses_the_fragment():
     """
     A briefing once opened "...rating 9.5; goals per" -- the ceiling cut it
@@ -268,7 +286,7 @@ async def test_the_briefing_leads_with_the_finding(monkeypatch):
     await ws.put(name="a.md", content="the figure is 1.4s",
                  author_id="researcher", author_name="Alice")
 
-    async def _fake(goal, artifacts, failures=None):
+    async def _fake(goal, artifacts, failures=None, primary=""):
         return synthesis.Conclusion(text="The figure is 1.4 seconds.",
                                     skipped=False, cost_usd=0.0002)
 
@@ -296,7 +314,7 @@ async def test_a_briefing_with_no_conclusion_says_so(monkeypatch):
                  produces="a.md", status="completed")])
     ws = MissionWorkspace("m_skip")
 
-    async def _skipped(goal, artifacts, failures=None):
+    async def _skipped(goal, artifacts, failures=None, primary=""):
         return synthesis.Conclusion(skipped=True,
                                     reason_skipped="no model configured")
 
@@ -323,7 +341,7 @@ async def test_a_regranted_step_is_named_in_the_briefing(monkeypatch):
                  needs_tools=["terminal"], regranted_from="creative")])
     ws = MissionWorkspace("m_grant")
 
-    async def _skipped(goal, artifacts, failures=None):
+    async def _skipped(goal, artifacts, failures=None, primary=""):
         return synthesis.Conclusion(skipped=True, reason_skipped="disabled")
 
     monkeypatch.setattr(synthesis, "conclude", _skipped)
