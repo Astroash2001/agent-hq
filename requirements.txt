@@ -37,3 +37,6 @@ beautifulsoup4==4.14.3
 # banners so the article, not the boilerplate, fills the character budget.
 # Optional at runtime -- without it fetch_url falls back to a plain tag strip.
 trafilatura==2.3.1
+# trafilatura's jusText imports lxml.html.clean, which lxml 5.2+ moved into
+# this separate package. Without it the import fails on a clean install.
+lxml_html_clean==0.4.5
