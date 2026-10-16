@@ -27,7 +27,7 @@ import logging
 import re
 import socket
 from html import unescape
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
 import httpx  # type: ignore
@@ -186,6 +186,42 @@ def _to_text(body: str, content_type: str) -> str:
     return _strip_tags(body)
 
 
+# A `query` answer: the best passages, capped. A whole page is re-sent on every
+# later turn of the step, and an observed three-page mission spent 344k of its
+# 340k token budget mostly on 20,000-character slices it needed one line of.
+MAX_QUERY_PASSAGES = 8
+MAX_QUERY_CHARS = 6000
+
+
+def _matching_passages(text: str, query: str) -> Tuple[str, int]:
+    """
+    The lines of `text` that best match `query`, in page order, and how many matched.
+
+    Ranked by how many distinct query words a line holds, then by how often.
+    Words of two letters or fewer are ignored unless they are all there is.
+    """
+    words = re.findall(r"\w+", query.lower())
+    terms = [w for w in words if len(w) > 2] or words
+    if not terms:
+        return "", 0
+    scored = []
+    for i, line in enumerate(l.strip() for l in text.split("\n")):
+        low = line.lower()
+        hits = [low.count(t) for t in terms]
+        distinct = sum(1 for h in hits if h)
+        if distinct:
+            scored.append((distinct, sum(hits), i, line))
+    best = sorted(scored, key=lambda s: (-s[0], -s[1], s[2]))[:MAX_QUERY_PASSAGES]
+    out, used = [], 0
+    for *_, line in sorted(best, key=lambda s: s[2]):
+        if used + len(line) > MAX_QUERY_CHARS:
+            line = line[:max(0, MAX_QUERY_CHARS - used)]
+        if line:
+            out.append(line)
+            used += len(line)
+    return "\n\n".join(out), len(scored)
+
+
 def _strip_tags(body: str) -> str:
     """Every visible word on the page, boilerplate included."""
     text = _DROP_TAGS.sub(" ", body)
@@ -252,6 +288,7 @@ async def fetch_url(
     offset: int = 0,
     save_as: str = "",
     selector: str = "",
+    query: str = "",
 ) -> Dict[str, Any]:
     """
     Fetch one URL and return its text, page through it, or save it directly.
@@ -268,6 +305,8 @@ async def fetch_url(
         save_as: Workspace filename to save complete raw or selected content into,
                  bypassing LLM prompt token limits.
         selector: Optional CSS selector to extract specific HTML elements.
+        query: Optional words to look for; returns only the best-matching
+               passages of the page instead of a 20,000-character slice.
     """
     refusal = _check_url(url)
     if refusal:
@@ -413,6 +452,11 @@ async def fetch_url(
                         content_to_save = "\n\n".join(str(el) for el in matched_elements)
                     elif selector:
                         content_to_save = text
+                    elif is_html and not save_target.lower().endswith((".html", ".htm")):
+                        # Raw HTML under a .txt/.md name reached a later step as
+                        # "<!DOCTYPE html>..." and the agent failed to read it.
+                        # Markup is kept only when the name asks for markup.
+                        content_to_save = text
                     else:
                         content_to_save = body
 
@@ -541,6 +585,17 @@ async def fetch_url(
                                 f"from the page's own HTML.")
                     else:
                         hint = _shell_hint(can_render)
+
+                if query and query.strip():
+                    passages, matched = _matching_passages(text, query)
+                    q = query.strip()
+                    final_text = text_slice = (
+                        f"[{matched} passage(s) of this {total_chars:,}-character page "
+                        f"match '{q}'; the best are shown below in page order.]\n\n{passages}"
+                        if passages else
+                        f"No passage on this page mentions any of '{q}'. Try other "
+                        f"words, or omit query to read the page from the start.")
+                    truncated = False
 
                 result: Dict[str, Any] = {
                     "success": True,

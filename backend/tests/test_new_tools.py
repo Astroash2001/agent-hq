@@ -232,6 +232,56 @@ async def test_fetch_url_selector_with_save_as(monkeypatch):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+@pytest.mark.asyncio
+async def test_fetch_url_save_as_text_name_saves_text_not_markup(monkeypatch):
+    """An axolotl page saved as axolotl_raw.txt arrived as '<!DOCTYPE html>...'."""
+    html = "<!DOCTYPE html><html><body><h1>Axolotl</h1><p>It can regrow limbs.</p></body></html>"
+
+    async def _mock_get(*args, **kwargs):
+        return _FakeResponse(html)
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _mock_get)
+    temp_dir = tempfile.mkdtemp()
+    try:
+        ws = MissionWorkspace("test_mission_fetch3")
+        ws.dir = temp_dir
+        bind_workspace(ws, "agent1", "Agent", "step1")
+
+        res = await fetch_url("https://93.184.216.34/axolotl", save_as="axolotl_raw.txt")
+        assert res["success"] is True
+        with open(os.path.join(temp_dir, "axolotl_raw.txt"), encoding="utf-8") as f:
+            content = f.read()
+        assert "regrow limbs" in content
+        assert "<" not in content, "no markup in a .txt save"
+    finally:
+        bind_workspace(None)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_fetch_url_query_returns_only_matching_passages(monkeypatch):
+    filler = "".join(f"<p>Unrelated paragraph number {i} about nothing much at all.</p>"
+                     for i in range(300))
+    html = (f"<html><body><article>{filler}"
+            f"<p>Tardigrades have survived exposure to outer space.</p>"
+            f"{filler}</article></body></html>")
+
+    async def _mock_get(*args, **kwargs):
+        return _FakeResponse(html)
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _mock_get)
+
+    res = await fetch_url("https://93.184.216.34/tardigrade", query="space exposure")
+    assert res["success"] is True
+    assert "survived exposure to outer space" in res["text"]
+    assert "Unrelated paragraph" not in res["text"]
+    assert len(res["text"]) < 1000 < res["total_chars"]
+
+    miss = await fetch_url("https://93.184.216.34/tardigrade", query="volcano")
+    assert miss["success"] is True
+    assert "No passage on this page mentions" in miss["text"]
+
+
 # --------------------------------------------------------------- calculate
 
 @pytest.mark.asyncio

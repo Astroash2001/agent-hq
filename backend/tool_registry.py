@@ -336,7 +336,9 @@ class ToolRegistry:
                 "For large pages or full datasets, use 'save_as' to write the complete response directly "
                 "to the workspace so you can parse all records (via Python/regex/query_data) without "
                 "context window truncation. Use 'offset' to page through sections, or 'selector' to "
-                "extract specific CSS elements."
+                "extract specific CSS elements. When you need specific facts or quotes from a long "
+                "page, pass 'query' to get only the matching passages -- far cheaper than reading "
+                "the whole page."
             ),
             parameters={
                 "type": "object",
@@ -349,7 +351,9 @@ class ToolRegistry:
                     "save_as": {"type": "string",
                                 "description": "Optional workspace filename (e.g. 'page.html') to save the complete page directly to disk, avoiding context truncation."},
                     "selector": {"type": "string",
-                                 "description": "Optional CSS selector (e.g. 'div.store-list', 'table') to extract only matching HTML elements."}
+                                 "description": "Optional CSS selector (e.g. 'div.store-list', 'table') to extract only matching HTML elements."},
+                    "query": {"type": "string",
+                              "description": "Optional words to look for (e.g. 'space radiation survival'). Returns only the best-matching passages of the page, in page order."}
                 },
                 "required": ["url"]
             },
